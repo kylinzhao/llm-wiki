@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki"
+  short_description: "从 0-1 构建、维护、查询和审查文件型 LLM Wiki 的统一技能"
+  default_prompt: "Use $llm-wiki to bootstrap, maintain, query, or audit an LLM Wiki project. Read BUSINESS_CONTEXT.md first if it exists, explain the phase or retrieval path explicitly, and ground the work in repo files."
