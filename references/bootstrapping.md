@@ -29,9 +29,10 @@
 3. 初始化目录骨架
 4. 初始化构建脚本
 5. 运行 `build_wiki.py`
-6. 运行 `health.py --json`
-7. 做 AI-native 文本精修
-8. 运行 `build_graph.py`
+6. 对全量语料完成首轮大模型 summary
+7. 对全量语料完成 AI-native 文本精修与分层落位
+8. 运行 `health.py --json`
+9. 运行 `build_graph.py`
 
 ## 4. 关键判断
 
@@ -51,6 +52,13 @@
 新项目首轮默认：
 
 - 文本优先
-- 不做图片多模态
-- 先完成 `wiki/sources`
-- 再补 layered pages / graph / syntheses / image-notes
+- 不做图片多模态，除非文本不足以支撑首轮精修
+- 必须完成全量语料的首轮 summary 和 AI-native 精修
+- 可以按层推进，但应在同一轮里做完
+- 推荐顺序是先完成 `wiki/sources`，再完成 layered pages，最后补 `concepts / entities / graph`
+
+不建议的首轮结束状态：
+
+- 只有目录骨架，没有全量 summary
+- 只有 `wiki/sources` 占位页，没有完成首轮精修
+- 把“大模型 summary / 精修”整体推迟到后续增量维护阶段
