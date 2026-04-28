@@ -17,6 +17,14 @@
 
 ## 2. 适用场景
 
+### 快速命令
+
+例如：
+
+- `用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，一次性跑完标准首轮。`
+- `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面。`
+- `用 $llm-wiki trace 补某个业务能力的需求到代码追踪矩阵。`
+
 ### A. 新项目 0-1
 
 例如：
@@ -207,6 +215,7 @@ SOP、活动执行、流程落地、运营动作。
 - `wiki/code/index.md`：代码 wiki 总入口
 - `wiki/code/codebases/<codebase_id>/`：单源码库事实页
 - `wiki/code/capabilities/`：跨需求文档、前端、后端、异步任务和技术设计的业务能力实现链路
+- `wiki/code/traceability/`：需求点到页面、URI、Controller/Dubbo、Service、配置、表、消息和任务的追踪矩阵
 
 常见 codebase 子层：
 
@@ -326,6 +335,18 @@ uv run python tools/build_graph.py
 ### 中文短入口
 
 ```text
+用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，并按标准顺序一次性完成首轮构建、精修、代码 wiki、验收、health 和 graph。
+```
+
+```text
+用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围，只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。
+```
+
+```text
+用 $llm-wiki trace 补电话直连链路的需求到代码追踪矩阵，标注 strong/partial/inferred/external/missing 并补关键代码锚点。
+```
+
+```text
 用 $llm-wiki 继续维护这个项目。先读 BUSINESS_CONTEXT.md 和当前状态，从未完成阶段续跑，不要重建已完成内容。
 ```
 
@@ -372,6 +393,7 @@ skill 核心文件：
 
 - [bootstrapping.md](./references/bootstrapping.md)
 - [build-and-maintenance.md](./references/build-and-maintenance.md)
+- [commands.md](./references/commands.md)
 - [project-principles.md](./references/project-principles.md)
 - [wiki-structure.md](./references/wiki-structure.md)
 - [query-logic.md](./references/query-logic.md)

@@ -1,4 +1,4 @@
 interface:
   display_name: "LLM Wiki"
-  short_description: "从 0-1 构建、续跑维护、查询、审查和联通代码证据的 LLM Wiki 统一技能"
-  default_prompt: "用 $llm-wiki 处理这个 LLM Wiki 项目。先读 BUSINESS_CONTEXT.md 和当前状态，说明阶段或检索路径；已有项目从未完成阶段续跑，不重建已完成内容。"
+  short_description: "用 fast/update/trace 等命令构建、维护、查询和审计 LLM Wiki"
+  default_prompt: "用 $llm-wiki 处理这个项目。新项目可用 fast 一次性跑完，变更响应用 update，需求到代码审计用 trace；先读 BUSINESS_CONTEXT.md 和当前状态。"

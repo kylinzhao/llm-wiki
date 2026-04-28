@@ -104,6 +104,32 @@ missing_evidence:
 proposed_links:
 ```
 
+### Traceability Draft
+
+```text
+capability:
+files_changed:
+requirement_points:
+- point:
+  source_pages:
+  frontend_page_or_component:
+  frontend_uri:
+  controller_or_dubbo:
+  service_or_method:
+  config:
+  table_or_field:
+  message_or_job:
+  evidence_strength: strong | partial | inferred | external | missing
+  gap:
+code_anchors:
+- path:
+  line:
+  symbol:
+  verified: true | false
+external_boundaries:
+missing_evidence:
+```
+
 ### Audit Finding
 
 ```text

@@ -37,6 +37,9 @@ wiki/code/
       index.md
   capabilities/
     <capability>.md
+  traceability/
+    index.md
+    <capability>.md
 staging/code-graph/
   <codebase_id>/
     graphify-out/
@@ -46,6 +49,7 @@ staging/code-graph/
 
 `codebases/<codebase_id>/` 记录单仓库事实。
 `capabilities/` 记录跨需求、前端、后端、异步任务和技术设计的业务能力实现链路。
+`traceability/` 记录需求点到实现证据的审计矩阵。
 
 ## 4. codebase 识别
 
@@ -290,7 +294,52 @@ OpenSpec / 技术设计页属于代码侧技术设计证据，不应混入 `raw/
 只有前两类可以写成“代码实现证明”。
 后几类必须写成“推断”。
 
-## 11. 证据优先级与冲突
+## 11. 追踪矩阵
+
+当用户需要测试追踪、实现审计、需求落地核对或“某个需求到底在哪些代码里实现”时，优先维护：
+
+```text
+wiki/code/traceability/
+  index.md
+  <capability>.md
+```
+
+追踪矩阵不替代 source 页、capability 页或 codebase 页。它把三者连成一张可审计表。
+
+矩阵字段：
+
+```text
+需求点 | 需求来源 | 前端页面/组件 | 前端 URI | Controller/Dubbo | Service/Method | 配置 | 表/字段 | 消息/任务 | 证据强度 | 缺口
+```
+
+证据强度：
+
+- `strong`：需求证据和实现证据能通过精确 URI、Controller/Dubbo、Service、表或消息名称连上。
+- `partial`：需求能连到代码模块或服务族，但方法、字段、消息体或运行时条件尚未完全证明。
+- `inferred`：只能从命名、相邻证据或 graphify 关系推断，作为事实引用前还需要直接证据。
+- `external`：关键闭环在当前 `raw-code/` 未包含的外部系统。
+- `missing`：已有需求证据，但当前 wiki/code 还没有找到实现证据。
+
+每个追踪矩阵页推荐包含：
+
+- `## 覆盖范围`
+- `## 追踪矩阵`
+- `## 关键代码锚点`
+- `## 外部系统边界`
+- `## 缺失证据与下一步`
+
+关键代码锚点应尽量覆盖：
+
+- 前端页面和 service URI。
+- HTTP Controller 和 Dubbo 入口。
+- 核心 Service / Method。
+- 配置常量、Etcd 读取、枚举。
+- DO、Mapper、关键字段。
+- Kafka consumer、topic、XXL job。
+
+锚点必须已验证文件存在；如果标行号，行号不能越界。无法闭环证明时保留 `partial`、`external` 或 `missing`，不要为了好看升级成 `strong`。
+
+## 12. 证据优先级与冲突
 
 OpenSpec / 技术设计属于代码侧设计证据，不属于 `raw/` 需求证据。
 
@@ -313,7 +362,7 @@ OpenSpec / 技术设计属于代码侧设计证据，不属于 `raw/` 需求证�
 - archived / stale / superseded 的 OpenSpec 必须在页面中标注状态。
 - 当前代码可以证明“现在怎么实现”，不能单独证明“业务应该如此”。
 
-## 12. checkpoint 与 freshness
+## 13. checkpoint 与 freshness
 
 长任务状态至少记录：
 
@@ -336,10 +385,11 @@ OpenSpec / 技术设计属于代码侧设计证据，不属于 `raw/` 需求证�
 - endpoint map 早于前端 service 或后端 controller。
 - OpenSpec 被归档或 superseded。
 - capability 页引用的代码路径删除或重命名。
+- traceability 页引用的 source 或 code anchor 失效、行号越界或证据强度变化。
 
 发现 stale 时，不要立即全量重做；先标注 stale 范围，再刷新受影响 codebase、endpoint map 和 capability 页。
 
-## 13. 安全与敏感配置
+## 14. 安全与敏感配置
 
 - 不复制 `.env`、cookie、token、password、secret、private key、access key。
 - 部署、网关、数据库、消息队列等配置只描述用途和配置项类别。
@@ -347,7 +397,7 @@ OpenSpec / 技术设计属于代码侧设计证据，不属于 `raw/` 需求证�
 - generated graph 和 Markdown 不应包含敏感值。
 - 内网 host、账号、凭据组合、签名密钥等默认敏感。
 
-## 14. 最低可用首轮
+## 15. 最低可用首轮
 
 代码 wiki 的 minimum useful first pass 至少包含：
 
@@ -357,6 +407,7 @@ OpenSpec / 技术设计属于代码侧设计证据，不属于 `raw/` 需求证�
 - 后端 endpoints / controllers / API contracts 已抽取，或说明不存在后端。
 - 至少一个 frontend-backend endpoint map，或明确无法映射的原因。
 - 初始 capability 页覆盖最核心业务能力。
+- 对最高价值能力建立初始 traceability 页，或明确留待下一轮。
 - graphify 输出已记录，或明确 skipped / failed 原因。
 - final gap report 列出缺失证据和下一轮范围。
 
@@ -375,7 +426,7 @@ OpenSpec / 技术设计属于代码侧设计证据，不属于 `raw/` 需求证�
 - validation results
 - recommended next pass
 
-## 15. 质量检查
+## 16. 质量检查
 
 代码 wiki 审查至少检查：
 
@@ -390,11 +441,13 @@ OpenSpec / 技术设计属于代码侧设计证据，不属于 `raw/` 需求证�
 - 是否存在敏感配置泄露
 - graphify 输出路径和覆盖范围是否记录
 - generated pages 是否没有 broken wikilinks
+- traceability 证据强度是否合理
+- traceability 代码锚点是否存在且未越界
 
 如果只有前端没有后端，必须标注后端缺失。
 如果前端和后端都存在，必须优先做跨端 URI 映射。
 
-## 16. 当前项目类型示例
+## 17. 当前项目类型示例
 
 常见模式：
 

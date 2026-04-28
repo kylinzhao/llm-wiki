@@ -59,6 +59,7 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/project-principles.md`
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/wiki-structure.md`
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/query-logic.md`
+- `/Users/zhaoliang/.codex/skills/llm-wiki/references/commands.md`
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/subagent-handoff.md`
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/image-evidence.md`
 
@@ -84,6 +85,23 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 - 每轮重要写入后更新 `staging/refinement-status.md`，再运行 health 和 graph 收口。
 
 ## 核心工作方式
+
+### 0. 二级命令路由
+
+`llm-wiki` 是统一入口，但推荐用二级命令降低提示词长度。看到这些命令时，先读取 `/Users/zhaoliang/.codex/skills/llm-wiki/references/commands.md`：
+
+- `llm-wiki fast`：新项目一口气完成标准首轮，从输入检查到 health / graph 收口；适合用户明确希望一次性跑完。
+- `llm-wiki init`：0-1 初始化，可分阶段汇报。
+- `llm-wiki resume`：读取状态文件，从未完成阶段续跑。
+- `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新。
+- `llm-wiki refine`：source / concepts / entities / layered pages 精修。
+- `llm-wiki gplus`：综合层二次校准、查询验收、质量审查。
+- `llm-wiki code`：构建 `wiki/code/codebases` 和 `wiki/code/capabilities`。
+- `llm-wiki trace`：构建或更新 `wiki/code/traceability` 需求到代码追踪矩阵。
+- `llm-wiki query`：按检索协议回答业务或代码问题。
+- `llm-wiki audit`：findings-first 质量审查。
+- `llm-wiki image`：高价值图片证据补充。
+- `llm-wiki ship`：health / graph / 可选 anchor check 后提交发布。
 
 ### 1. 阶段模型
 
@@ -141,10 +159,12 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 - `wiki/code/index.md`
 - `wiki/code/codebases/<codebase_id>/`
 - `wiki/code/capabilities/`
+- `wiki/code/traceability/`
 - `staging/code-graph/<codebase_id>/`
 
 `wiki/code/codebases/<codebase_id>/` 记录单个源码库内部事实。
 `wiki/code/capabilities/` 记录跨需求文档、前端、后端、异步任务、技术设计的业务能力实现链路。
+`wiki/code/traceability/` 记录需求点到页面、URI、Controller/Dubbo、Service、配置、表、消息和任务的可审计追踪矩阵。
 
 可以使用 `graphify` 作为代码图谱增强层。它用于提取 AST、调用关系、代码结构报告和交互式图谱；`llm-wiki` 仍负责业务语义基线、Markdown 目录协议、跨层链接和可审计回答。
 
@@ -315,9 +335,26 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 9. missing evidence
 10. validation results
 
+### 追踪矩阵任务
+
+至少说明：
+
+1. 覆盖的业务能力和需求点
+2. 需求来源
+3. 前端页面 / 组件 / URI
+4. Controller / Dubbo / Service / Method
+5. 配置 / 表字段 / 消息 / 任务
+6. 证据强度：`strong`、`partial`、`inferred`、`external`、`missing`
+7. 关键代码锚点
+8. 外部系统边界和缺口
+
 ## 推荐入口
 
 ### 中文短入口
+
+`用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，并按标准顺序一次性完成首轮构建、精修、代码 wiki、验收、health 和 graph。`
+
+`用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围，只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。`
 
 `用 $llm-wiki 继续维护这个项目。先读 BUSINESS_CONTEXT.md 和当前状态，从未完成阶段续跑，不要重建已完成内容。`
 

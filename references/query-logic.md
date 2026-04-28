@@ -43,6 +43,7 @@
 
 ### 代码实现 / 架构 / 调用链
 
+- `wiki/code/traceability`
 - `wiki/code/codebases`
 - `wiki/code/capabilities`
 - `concepts`
@@ -55,6 +56,7 @@
 - `concepts`
 - `entities`
 - `sources`
+- `wiki/code/traceability`
 - `wiki/code/capabilities`
 - `wiki/code/codebases`
 
@@ -95,7 +97,18 @@
 当 URI 能精确对上时，可以标记为“代码实现证明”。
 当只能通过命名相似、能力页、graphify 聚类或 OpenSpec 标题关联时，只能标记为“推断”。
 
-## 6. 推荐回答形状
+## 6. 追踪矩阵优先规则
+
+当问题是实现类、测试追踪类、风险审计类或“需求落到哪里”时，优先查：
+
+1. `wiki/code/traceability`
+2. `wiki/code/capabilities`
+3. `wiki/code/codebases`
+4. `wiki/sources`
+
+回答时保留矩阵中的证据强度，不要把 `partial`、`inferred`、`external`、`missing` 自动升级成确定结论。
+
+## 7. 推荐回答形状
 
 ```text
 查询类型：
