@@ -93,6 +93,7 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 - `llm-wiki fast`：新项目一口气完成标准首轮，从输入检查到 health / graph 收口；适合用户明确希望一次性跑完。
 - `llm-wiki init`：0-1 初始化，可分阶段汇报。
 - `llm-wiki resume`：读取状态文件，从未完成阶段续跑。
+- `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，指出健康度、缺口、优化建议和下一步命令。
 - `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新。
 - `llm-wiki refine`：source / concepts / entities / layered pages 精修。
 - `llm-wiki gplus`：综合层二次校准、查询验收、质量审查。
@@ -234,6 +235,15 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 - 不把 token、cookie、密码、私钥、access key、内部凭据或完整敏感配置值写入 wiki；必要时只写用途并脱敏。
 - 不修改项目 `tools/` 来产品化一次性 workflow，除非用户明确要求。
 
+### 11. 完成后建议下一步
+
+每次执行任何 `llm-wiki` 命令后，最终输出都必须包含“建议下一步”：
+
+- 基于当前项目状态，而不是泛泛建议。
+- 给出 1-3 个优先级排序的下一步动作。
+- 如果适合继续执行，直接推荐对应二级命令，例如 `llm-wiki update`、`llm-wiki trace`、`llm-wiki doctor`、`llm-wiki ship`。
+- 如果当前状态已经健康，说明“可以暂停”的条件和后续触发 `update` 的时机。
+
 ## 任务模式
 
 ### A. 0-1 初始化
@@ -310,6 +320,18 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 
 必须 findings first。
 
+### Doctor 任务
+
+只读诊断，至少说明：
+
+1. 当前阶段和整体 verdict
+2. 输入层：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`
+3. 文档层：sources、layered pages、concepts、entities、G+ 产物
+4. 代码层：codebases、capabilities、traceability、graphify
+5. 校验层：health、broken links、graph、可选 anchor check
+6. 风险与缺口
+7. 优先级建议和下一步命令
+
 ### G+ 任务
 
 至少说明：
@@ -353,6 +375,8 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 ### 中文短入口
 
 `用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，并按标准顺序一次性完成首轮构建、精修、代码 wiki、验收、health 和 graph。`
+
+`用 $llm-wiki doctor 诊断整个 LLM Wiki 站点状态，告诉我哪里健康、哪里缺口最大、下一步建议怎么做。`
 
 `用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围，只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。`
 

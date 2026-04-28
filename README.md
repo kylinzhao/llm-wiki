@@ -22,6 +22,7 @@
 例如：
 
 - `用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，一次性跑完标准首轮。`
+- `用 $llm-wiki doctor 看看整个站点健康度、缺口和下一步建议。`
 - `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面。`
 - `用 $llm-wiki trace 补某个业务能力的需求到代码追踪矩阵。`
 
@@ -336,6 +337,10 @@ uv run python tools/build_graph.py
 
 ```text
 用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，并按标准顺序一次性完成首轮构建、精修、代码 wiki、验收、health 和 graph。
+```
+
+```text
+用 $llm-wiki doctor 诊断整个 LLM Wiki 站点状态，告诉我哪里健康、哪里缺口最大、下一步建议怎么做。
 ```
 
 ```text

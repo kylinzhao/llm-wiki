@@ -9,6 +9,7 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki fast` | New project, user wants the standard path completed in one run | Full first-pass wiki, refinement, validation, status |
 | `llm-wiki init` | New project, user wants phased initialization | Skeleton, deterministic build, first-pass plan |
 | `llm-wiki resume` | Existing project has partial work | Resume from latest status / checkpoint |
+| `llm-wiki doctor` | User wants a site-wide status, diagnosis, and recommendations | Health portrait and prioritized next steps |
 | `llm-wiki update` | `raw/`, `BUSINESS_CONTEXT.md`, `raw-code/`, wiki, or source code changed | Impact-scoped wiki update |
 | `llm-wiki refine` | Improve source, concepts, entities, or layered pages | AI-native text refinement |
 | `llm-wiki gplus` | Text layer exists and needs query readiness | Query acceptance, quality audit, health, graph |
@@ -18,6 +19,17 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki audit` | Review wiki quality | Findings-first report |
 | `llm-wiki image` | Add high-value image evidence after text completion | image notes and linked facts |
 | `llm-wiki ship` | Publish or submit wiki work | validation, commit, push |
+
+## Completion Rule
+
+Every command must end with `建议下一步`.
+
+The recommendation should be project-specific:
+
+- 1-3 prioritized next actions.
+- Include the exact next command when useful.
+- Mention when it is reasonable to pause.
+- Mention what future change should trigger `llm-wiki update`.
 
 ## `llm-wiki fast`
 
@@ -127,6 +139,81 @@ Final report:
 - validation results
 - remaining stale or missing evidence
 
+## `llm-wiki doctor`
+
+Purpose: read-only diagnosis of the whole LLM Wiki site. Use it when the user asks “现在状态如何”, “还缺什么”, “下一步干什么”, “这个 wiki 健康吗”, or wants a project-level operating recommendation.
+
+Read:
+
+1. `BUSINESS_CONTEXT.md`
+2. `wiki/index.md`
+3. `wiki/overview.md`
+4. `docs/retrieval-playbook.md`
+5. `docs/build-and-maintenance.md`
+6. `staging/refinement-status.md`
+7. `staging/health/latest.json`
+8. `graph/summary.md`
+9. `wiki/code/index.md`
+10. `wiki/code/traceability/index.md`
+11. `docs/query-acceptance.md`
+12. `docs/gplus-quality-audit.md`
+
+If any file is missing, report it as a signal. Do not create or modify files.
+
+Optional read-only checks:
+
+- Count `raw/*/index.md` and `wiki/sources/*.md`.
+- Count `wiki/code/codebases/*`, `wiki/code/capabilities/*.md`, and `wiki/code/traceability/*.md`.
+- Inspect latest health status.
+- Inspect graph node / edge counts.
+- Search for broken or stale markers.
+- If traceability pages exist, sample evidence strength distribution.
+- If code anchors are used, recommend anchor check when not recently run.
+
+Output shape:
+
+```text
+诊断类型：llm-wiki doctor
+已使用 BUSINESS_CONTEXT.md：是/否
+读取路径：
+
+总体 verdict：
+
+状态画像：
+- 输入层：
+- 文档层：
+- 代码层：
+- 追踪矩阵：
+- 校验层：
+- 发布/维护状态：
+
+主要问题：
+- P0 ...
+- P1 ...
+- P2 ...
+
+建议下一步：
+1. ...
+2. ...
+3. ...
+```
+
+Verdict levels:
+
+- `healthy`: health/graph pass, retrieval docs exist, source coverage complete, no urgent gaps.
+- `usable-with-gaps`: wiki answers common questions but has traceability, code, image, or stale gaps.
+- `needs-maintenance`: health/graph/staleness/coverage problems should be fixed before relying on it.
+- `blocked`: missing required inputs or broken core structure.
+
+Recommendation rules:
+
+- If required inputs or entry docs are missing, recommend `llm-wiki init` or `llm-wiki update`.
+- If source coverage or refinement is incomplete, recommend `llm-wiki refine`.
+- If G+ artifacts are missing, recommend `llm-wiki gplus`.
+- If code wiki exists but traceability is thin, recommend `llm-wiki trace`.
+- If files changed recently or stale markers exist, recommend `llm-wiki update`.
+- If everything is healthy and remote publishing is desired, recommend `llm-wiki ship`.
+
 ## `llm-wiki trace`
 
 Purpose: build or update audit-grade requirement-to-code matrices.
@@ -178,6 +265,10 @@ Use the same early stages as `fast`, but stop after the initialized baseline and
 ### `llm-wiki resume`
 
 Read status and checkpoints first. Continue from the last incomplete phase. Do not restart completed phases.
+
+### `llm-wiki doctor`
+
+Read-only project status diagnosis. Never edit files. End with prioritized next commands.
 
 ### `llm-wiki refine`
 
