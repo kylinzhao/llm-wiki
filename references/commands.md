@@ -11,10 +11,12 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki resume` | Existing project has partial work | Resume from latest status / checkpoint |
 | `llm-wiki doctor` | User wants a site-wide status, diagnosis, and recommendations | Health portrait and prioritized next steps |
 | `llm-wiki update` | `raw/`, `BUSINESS_CONTEXT.md`, `raw-code/`, wiki, or source code changed | Impact-scoped wiki update |
+| `llm-wiki add-wiki` | Add another document/wiki directory as business or requirement evidence | Imported raw evidence and affected wiki updates |
+| `llm-wiki add-code` | Add another project codebase as implementation evidence | New raw-code codebase and code wiki updates |
 | `llm-wiki refine` | Improve source, concepts, entities, or layered pages | AI-native text refinement |
 | `llm-wiki gplus` | Text layer exists and needs query readiness | Query acceptance, quality audit, health, graph |
-| `llm-wiki code` | Build or refresh code wiki | codebases, capabilities, mappings |
-| `llm-wiki trace` | Need audit-grade requirement-to-code tracking | traceability matrix |
+| `llm-wiki build-code` | Build or refresh code wiki. `llm-wiki code` is a backward-compatible alias | codebases, capabilities, mappings |
+| `llm-wiki code-trace` | Need audit-grade requirement-to-code tracking. `llm-wiki trace` is a backward-compatible alias | traceability matrix |
 | `llm-wiki query` | Answer a business or implementation question | Evidence-grounded answer |
 | `llm-wiki audit` | Review wiki quality | Findings-first report |
 | `llm-wiki image` | Add high-value image evidence after text completion | image notes and linked facts |
@@ -114,13 +116,40 @@ Impact analysis:
 Default update order:
 
 1. Identify changed files and classify the trigger.
-2. Map changed inputs to wiki outputs.
-3. Refresh only affected pages.
-4. Preserve manual edits and refined prose unless directly stale.
-5. Re-run health.
-6. Rebuild graph when wikilinks changed.
-7. Run optional traceability anchor check when traceability pages changed.
-8. Update `staging/refinement-status.md`.
+2. Refresh upstream inputs when the project has a declared updater:
+   - run the configured `raw/` wiki sync command, if present
+   - update clean `raw-code/*` repositories, if requested or configured
+   - never silently overwrite dirty `raw-code/*` worktrees
+3. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
+4. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
+5. Refresh affected pages:
+   - changed `raw/` pages update matching source pages, layered pages, concepts, entities, query readiness, health, and graph
+   - changed `raw-code/` files update affected codebase pages, endpoint maps, capability pages, traceability rows, and graphify status when needed
+   - changed `BUSINESS_CONTEXT.md` updates canonical aliases, concepts, entities, conflicts, truth, and retrieval guidance
+   - if health or the update report shows remaining `pending` or `stale` source pages, resolve them in the same command when they are in scope or the backlog is small enough to finish safely
+6. When the same update affects both requirement/source evidence and implementation/code evidence, treat source refinement and code traceability refresh as one integrated update pass:
+   - refine stale affected source pages first
+   - immediately update affected `wiki/code/capabilities/` and `wiki/code/traceability/` rows against the refined requirement evidence
+   - re-check evidence strength after both sides are updated
+   - do not present these as separate optional next commands unless the user explicitly asked to stop after one layer
+7. Continue automatically through all low-risk update completion work:
+   - affected source AI refinement
+   - affected concept/entity/layer page refresh
+   - affected codebase and capability page refresh
+   - affected code traceability rows
+   - broken wikilink fixes
+   - health and graph rebuild
+8. Preserve manual edits and refined prose unless directly stale.
+9. Re-run health after AI-native edits, not only after deterministic build.
+10. Rebuild graph after AI-native edits when wikilinks changed.
+11. Run optional traceability anchor check when traceability pages changed.
+12. Update `staging/refinement-status.md`.
+
+Project command convention:
+
+- If the repo has `tools/update_wiki.py`, prefer it over manually chaining `build_wiki.py`, `health.py`, and `build_graph.py`.
+- If the repo does not have a local update command, use the standard deterministic build order and create a brief impact report before AI-native edits.
+- Local scripts may scan files, compare hashes, build manifests, and validate links; semantic summary, entity normalization, and implementation judgment must happen in Codex-native work, not through local model SDK calls.
 
 Do not:
 
@@ -128,6 +157,7 @@ Do not:
 - Rewrite `raw/`.
 - Rewrite unrelated refined pages.
 - Upgrade `partial`, `inferred`, `external`, or `missing` evidence to `strong` without direct proof.
+- End by asking the user to run `llm-wiki update` again for low-risk pending/stale/source/code-trace work that can be completed now.
 
 Final report:
 
@@ -138,6 +168,89 @@ Final report:
 - pages intentionally left untouched
 - validation results
 - remaining stale or missing evidence
+
+Recommendation rule:
+
+- Do not recommend `llm-wiki update` as the next step when the current `llm-wiki update` can safely finish the remaining source refinement, capability, traceability, health, or graph work. Finish it in the current command.
+- If affected source pages remain stale and affected code traceability also needs refresh but a hard blocker prevents completion, report the blocker and checkpoint, then recommend one combined continuation: `llm-wiki update` to resume the integrated source refinement plus code-trace refresh.
+- Recommend `llm-wiki code-trace` separately only when the source wiki is already current and the remaining work is traceability-only.
+- Recommend source-only refinement separately only when no affected code evidence or traceability pages are in scope.
+
+## `llm-wiki add-wiki`
+
+Purpose: add another document/wiki directory to the current LLM Wiki as business or requirement evidence.
+
+Use when:
+
+- The user has another exported wiki, Markdown directory, Confluence export, or document folder that should become part of `raw/`.
+- The current project should answer questions across multiple document sources.
+- The added material is business/requirement evidence, not source code.
+
+Default order:
+
+1. Read `BUSINESS_CONTEXT.md`, existing `docs/build-and-maintenance.md`, and current `staging/refinement-status.md`.
+2. Inspect the provided source directory and identify its document unit pattern.
+3. Confirm whether the input can be copied or linked into `raw/`; do not rewrite or normalize source evidence in place.
+4. Preserve provenance: original path, source URL when present, imported_at, and source collection name.
+5. Place imported documents under a stable `raw/` subdirectory naming scheme that will not collide with existing page IDs.
+6. Run the project update command when available, such as `uv run python tools/update_wiki.py`.
+7. AI-native refine only affected source, concept, entity, and layered pages.
+8. Run health and graph.
+
+Stop for confirmation when:
+
+- The user did not provide a source path.
+- The input has ambiguous ownership or should not be copied into this project.
+- The import would overwrite existing `raw/` directories.
+- Canonical entity rules need to change to accommodate the new corpus.
+
+Final report:
+
+- source directory
+- import method: copied, linked, or blocked
+- imported document count
+- affected wiki pages
+- validation results
+- remaining normalization or entity questions
+
+## `llm-wiki add-code`
+
+Purpose: add another project codebase under `raw-code/<codebase_id>/` and build or refresh the code wiki layer.
+
+Use when:
+
+- The user points to another local project, repo clone, or source tree.
+- The project should answer implementation questions using that codebase.
+- The added material is implementation evidence, not business requirements.
+
+Default order:
+
+1. Read `BUSINESS_CONTEXT.md` and existing `wiki/code/index.md` when present.
+2. Inspect the provided code path, detect repo root, stack, entry points, docs, and whether it is a git repository.
+3. Choose a stable `codebase_id` from the repo or directory name; ask only if it collides or is misleading.
+4. Add the codebase under `raw-code/<codebase_id>/` by copying, symlinking, or recording the existing path according to project convention. Do not mix it into `raw/`.
+5. Scan the codebase for README, AGENTS, OpenSpec, API contracts, routes, controllers, services, jobs, messages, data access, and config.
+6. Run graphify if available and useful; otherwise record why it was skipped.
+7. Create or update `wiki/code/codebases/<codebase_id>/` and affected `wiki/code/capabilities/`.
+8. If relevant requirements already exist, add or refresh `wiki/code/traceability/` rows with conservative evidence strength.
+9. Run health and graph.
+
+Stop for confirmation when:
+
+- The source path is missing.
+- The target `raw-code/<codebase_id>/` already exists.
+- Copying the repo would include secrets, credentials, build artifacts, or very large dependency directories.
+- The codebase is dirty and the user asked to pull or update it.
+
+Final report:
+
+- codebase_id
+- source path and import method
+- detected stack and entry points
+- pages created or updated
+- capability and traceability coverage
+- validation results
+- missing evidence
 
 ## `llm-wiki doctor`
 
@@ -210,13 +323,15 @@ Recommendation rules:
 - If required inputs or entry docs are missing, recommend `llm-wiki init` or `llm-wiki update`.
 - If source coverage or refinement is incomplete, recommend `llm-wiki refine`.
 - If G+ artifacts are missing, recommend `llm-wiki gplus`.
-- If code wiki exists but traceability is thin, recommend `llm-wiki trace`.
+- If code wiki exists but traceability is thin, recommend `llm-wiki code-trace`.
 - If files changed recently or stale markers exist, recommend `llm-wiki update`.
 - If everything is healthy and remote publishing is desired, recommend `llm-wiki ship`.
 
-## `llm-wiki trace`
+## `llm-wiki code-trace`
 
 Purpose: build or update audit-grade requirement-to-code matrices.
+
+Backward-compatible alias: `llm-wiki trace`.
 
 Output:
 
@@ -278,9 +393,23 @@ Limit work to the requested scope: source pages, concepts, entities, layered pag
 
 Produce query acceptance and quality audit. Fix low-risk structural issues automatically. Do not decide business conflicts without evidence.
 
-### `llm-wiki code`
+### `llm-wiki build-code`
 
 Build codebase indexes, endpoint maps, capability pages, graphify records, and evidence gap reports.
+
+Backward-compatible alias: `llm-wiki code`.
+
+### `llm-wiki code-trace`
+
+Build requirement-to-code traceability matrices. Backward-compatible alias: `llm-wiki trace`.
+
+### `llm-wiki add-wiki`
+
+Add another document/wiki directory into the project evidence layer. Preserve provenance, avoid overwriting `raw/`, then run update, health, and graph.
+
+### `llm-wiki add-code`
+
+Add another project codebase as `raw-code/<codebase_id>/`. Build codebase pages, capability links, optional graphify output, and traceability when relevant.
 
 ### `llm-wiki query`
 

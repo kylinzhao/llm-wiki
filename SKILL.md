@@ -95,10 +95,12 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 - `llm-wiki resume`：读取状态文件，从未完成阶段续跑。
 - `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，指出健康度、缺口、优化建议和下一步命令。
 - `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新。
+- `llm-wiki add-wiki`：把另一个文档/wiki 目录接入当前项目，作为新的 `raw/` 需求/业务证据来源。
+- `llm-wiki add-code`：把另一个项目代码库接入当前项目，作为新的 `raw-code/<codebase_id>/` 代码证据来源。
 - `llm-wiki refine`：source / concepts / entities / layered pages 精修。
 - `llm-wiki gplus`：综合层二次校准、查询验收、质量审查。
-- `llm-wiki code`：构建 `wiki/code/codebases` 和 `wiki/code/capabilities`。
-- `llm-wiki trace`：构建或更新 `wiki/code/traceability` 需求到代码追踪矩阵。
+- `llm-wiki build-code`：构建或刷新 `wiki/code/codebases` 和 `wiki/code/capabilities`。兼容旧别名：`llm-wiki code`。
+- `llm-wiki code-trace`：构建或更新 `wiki/code/traceability` 需求到代码追踪矩阵。兼容旧别名：`llm-wiki trace`。
 - `llm-wiki query`：按检索协议回答业务或代码问题。
 - `llm-wiki audit`：findings-first 质量审查。
 - `llm-wiki image`：高价值图片证据补充。
@@ -241,7 +243,9 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 
 - 基于当前项目状态，而不是泛泛建议。
 - 给出 1-3 个优先级排序的下一步动作。
-- 如果适合继续执行，直接推荐对应二级命令，例如 `llm-wiki update`、`llm-wiki trace`、`llm-wiki doctor`、`llm-wiki ship`。
+- 如果适合继续执行，直接推荐对应二级命令，例如 `llm-wiki update`、`llm-wiki code-trace`、`llm-wiki doctor`、`llm-wiki ship`。
+- 如果同一轮变更同时留下 source 精修和代码追踪缺口，优先推荐继续 `llm-wiki update` 一次性收口；只有 traceability-only 时才单独推荐 `llm-wiki code-trace`。
+- 对 `llm-wiki update` 来说，低风险 pending/stale/source/code-trace/health/graph 收口应在当前命令里继续完成；不要把“再跑一次 update”当成默认建议，除非有明确 blocker 或用户要求只做诊断/确定性阶段。
 - 如果当前状态已经健康，说明“可以暂停”的条件和后续触发 `update` 的时机。
 
 ## 任务模式
@@ -380,9 +384,15 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 
 `用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围，只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。`
 
+`用 $llm-wiki add-wiki 添加这个文档目录到当前项目。保持 raw 不可变，建立来源记录，增量生成受影响 wiki。`
+
+`用 $llm-wiki add-code 添加这个代码项目到当前项目。把它作为 raw-code 下独立 codebase，构建代码 wiki 和必要的能力链接。`
+
 `用 $llm-wiki 继续维护这个项目。先读 BUSINESS_CONTEXT.md 和当前状态，从未完成阶段续跑，不要重建已完成内容。`
 
-`用 $llm-wiki 构建需求+代码联合 wiki。raw 是需求证据，raw-code 是代码证据，按现有协议并发推进并输出验收结果。`
+`用 $llm-wiki build-code 构建需求+代码联合 wiki。raw 是需求证据，raw-code 是代码证据，按现有协议并发推进并输出验收结果。`
+
+`用 $llm-wiki code-trace 构建需求到代码追踪矩阵，说明需求点、前端、后端、Service、表、消息和证据强度。`
 
 `用 $llm-wiki 查询这个问题。先读 BUSINESS_CONTEXT.md，说明查询类型、检索路径、结论、支撑页面和未决点。`
 
