@@ -38,6 +38,14 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 
 如果缺文件，不要假装项目已经完整可用，要先说明缺什么，再走初始化或补档流程。
 
+新项目初始化时必须先安装随 skill 打包的项目模板，除非目标项目已经有等价脚本：
+
+```bash
+python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template.py --project "$PWD"
+```
+
+该模板提供 `tools/build_wiki.py`、`tools/scan_code.py`、`tools/graphify_code.py`、`tools/build_traceability.py`、`tools/health.py`、`tools/build_graph.py`、`tools/anchor_check.py`、项目 `AGENTS.md`、`.gitignore` 和依赖说明。模板脚本只做确定性扫描、脚手架、校验和图谱构建；语义 summary、实体归一、能力判断和证据强度仍由 Codex / subagent 完成。
+
 ## 阅读顺序
 
 ### 新项目 / 构建任务
@@ -62,6 +70,7 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/commands.md`
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/subagent-handoff.md`
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/image-evidence.md`
+- `/Users/zhaoliang/.codex/skills/llm-wiki/references/fe-req-review-skill.md`
 
 ## 续跑优先级
 
@@ -102,6 +111,7 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 - `llm-wiki build-code`：构建或刷新 `wiki/code/codebases` 和 `wiki/code/capabilities`。兼容旧别名：`llm-wiki code`。
 - `llm-wiki code-trace`：构建或更新 `wiki/code/traceability` 需求到代码追踪矩阵。兼容旧别名：`llm-wiki trace`。
 - `llm-wiki query`：按检索协议回答业务或代码问题。
+- `llm-wiki review-requirement`：对新 PRD、Cwiki 页面或需求文档做证据型需求评审，纳入 raw 原文、图片、zip 原型、前端评审和代码能力证据。
 - `llm-wiki audit`：findings-first 质量审查。
 - `llm-wiki image`：高价值图片证据补充。
 - `llm-wiki ship`：health / graph / 可选 anchor check 后提交发布。
@@ -154,6 +164,8 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 - 代码也按文本证据处理，先使用 AST/路由/API/调用关系/技术设计文档，不默认进入截图或视觉资产
 
 文本层完成后可以进入阶段 H，但只处理高价值图片证据。图片 note 必须结合图片在 `raw/**/index.md` 中的前后文，不做裸图 OCR。低价值页面走查、重复 UI 截图、装饰图默认跳过。
+
+例外：`llm-wiki review-requirement` 是需求评审命令。如果目标项目或目标需求证据中存在图片、截图、图表、附件图片或 zip 原型，必须把这些材料纳入需求证据层分析；图片必须用多模态详细识别，zip 很可能是 HTML 原型，必须解压到临时工作区并审查页面结构、交互、状态和静态资源关系。
 
 ### 5. 代码 wiki 是可选但一等的证据层
 

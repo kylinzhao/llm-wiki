@@ -3,18 +3,28 @@
 ## 1. 标准命令
 
 ```text
+python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template.py --project "$PWD"
 uv run python tools/build_wiki.py
+uv run python tools/scan_code.py
+uv run python tools/build_traceability.py
 uv run python tools/health.py --json
 uv run python tools/build_graph.py
+uv run python tools/anchor_check.py
 ```
 
 如果存在 `raw-code/`，标准文档构建之后还要进入代码 wiki 阶段。代码 wiki 可以先由 Codex-native 工作流完成，不要求项目一开始就有专门脚本。
+如果需要 graphify 代码图谱增强，运行：
+
+```text
+uv run python tools/graphify_code.py --all
+```
 
 重要写入后必须收口：
 
 ```text
 uv run python tools/health.py --json
 uv run python tools/build_graph.py
+uv run python tools/anchor_check.py
 ```
 
 要求：
@@ -33,6 +43,28 @@ uv run python tools/build_graph.py
 - 输出确定性结构
 - 为后续全量大模型 summary 和 AI-native 精修提供稳定落点
 
+### `scan_code.py`
+
+- 扫描 `raw-code/*`
+- 识别技术栈 marker、文件角色、endpoint / route 候选和符号
+- 输出 `staging/code-graph/<codebase_id>/manifest.json`
+- 输出 `staging/code-graph/<codebase_id>/endpoint-map.json`
+- 生成或刷新 `wiki/code/codebases/<codebase_id>/index.md`
+
+### `graphify_code.py`
+
+- 检查 `graphify` 或 `graphifyy` 是否在 `PATH`
+- 对每个 `raw-code/<codebase_id>` 单独运行 `graphify update`
+- 将 `graphify-out/` 归档到 `staging/code-graph/<codebase_id>/graphify-out/`
+- 写入 `staging/code-graph/<codebase_id>/graphify-status.json`
+- 缺失或失败时留痕，不阻断确定性代码扫描和 Markdown 构建
+
+### `build_traceability.py`
+
+- 基于 source manifest 和 code scan 输出生成 traceability 种子
+- 写入 `wiki/code/traceability/index.md`
+- 只生成待 Codex 验证的候选行，不替代证据强度判断
+
 ### `health.py`
 
 - 检查结构健康度
@@ -42,6 +74,11 @@ uv run python tools/build_graph.py
 
 - 解析 wikilink
 - 输出 graph 数据
+
+### `anchor_check.py`
+
+- 检查 traceability 页面中反引号引用的 `raw-code/...` 锚点是否存在
+- 输出 `staging/anchor-check.json`
 
 ### 代码 wiki 阶段
 
@@ -218,6 +255,7 @@ graphify 是代码图谱增强层，不是业务语义基线。
 默认策略：
 
 - 有 `raw-code/` 且用户希望构建代码 wiki 时，优先考虑 graphify
+- 必须先在 `docs/tooling-dependencies.md` 或最终输出中说明依赖：Python 3.10+、`uv` 必需，`graphify` 可选
 - 每个 codebase 单独运行或单独归档输出
 - 输出放在 `staging/code-graph/<codebase_id>/graphify-out/`
 - 将 graphify 的 `graph.json`、报告、调用关系和聚类结果作为输入证据

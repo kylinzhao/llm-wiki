@@ -90,10 +90,11 @@ staging/code-graph/
 推荐用法：
 
 1. 每个 codebase 单独运行 graphify 或单独归档输出
-2. 输出放在 `staging/code-graph/<codebase_id>/graphify-out/`
-3. 读取 graphify 的 `graph.json`、报告、调用关系和聚类结果
-4. 将结果转成 `wiki/code/` Markdown 页面
-5. 在能力页中引用 graphify 支持的代码结构，但不要把推断边当作直接事实
+2. 优先使用模板脚本：`uv run python tools/graphify_code.py --all`
+3. 输出放在 `staging/code-graph/<codebase_id>/graphify-out/`
+4. 读取 graphify 的 `graph.json`、报告、调用关系和聚类结果
+5. 将结果转成 `wiki/code/` Markdown 页面
+6. 在能力页中引用 graphify 支持的代码结构，但不要把推断边当作直接事实
 
 操作顺序：
 
@@ -101,8 +102,14 @@ staging/code-graph/
 2. 再检查项目或全局环境是否存在 `graphify` / `graphifyy` 命令。
 3. 从 `raw-code/<codebase_id>/` 或拆分后的模块目录运行，不从 wiki 根目录直接扫所有代码。
 4. 将 stdout、report、`graph.json`、HTML 或 assets 统一归档到 `graphify-out/`。
-5. 记录 `manifest.json`：命令、工作目录、开始时间、结束时间、退出码、覆盖范围、输出文件、失败原因。
+5. 记录 `graphify-status.json`：命令、工作目录、退出码、覆盖范围、输出路径、失败原因。
 6. 如果 graphify 失败，保留失败记录，继续做确定性代码扫描和 Markdown 页面，不伪造 graphify 输出。
+
+依赖说明必须写清楚：
+
+- 必需：Python 3.10+、`uv`
+- 可选：`graphify`，提供 `graphify update <path>` 命令
+- graphify 缺失时，`graphify_code.py` 记录 skipped；仍继续使用 `scan_code.py` 生成确定性代码事实
 
 大型 codebase 拆分策略：
 

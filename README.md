@@ -10,6 +10,7 @@
 - 增量维护
 - 查询问答
 - 质量审查
+- 需求评审
 - 需求文档与多源码仓库的联合知识层构建
 
 它面向的不是“只会查”的场景，而是“把一个项目从原始文档变成可用知识库”的全链路工作。
@@ -24,6 +25,7 @@
 - `用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，一次性跑完标准首轮。`
 - `用 $llm-wiki doctor 看看整个站点健康度、缺口和下一步建议。`
 - `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面。`
+- `用 $llm-wiki review-requirement 帮我 review 这个 Cwiki 需求，并输出评论稿。`
 - `用 $llm-wiki trace 补某个业务能力的需求到代码追踪矩阵。`
 
 ### A. 新项目 0-1
@@ -55,7 +57,15 @@
 - `不要生成内容，纯检查这套 wiki 是否真的可用`
 - `检查 concepts / entities 有没有冲突`
 
-### E. 需求 + 代码联合 wiki
+### E. 需求评审
+
+例如：
+
+- `帮我 review 这个 PRD 是否能进入开发`
+- `这个 Cwiki 需求有没有遗漏前端交互、异常状态和埋点`
+- `结合历史需求、代码能力、图片和 zip 原型，找出阻塞开发的问题`
+
+### F. 需求 + 代码联合 wiki
 
 例如：
 
@@ -269,16 +279,36 @@ SOP、活动执行、流程落地、运营动作。
 标准命令：
 
 ```text
+python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template.py --project "$PWD"
 uv run python tools/build_wiki.py
+uv run python tools/scan_code.py
+uv run python tools/build_traceability.py
 uv run python tools/health.py --json
 uv run python tools/build_graph.py
+uv run python tools/anchor_check.py
 ```
 
-这三步分别负责：
+这些步骤分别负责：
 
+- `install_project_template.py`：把完整项目脚手架复制到目标 wiki 项目
 - `build_wiki.py`：搭 wiki 骨架
+- `scan_code.py`：扫描 `raw-code/*` 并生成代码事实入口
+- `build_traceability.py`：生成需求到代码追踪矩阵种子
 - `health.py`：检查结构是否健康
 - `build_graph.py`：把 wikilink 连成图谱
+- `anchor_check.py`：检查 traceability 中的代码锚点是否存在
+
+如果 `raw-code/` 存在且需要代码图谱增强，可运行：
+
+```text
+uv run python tools/graphify_code.py --all
+```
+
+依赖约定：
+
+- 必需：Python 3.10+、`uv`
+- 可选：`graphify`，用于代码图谱提取，输出归档到 `staging/code-graph/<codebase_id>/graphify-out/`
+- 本地脚本不得调用模型 SDK；语义 summary、实体归一、能力判断和证据强度由 Codex / subagent 完成
 
 代码 wiki 的构建可以是 AI-native 编排任务，不要求一开始就写入仓库脚本。执行时先识别 codebase，再按确定性扫描、graphify 图谱、Markdown 精修、跨层链接的顺序推进。
 
@@ -330,6 +360,8 @@ uv run python tools/build_graph.py
 - 不默认启动图片分析
 
 文本层完成后，可以进入阶段 H：选择性高价值图片证据补充。图片识别必须结合 `raw/**/index.md` 中图片前后文，输出到 `staging/image-notes/`，低价值页面走查和重复 UI 截图默认跳过。详见 [image-evidence.md](./references/image-evidence.md)。
+
+例外：`llm-wiki review-requirement` 进行需求评审时，图片、截图、图表和 zip 原型都属于需求证据；必须分析图片内容，并把 zip 优先当作 HTML 原型检查。
 
 ## 11. 推荐用法
 

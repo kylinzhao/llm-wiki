@@ -26,13 +26,45 @@
 
 1. 检查 `raw/`
 2. 检查 `BUSINESS_CONTEXT.md`
-3. 初始化目录骨架
-4. 初始化构建脚本
-5. 运行 `build_wiki.py`
+3. 安装随 skill 打包的项目模板：
+
+   ```bash
+   python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template.py --project "$PWD"
+   ```
+
+4. 运行确定性初始化：
+
+   ```bash
+   uv run python tools/update_wiki.py
+   ```
+
+5. 如果存在 `raw-code/` 且需要图谱增强，运行：
+
+   ```bash
+   uv run python tools/graphify_code.py --all
+   uv run python tools/scan_code.py
+   uv run python tools/build_traceability.py
+   ```
+
 6. 对全量语料完成首轮大模型 summary
 7. 对全量语料完成 AI-native 文本精修与分层落位
-8. 运行 `health.py --json`
-9. 运行 `build_graph.py`
+8. 对代码能力页和 traceability 完成 Codex-native 证据强度判定
+9. 运行 `health.py --json`
+10. 运行 `build_graph.py`
+11. 运行 `anchor_check.py`
+
+模板必须包含完整工程底座，而不是只有最小 demo。目标项目至少应获得：
+
+- `tools/build_wiki.py`
+- `tools/scan_code.py`
+- `tools/graphify_code.py`
+- `tools/build_traceability.py`
+- `tools/health.py`
+- `tools/build_graph.py`
+- `tools/anchor_check.py`
+- `docs/tooling-dependencies.md`
+- `docs/implementation-workflow.md`
+- 项目级 `AGENTS.md`
 
 ## 4. 关键判断
 
