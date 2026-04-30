@@ -66,6 +66,7 @@ python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template
 
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/project-principles.md`
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/wiki-structure.md`
+- `/Users/zhaoliang/.codex/skills/llm-wiki/references/architecture-and-retrieval.md`
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/query-logic.md`
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/commands.md`
 - `/Users/zhaoliang/.codex/skills/llm-wiki/references/subagent-handoff.md`

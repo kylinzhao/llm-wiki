@@ -433,6 +433,7 @@ skill 核心文件：
 - [commands.md](./references/commands.md)
 - [project-principles.md](./references/project-principles.md)
 - [wiki-structure.md](./references/wiki-structure.md)
+- [architecture-and-retrieval.md](./references/architecture-and-retrieval.md)
 - [query-logic.md](./references/query-logic.md)
 - [code-wiki.md](./references/code-wiki.md)
 - [subagent-handoff.md](./references/subagent-handoff.md)
