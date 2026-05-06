@@ -25,7 +25,7 @@
 - `用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，一次性跑完标准首轮。`
 - `用 $llm-wiki doctor 看看整个站点健康度、缺口和下一步建议。`
 - `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面。`
-- `用 $llm-wiki add-wiki 添加这个文档目录或 wiki URL 到当前项目；如果是 wiki URL，尝试推导 RSS，失败则要求我手动提供 RSS。`
+- `用 $llm-wiki add-wiki 添加这个文档目录或 wiki URL 到当前项目；如果是 wiki URL，尝试推导并验证 RSS，失败则要求我手动提供 RSS。`
 - `用 $llm-wiki review-requirement 帮我 review 这个 Cwiki 需求，并输出评论稿。`
 - `用 $llm-wiki trace 补某个业务能力的需求到代码追踪矩阵。`
 
@@ -381,7 +381,7 @@ uv run python tools/graphify_code.py --all
 ```
 
 ```text
-用 $llm-wiki add-wiki 添加这个文档目录或 wiki URL 到当前项目。保持 raw 不可变，建立来源记录；如果是 wiki URL，尝试推导 RSS，失败则要求我手动提供 RSS。
+用 $llm-wiki add-wiki 添加这个文档目录或 wiki URL 到当前项目。保持 raw 不可变，建立来源记录；如果是 wiki URL，尝试推导并验证 RSS，失败则要求我手动提供 RSS。
 ```
 
 ```text

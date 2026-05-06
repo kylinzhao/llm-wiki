@@ -121,6 +121,7 @@ Default update order:
 2. Refresh upstream inputs when the project has a declared updater:
    - run the configured `raw/` wiki sync command, RSS watcher, or feed-based wiki sync command, if present
    - if upstream wiki URLs are configured but RSS/feed URLs are missing, attempt deterministic feed discovery from the wiki URL and platform metadata before syncing
+   - after discovering or constructing any RSS/feed URL, verify it once before saving or using it: HTTP must be reachable without auth/login HTML, XML must parse as RSS/Atom/RDF, and it must contain at least one item/entry
    - if an RSS/feed URL cannot be inferred, tell the user exactly which wiki URL needs a manually supplied RSS URL; if the user does not provide one, leave the RSS/feed field empty and report that automatic future updates for that source cannot be completed
    - update clean `raw-code/*` repositories, if requested or configured
    - never silently overwrite dirty `raw-code/*` worktrees
@@ -197,8 +198,8 @@ Default order:
 1. Read `BUSINESS_CONTEXT.md`, existing `docs/build-and-maintenance.md`, and current `staging/refinement-status.md`.
 2. Inspect the provided source directory or wiki URL and identify its document unit pattern.
 3. If the input is a live wiki URL, attempt deterministic RSS/feed discovery from URL structure and platform metadata.
-4. If RSS/feed discovery succeeds, record the discovered RSS/feed URL with the source provenance or updater config.
-5. If RSS/feed discovery fails, explicitly tell the user that the RSS URL cannot be inferred, ask the user to manually provide the RSS URL, and explain that automatic future update work for that source cannot be completed without it. If the user does not provide one, leave the RSS/feed field empty.
+4. Immediately verify any discovered, constructed, or user-provided RSS/feed URL with `uv run python tools/discover_wiki_feeds.py --url <wiki_url> [--rss-url <rss_url>]`; only `discovered_verified` and `provided_verified` are valid for automatic future updates.
+5. If RSS/feed discovery or verification fails, explicitly tell the user that the RSS URL cannot be inferred or verified, ask the user to manually provide the RSS URL, and explain that automatic future update work for that source cannot be completed without it. If the user does not provide one, leave the RSS/feed field empty.
 6. Confirm whether the input can be copied, linked, downloaded, or synced into `raw/`; do not rewrite or normalize source evidence in place.
 7. Preserve provenance: original path, source URL when present, RSS/feed URL when known, RSS/feed status, imported_at, and source collection name.
 8. Place imported documents under a stable `raw/` subdirectory naming scheme that will not collide with existing page IDs.

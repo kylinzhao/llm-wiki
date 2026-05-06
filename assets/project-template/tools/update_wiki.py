@@ -37,8 +37,13 @@ def main() -> int:
         (tools / "build_graph.py", []),
         (tools / "anchor_check.py", []),
     ]
+    wiki_sources = project / "upstream" / "wiki-sources.json"
+    feed_discovery = tools / "discover_wiki_feeds.py"
+    if wiki_sources.is_file():
+        steps.insert(0, (feed_discovery, ["--input", str(wiki_sources)]))
     if args.graphify and (project / "raw-code").is_dir():
-        steps.insert(2, (tools / "graphify_code.py", ["--all"]))
+        graphify_index = 3 if wiki_sources.is_file() else 2
+        steps.insert(graphify_index, (tools / "graphify_code.py", ["--all"]))
 
     exit_code = 0
     for script, extra in steps:
