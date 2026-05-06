@@ -105,7 +105,7 @@ python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template
 - `llm-wiki resume`：读取状态文件，从未完成阶段续跑。
 - `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，指出健康度、缺口、优化建议和下一步命令。
 - `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新。
-- `llm-wiki add-wiki`：把另一个文档/wiki 目录接入当前项目，作为新的 `raw/` 需求/业务证据来源。
+- `llm-wiki add-wiki`：把另一个文档/wiki 目录或 wiki URL 接入当前项目，作为新的 `raw/` 需求/业务证据来源；wiki URL 应尝试推导 RSS/feed，无法推导时要求用户手动提供，否则该来源 RSS 留空且不具备后续自动更新能力。
 - `llm-wiki add-code`：把另一个项目代码库接入当前项目，作为新的 `raw-code/<codebase_id>/` 代码证据来源。
 - `llm-wiki refine`：source / concepts / entities / layered pages 精修。
 - `llm-wiki gplus`：综合层二次校准、查询验收、质量审查。
@@ -397,7 +397,7 @@ python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template
 
 `用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围，只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。`
 
-`用 $llm-wiki add-wiki 添加这个文档目录到当前项目。保持 raw 不可变，建立来源记录，增量生成受影响 wiki。`
+`用 $llm-wiki add-wiki 添加这个文档目录或 wiki URL 到当前项目。保持 raw 不可变，建立来源记录；如果是 wiki URL，尝试推导 RSS，失败则要求我手动提供 RSS。`
 
 `用 $llm-wiki add-code 添加这个代码项目到当前项目。把它作为 raw-code 下独立 codebase，构建代码 wiki 和必要的能力链接。`
 

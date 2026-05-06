@@ -10,8 +10,8 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki init` | New project, user wants phased initialization | Skeleton, deterministic build, first-pass plan |
 | `llm-wiki resume` | Existing project has partial work | Resume from latest status / checkpoint |
 | `llm-wiki doctor` | User wants a site-wide status, diagnosis, and recommendations | Health portrait and prioritized next steps |
-| `llm-wiki update` | `raw/`, `BUSINESS_CONTEXT.md`, `raw-code/`, wiki, or source code changed | Impact-scoped wiki update |
-| `llm-wiki add-wiki` | Add another document/wiki directory as business or requirement evidence | Imported raw evidence and affected wiki updates |
+| `llm-wiki update` | `raw/`, `BUSINESS_CONTEXT.md`, `raw-code/`, wiki, configured RSS/upstream wiki sources, or source code changed | Impact-scoped wiki update |
+| `llm-wiki add-wiki` | Add another document/wiki directory or wiki URL as business or requirement evidence | Imported raw evidence, source provenance, RSS/update status, and affected wiki updates |
 | `llm-wiki add-code` | Add another project codebase as implementation evidence | New raw-code codebase and code wiki updates |
 | `llm-wiki refine` | Improve source, concepts, entities, or layered pages | AI-native text refinement |
 | `llm-wiki gplus` | Text layer exists and needs query readiness | Query acceptance, quality audit, health, graph |
@@ -119,7 +119,9 @@ Default update order:
 
 1. Identify changed files and classify the trigger.
 2. Refresh upstream inputs when the project has a declared updater:
-   - run the configured `raw/` wiki sync command, if present
+   - run the configured `raw/` wiki sync command, RSS watcher, or feed-based wiki sync command, if present
+   - if upstream wiki URLs are configured but RSS/feed URLs are missing, attempt deterministic feed discovery from the wiki URL and platform metadata before syncing
+   - if an RSS/feed URL cannot be inferred, tell the user exactly which wiki URL needs a manually supplied RSS URL; if the user does not provide one, leave the RSS/feed field empty and report that automatic future updates for that source cannot be completed
    - update clean `raw-code/*` repositories, if requested or configured
    - never silently overwrite dirty `raw-code/*` worktrees
 3. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
@@ -166,6 +168,7 @@ Final report:
 
 - trigger
 - changed inputs
+- upstream sync status, including missing RSS/feed URLs when automatic wiki updates are configured
 - affected wiki layers
 - pages updated
 - pages intentionally left untouched
@@ -181,36 +184,41 @@ Recommendation rule:
 
 ## `llm-wiki add-wiki`
 
-Purpose: add another document/wiki directory to the current LLM Wiki as business or requirement evidence.
+Purpose: add another document/wiki directory or wiki URL to the current LLM Wiki as business or requirement evidence.
 
 Use when:
 
-- The user has another exported wiki, Markdown directory, Confluence export, or document folder that should become part of `raw/`.
+- The user has another exported wiki, Markdown directory, Confluence export, live wiki URL, or document folder that should become part of `raw/`.
 - The current project should answer questions across multiple document sources.
 - The added material is business/requirement evidence, not source code.
 
 Default order:
 
 1. Read `BUSINESS_CONTEXT.md`, existing `docs/build-and-maintenance.md`, and current `staging/refinement-status.md`.
-2. Inspect the provided source directory and identify its document unit pattern.
-3. Confirm whether the input can be copied or linked into `raw/`; do not rewrite or normalize source evidence in place.
-4. Preserve provenance: original path, source URL when present, imported_at, and source collection name.
-5. Place imported documents under a stable `raw/` subdirectory naming scheme that will not collide with existing page IDs.
-6. Run the project update command when available, such as `uv run python tools/update_wiki.py`.
-7. AI-native refine only affected source, concept, entity, and layered pages.
-8. Run health and graph.
+2. Inspect the provided source directory or wiki URL and identify its document unit pattern.
+3. If the input is a live wiki URL, attempt deterministic RSS/feed discovery from URL structure and platform metadata.
+4. If RSS/feed discovery succeeds, record the discovered RSS/feed URL with the source provenance or updater config.
+5. If RSS/feed discovery fails, explicitly tell the user that the RSS URL cannot be inferred, ask the user to manually provide the RSS URL, and explain that automatic future update work for that source cannot be completed without it. If the user does not provide one, leave the RSS/feed field empty.
+6. Confirm whether the input can be copied, linked, downloaded, or synced into `raw/`; do not rewrite or normalize source evidence in place.
+7. Preserve provenance: original path, source URL when present, RSS/feed URL when known, RSS/feed status, imported_at, and source collection name.
+8. Place imported documents under a stable `raw/` subdirectory naming scheme that will not collide with existing page IDs.
+9. Run the project update command when available, such as `uv run python tools/update_wiki.py`.
+10. AI-native refine only affected source, concept, entity, and layered pages.
+11. Run health and graph.
 
 Stop for confirmation when:
 
-- The user did not provide a source path.
+- The user did not provide a source path or wiki URL.
 - The input has ambiguous ownership or should not be copied into this project.
 - The import would overwrite existing `raw/` directories.
 - Canonical entity rules need to change to accommodate the new corpus.
+- A live wiki URL needs automatic future updates but no RSS/feed URL can be inferred; ask for the manual RSS URL, and leave it empty if the user does not provide one.
 
 Final report:
 
-- source directory
-- import method: copied, linked, or blocked
+- source input: directory, export, document folder, or wiki URL
+- import method: copied, linked, downloaded, synced, or blocked
+- source URL, RSS/feed URL when known, and RSS/feed status: discovered, provided, missing, or not applicable
 - imported document count
 - affected wiki pages
 - validation results
@@ -556,7 +564,7 @@ Build requirement-to-code traceability matrices. Backward-compatible alias: `llm
 
 ### `llm-wiki add-wiki`
 
-Add another document/wiki directory into the project evidence layer. Preserve provenance, avoid overwriting `raw/`, then run update, health, and graph.
+Add another document/wiki directory or wiki URL into the project evidence layer. Preserve provenance and RSS/update status, avoid overwriting `raw/`, then run update, health, and graph.
 
 ### `llm-wiki add-code`
 
