@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Add Code"
+  short_description: "把其他项目代码加入 raw-code 证据层"
+  default_prompt: "用 $llm-wiki-add-code 添加这个代码项目："

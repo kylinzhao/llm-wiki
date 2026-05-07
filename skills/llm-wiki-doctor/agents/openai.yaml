@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Doctor"
+  short_description: "只读诊断 wiki 健康度、缺口和下一步建议"
+  default_prompt: "用 $llm-wiki-doctor 诊断当前项目。"

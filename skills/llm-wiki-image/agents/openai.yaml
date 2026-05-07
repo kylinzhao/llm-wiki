@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Image"
+  short_description: "文本层完成后补充高价值图片证据"
+  default_prompt: "用 $llm-wiki-image 补充当前项目高价值图片证据。"

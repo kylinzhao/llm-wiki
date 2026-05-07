@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Build Code"
+  short_description: "从 raw-code 构建或刷新 wiki/code"
+  default_prompt: "用 $llm-wiki-build-code 刷新当前项目代码 wiki。"

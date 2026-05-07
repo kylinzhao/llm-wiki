@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Code Trace"
+  short_description: "把需求映射到前端、后端和代码证据"
+  default_prompt: "用 $llm-wiki-code-trace 构建需求到代码追踪。"

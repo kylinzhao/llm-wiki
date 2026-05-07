@@ -66,8 +66,6 @@ def main() -> int:
             print(f"  = {item}")
     print("next_commands:")
     print("  uv run python tools/update_wiki.py")
-    print("  # optional when upstream/wiki-sources.json exists or when adding live wiki URLs:")
-    print("  uv run python tools/discover_wiki_feeds.py --input upstream/wiki-sources.json")
     print("  # optional when raw-code/ exists and graphify is installed:")
     print("  uv run python tools/update_wiki.py --graphify")
     print("  # or run graphify alone:")

@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Resume"
+  short_description: "从状态文件和 checkpoint 续跑中断的 wiki 任务"
+  default_prompt: "用 $llm-wiki-resume 续跑当前项目。"
