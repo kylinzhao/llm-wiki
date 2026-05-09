@@ -43,7 +43,7 @@ Frontend is involved when the project has frontend code, routes, UI screenshots,
 
 - Do not mutate source evidence in `raw/` by hand.
 - Do not silently replace Cwiki/raw versions when pageId conflicts.
-- If starting any local preview/dev server under `/Users/zhaoliang/guazi/work`, run the local port registry guard first.
+- If starting any local preview/dev server in a workspace where port collisions are common (for example many repositories checked out under one parent folder), run the local port registry guard first.
 - Never put local paths such as `/Users/...`, `raw/...`, or `wiki/sources/...` in the Cwiki comment draft.
 - Code evidence may support a finding, but "code already implements something the PRD omitted" is not by itself a frontend缺失 finding. Put it in notes as: `代码已有实现，建议 PRD 补录与代码对齐`.
 - When evidence is missing, say it is missing. Do not upgrade inference to fact.

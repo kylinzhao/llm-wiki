@@ -29,8 +29,10 @@
 3. 安装随 skill 打包的项目模板：
 
    ```bash
-   python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template.py --project "$PWD"
+   python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"
    ```
+
+   `$LLM_WIKI_SKILL_ROOT` 为 llm-wiki skill 包根目录，定义见主 `SKILL.md` 的「Skill 包路径」。
 
 4. 运行确定性初始化：
 

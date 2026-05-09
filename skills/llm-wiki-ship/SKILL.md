@@ -7,8 +7,8 @@ description: LLM Wiki 发布收口入口。用于将 wiki 工作验证并准备�
 
 这是 `$llm-wiki ship` 的短入口。
 
-1. 读取 `/Users/zhaoliang/.codex/skills/llm-wiki/SKILL.md`。
-2. 读取 `/Users/zhaoliang/.codex/skills/llm-wiki/references/commands.md`。
+1. 读取 **llm-wiki** skill 包根目录下的 `SKILL.md`（路径由当前环境的 skill 安装位置解析，勿写死本机绝对路径）。
+2. 读取同包内 `references/commands.md`。
 3. 将 `$llm-wiki-ship` 后面的用户文本作为 `llm-wiki ship` 参数。
 4. 发布前先验证，并确保 `raw/` 没有被 staged 或 tracked。
 5. 只有 remote 和意图明确时才提交或推送。

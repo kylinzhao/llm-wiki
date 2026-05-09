@@ -54,11 +54,13 @@ Zip files are likely prototype HTML. For every relevant zip:
 - detect HTML entry points, assets, scripts, routes, mock data, README files, and exported design metadata
 - inspect HTML text, visible labels, forms, buttons, states, navigation, dialogs, tables, and validation hints
 - open locally only when needed for visual inspection
-- if starting a local preview/dev server under `/Users/zhaoliang/guazi/work`, first run:
+- if starting a local preview/dev server in an environment where port collisions are common, first run the local port registry helper from **that skill's package root** (resolve the path like other installed skills — do not hardcode a user-specific absolute path), for example:
 
 ```bash
-python3 "$HOME/.codex/skills/local-port-registry/scripts/port_registry.py" prompt --project "$PWD" --command "<start command>"
+python3 "$LOCAL_PORT_REGISTRY_SKILL_ROOT/scripts/port_registry.py" prompt --project "$PWD" --command "<start command>"
 ```
+
+Set `LOCAL_PORT_REGISTRY_SKILL_ROOT` to the installed `local-port-registry` skill package root (resolve from your agent’s skill install layout; do not hardcode user-specific absolute paths).
 
 Treat prototype behavior as evidence with provenance, and distinguish static prototype facts from implemented system facts.
 

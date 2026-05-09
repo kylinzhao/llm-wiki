@@ -54,6 +54,8 @@ def main() -> int:
 
     project.mkdir(parents=True, exist_ok=True)
     copied, skipped = copy_tree(TEMPLATE_ROOT, project, args.force)
+    # build_wiki.py requires raw/; the template does not ship evidence files (often gitignored).
+    (project / "raw").mkdir(parents=True, exist_ok=True)
 
     print(f"project={project}")
     print(f"template={TEMPLATE_ROOT}")

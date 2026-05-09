@@ -7,8 +7,8 @@ description: LLM Wiki 添加代码库入口。用于把另一个本地项目、�
 
 这是 `$llm-wiki add-code` 的短入口。
 
-1. 读取 `/Users/zhaoliang/.codex/skills/llm-wiki/SKILL.md`。
-2. 读取 `/Users/zhaoliang/.codex/skills/llm-wiki/references/commands.md`。
+1. 读取 **llm-wiki** skill 包根目录下的 `SKILL.md`（路径由当前环境的 skill 安装位置解析，勿写死本机绝对路径）。
+2. 读取同包内 `references/commands.md`。
 3. 将 `$llm-wiki-add-code` 后面的用户文本作为代码路径和 `llm-wiki add-code` 参数。
 4. 代码证据放在 `raw-code/<codebase_id>/`，不要混入 `raw/`。
 5. 覆盖已有代码库或复制密钥/构建产物前必须停下确认。

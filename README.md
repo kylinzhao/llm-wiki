@@ -1,12 +1,24 @@
 # LLM Wiki Skill Bundle
 
-这是 LLM Wiki 的 Codex skill bundle。它把 `llm-wiki` 主 skill、常用二级 skill wrapper、需求评审 skill、项目模板脚本和维护文档打包在一起，便于安装到本机 Codex skills 目录，也便于统一维护和发布。
+这是 LLM Wiki 的 skill bundle。它把 `llm-wiki` 主 skill、常用二级 skill wrapper、需求评审 skill、项目模板脚本和维护文档打包在一起，便于安装到 Codex / Claude Code / Cursor 的技能目录，也便于统一维护和发布。
 
-项目仓库：
+项目仓库（对外分发时请改为受众可克隆的地址）：
 
 ```text
 https://git.guazi-corp.com/c2b-fe/llm-wiki
 ```
+
+## 前置条件
+
+- **Python** 3.10+（与项目模板 `pyproject.toml` 一致）
+- **`uv`**：模板与文档中的构建命令统一为 `uv run python ...`（见 `skills/llm-wiki/assets/project-template/docs/tooling-dependencies.md`）
+- **Unix 环境**：`install.sh` 为 Bash 脚本；Windows 请手动将 `skills/` 下各目录复制到对应 skills 安装路径，或使用 WSL/Git Bash。
+- `install.sh` 支持 `--client codex|claude|cursor|all|auto`：
+  - `codex` -> `${CODEX_HOME:-$HOME/.codex}/skills`
+  - `claude` -> `${CLAUDE_HOME:-$HOME/.claude}/skills`
+  - `cursor` -> `${CURSOR_HOME:-$HOME/.cursor}/skills`
+  - `auto`（默认）会按当前机器上已存在的客户端目录自动选择目标；`all` 强制安装到三者。
+- **可选**：`graphify`（仅当需要代码图谱增强时）。**可选**：`local-port-registry` skill——仅在 `requirement-review` 流程里要起本地预览服且担心端口冲突时使用；本 bundle 未内置该 skill。
 
 ## 这是什么
 
@@ -51,7 +63,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 | `skills/llm-wiki/` | 主 skill，包含完整生命周期协议、二级命令路由、references、项目模板脚本和 agent handoff 规则。 |
 | `skills/llm-wiki-*/` | 常用命令的短入口 wrapper，便于在 Codex skill 列表里直接发现和调用。 |
 | `skills/requirement-review/` | 独立需求评审 skill，可脱离 `llm-wiki` 使用。 |
-| `install.sh` | 把本 bundle 安装到 `${CODEX_HOME:-$HOME/.codex}/skills`。 |
+| `install.sh` | 把本 bundle 安装到 Codex / Claude Code / Cursor 的 skills 目录（可用 `--client` 选择目标）。 |
 | `tests/` | 安装脚本和 bundle 结构测试。 |
 | `INSTRUCTION_AND_RELEASE_PLAN.md` | 指令拆分、update 收口和发布方案说明。 |
 | `FE_REQ_REVIEW_SKILL.md` | 前端需求评审能力设计说明。 |
@@ -59,10 +71,36 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 
 ## 安装
 
-复制安装：
+首次在本机安装 bundle（默认 `--client auto`；目标目录下尚无同名 skill 时，可省略 `--backup`）：
 
 ```bash
 ./install.sh --copy --backup
+# 或显式指定客户端
+./install.sh --copy --backup --client codex
+./install.sh --copy --backup --client claude
+./install.sh --copy --backup --client cursor
+```
+
+安装完成后，在**空的 wiki 项目目录**中初始化脚手架（会创建 `raw/` 与工具脚本；随后请补全 `BUSINESS_CONTEXT.md` 与 `raw/` 证据）：
+
+```bash
+cd /path/to/your-wiki-repo
+# 以 codex 为例；claude/cursor 请把前缀改为对应 skills 目录
+python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"
+uv run python tools/update_wiki.py
+```
+
+按客户端可直接复制的初始化命令：
+
+```bash
+# Codex
+python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"
+
+# Claude Code
+python3 "${CLAUDE_HOME:-$HOME/.claude}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"
+
+# Cursor
+python3 "${CURSOR_HOME:-$HOME/.cursor}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"
 ```
 
 软链安装，适合继续开发这个 bundle：
@@ -80,7 +118,9 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 默认安装目录是：
 
 ```text
-${CODEX_HOME:-$HOME/.codex}/skills
+codex  -> ${CODEX_HOME:-$HOME/.codex}/skills
+claude -> ${CLAUDE_HOME:-$HOME/.claude}/skills
+cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
 ```
 
 ## 主入口

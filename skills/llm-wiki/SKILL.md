@@ -8,6 +8,22 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 这个 skill 面向“文件型 LLM Wiki 项目”的全生命周期，而不只是查询。
 它也是这类项目后续唯一推荐维护和调用的统一入口，不再需要拆分单独的 query-only skill。
 
+## Skill 包路径
+
+文档中的 `README.md`、`references/...`、`scripts/...` 均相对于 **llm-wiki skill 包根目录**（与 `SKILL.md`、`scripts/` 同级的文件夹）。该根目录须从当前环境解析（例如根据已加载的 skill 文件路径、或 Codex/Cursor 等下的实际安装位置），**禁止**写死个人本机绝对路径。
+
+**按本仓库 `install.sh` 安装后**，可直接使用（以 Codex 默认目录为例；Claude Code / Cursor 只需替换为各自 skills 根目录）：
+
+```bash
+python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"
+```
+
+其他布局下将 `$LLM_WIKI_SKILL_ROOT` 设为上述根目录即可：
+
+```bash
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"
+```
+
 它适用于：
 
 - 新项目 0-1 初始化
@@ -41,7 +57,7 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 新项目初始化时必须先安装随 skill 打包的项目模板，除非目标项目已经有等价脚本：
 
 ```bash
-python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template.py --project "$PWD"
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"
 ```
 
 该模板提供 `tools/build_wiki.py`、`tools/scan_code.py`、`tools/graphify_code.py`、`tools/build_traceability.py`、`tools/health.py`、`tools/build_graph.py`、`tools/anchor_check.py`、项目 `AGENTS.md`、`.gitignore` 和依赖说明。模板脚本只做确定性扫描、脚手架、校验和图谱构建；语义 summary、实体归一、能力判断和证据强度仍由 Codex / subagent 完成。
@@ -50,28 +66,28 @@ python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template
 
 ### 新项目 / 构建任务
 
-- `/Users/zhaoliang/.codex/skills/llm-wiki/README.md`
-- `/Users/zhaoliang/.codex/skills/llm-wiki/references/bootstrapping.md`
-- `/Users/zhaoliang/.codex/skills/llm-wiki/references/build-and-maintenance.md`
-- 如果存在 `raw-code/`：`/Users/zhaoliang/.codex/skills/llm-wiki/references/code-wiki.md`
+- `README.md`（llm-wiki 包内）
+- `references/bootstrapping.md`
+- `references/build-and-maintenance.md`
+- 如果存在 `raw-code/`：`references/code-wiki.md`
 
 ### 已有项目 / 查询任务
 
-- `/Users/zhaoliang/.codex/skills/llm-wiki/README.md`
+- `README.md`（llm-wiki 包内）
 - `docs/retrieval-playbook.md`
 - `docs/build-and-maintenance.md`
-- 如果问题涉及代码实现或项目存在 `wiki/code/`：`/Users/zhaoliang/.codex/skills/llm-wiki/references/code-wiki.md`
+- 如果问题涉及代码实现或项目存在 `wiki/code/`：`references/code-wiki.md`
 
 ### 按需读
 
-- `/Users/zhaoliang/.codex/skills/llm-wiki/references/project-principles.md`
-- `/Users/zhaoliang/.codex/skills/llm-wiki/references/wiki-structure.md`
-- `/Users/zhaoliang/.codex/skills/llm-wiki/references/architecture-and-retrieval.md`
-- `/Users/zhaoliang/.codex/skills/llm-wiki/references/query-logic.md`
-- `/Users/zhaoliang/.codex/skills/llm-wiki/references/commands.md`
-- `/Users/zhaoliang/.codex/skills/llm-wiki/references/subagent-handoff.md`
-- `/Users/zhaoliang/.codex/skills/llm-wiki/references/image-evidence.md`
-- `/Users/zhaoliang/.codex/skills/llm-wiki/references/fe-req-review-skill.md`
+- `references/project-principles.md`
+- `references/wiki-structure.md`
+- `references/architecture-and-retrieval.md`
+- `references/query-logic.md`
+- `references/commands.md`
+- `references/subagent-handoff.md`
+- `references/image-evidence.md`
+- `references/fe-req-review-skill.md`
 
 ## 续跑优先级
 
@@ -98,7 +114,7 @@ python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template
 
 ### 0. 二级命令路由
 
-`llm-wiki` 是统一入口，但推荐用二级命令降低提示词长度。看到这些命令时，先读取 `/Users/zhaoliang/.codex/skills/llm-wiki/references/commands.md`：
+`llm-wiki` 是统一入口，但推荐用二级命令降低提示词长度。看到这些命令时，先读取 llm-wiki 包内 `references/commands.md`：
 
 - `llm-wiki fast`：新项目一口气完成标准首轮，从输入检查到 health / graph 收口；适合用户明确希望一次性跑完。
 - `llm-wiki init`：0-1 初始化，可分阶段汇报。

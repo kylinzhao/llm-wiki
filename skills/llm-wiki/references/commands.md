@@ -49,7 +49,7 @@ Read:
 Run order:
 
 1. Validate `raw/` and `BUSINESS_CONTEXT.md`.
-2. Install the bundled project template unless equivalent scripts already exist: `python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template.py --project "$PWD"`.
+2. Install the bundled project template unless equivalent scripts already exist: after bundle install, use your client's skills root (for example Codex: `python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"`), or use `python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"` when the package lives elsewhere (see main `SKILL.md` "Skill 包路径").
 3. Run deterministic build with `uv run python tools/update_wiki.py`.
 4. If `raw-code/` exists and code graph extraction is useful, run `uv run python tools/graphify_code.py --all`, then rerun `scan_code.py` and `build_traceability.py`.
 5. Complete first-pass source summary and AI-native refinement.
@@ -356,7 +356,7 @@ Required reads:
 4. `wiki/overview.md`, `wiki/index.md`, and relevant `wiki/sources/`
 5. relevant `wiki/concepts/`, `wiki/entities/`, `wiki/truth/`, `wiki/conflicts/`, `wiki/evidence/`, `wiki/proposals/`, `wiki/reference/`, and `wiki/operations/`
 6. if present, `wiki/code/index.md`, `wiki/code/capabilities/`, and `wiki/code/traceability/`
-7. frontend review rules: first read project-local `FE_REQ_REVIEW_SKILL.md` if it exists; otherwise read the bundled copy at `/Users/zhaoliang/.codex/skills/llm-wiki/references/fe-req-review-skill.md`
+7. frontend review rules: first read project-local `FE_REQ_REVIEW_SKILL.md` if it exists; otherwise read the bundled copy at `references/fe-req-review-skill.md` inside the llm-wiki skill package
 8. if the requirement or project contains images, read nearby Markdown context and perform multimodal analysis of every requirement-relevant image
 9. if the requirement or project contains zip files, inspect each relevant zip as a possible HTML prototype
 
@@ -379,7 +379,7 @@ Mandatory artifact analysis:
 - Zip files are likely prototype HTML. For each relevant zip:
   - list top-level files and detect HTML entry points, assets, scripts, routes, mock data, and README files
   - inspect HTML text, visible labels, forms, buttons, states, navigation, dialogs, tables, and validation hints
-  - open locally only when needed for visual inspection; if starting a local server under `/Users/zhaoliang/guazi/work`, obey the local port registry guard before any dev/preview command
+  - open locally only when needed for visual inspection; if starting a local server in a workspace where port collisions are common (e.g. many repos under one parent directory), run the local port registry guard before any dev/preview command
   - treat prototype behavior as evidence with provenance, and distinguish static prototype facts from implemented system facts
 
 Frontend-specific review:

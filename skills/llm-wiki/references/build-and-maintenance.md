@@ -1,9 +1,11 @@
 # 构建与维护
 
+`$LLM_WIKI_SKILL_ROOT` 为 llm-wiki skill 包根目录（见主 `SKILL.md`「Skill 包路径」）。
+
 ## 1. 标准命令
 
 ```text
-python3 /Users/zhaoliang/.codex/skills/llm-wiki/scripts/install_project_template.py --project "$PWD"
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"
 uv run python tools/build_wiki.py
 uv run python tools/scan_code.py
 uv run python tools/build_traceability.py

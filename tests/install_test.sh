@@ -37,7 +37,19 @@ assert_contains() {
 run_install() {
   local home="$1"
   shift
-  CODEX_HOME="$home" "$ROOT_DIR/install.sh" "$@"
+  CODEX_HOME="$home" "$ROOT_DIR/install.sh" --client codex "$@"
+}
+
+run_install_claude() {
+  local home="$1"
+  shift
+  CLAUDE_HOME="$home" "$ROOT_DIR/install.sh" --client claude "$@"
+}
+
+run_install_cursor() {
+  local home="$1"
+  shift
+  CURSOR_HOME="$home" "$ROOT_DIR/install.sh" --client cursor "$@"
 }
 
 test_default_refuses_existing_skill() {
@@ -95,9 +107,25 @@ test_force_replaces_existing_skill() {
   assert_contains "replaced llm-wiki" "$TMP_DIR/force.out"
 }
 
+test_claude_client_installs_to_claude_home() {
+  local home="$TMP_DIR/claude"
+  run_install_claude "$home" --copy >"$TMP_DIR/claude.out"
+  assert_file "$home/skills/llm-wiki/SKILL.md"
+  assert_contains "Installed llm-wiki skills into:" "$TMP_DIR/claude.out"
+}
+
+test_cursor_client_installs_to_cursor_home() {
+  local home="$TMP_DIR/cursor"
+  run_install_cursor "$home" --copy >"$TMP_DIR/cursor.out"
+  assert_file "$home/skills/llm-wiki/SKILL.md"
+  assert_contains "Installed llm-wiki skills into:" "$TMP_DIR/cursor.out"
+}
+
 test_default_refuses_existing_skill
 test_dry_run_does_not_write
 test_backup_preserves_existing_skill
 test_force_replaces_existing_skill
+test_claude_client_installs_to_claude_home
+test_cursor_client_installs_to_cursor_home
 
 echo "install tests passed"
