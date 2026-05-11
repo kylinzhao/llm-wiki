@@ -39,6 +39,8 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `raw/`
 - `BUSINESS_CONTEXT.md`
 
+若仓库**只提交了构建后的 `wiki/`**，而 `raw/` / `raw-code/` 由单独流程同步：先读 `staging/health/latest.json` 的 `evidence_gaps` / `recommended_actions`。当工具报 `missing_raw_evidence` 或 `missing_raw_code_evidence` 时，**主动提示用户**拉取原始证据后再执行 `update` / `build-code` / `code-trace`，不要假装可以完整重建。只读 `query` / `doctor` 仍可按 `references/commands.md` 的 Evidence preflight 规则进行。
+
 如果项目根目录存在 `raw-code/`：
 
 - 将 `raw-code/*` 的每个一级目录视为一个 `codebase_id`

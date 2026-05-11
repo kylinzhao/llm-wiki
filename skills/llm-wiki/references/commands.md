@@ -23,6 +23,24 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki image` | Add high-value image evidence after text completion | image notes and linked facts |
 | `llm-wiki ship` | Publish or submit wiki work | validation, commit, push |
 
+## Evidence preflight (partial clone / git without raw)
+
+Many teams **commit the built `wiki/`** but **do not commit** `raw/` or `raw-code/` (submodule, sparse checkout, or internal sync). The deterministic tools detect that situation and **block rebuild/update** until evidence is restored.
+
+**Heuristics**
+
+- **Expects `raw/`** when `wiki/sources/*.md` exists or `staging/source-manifest.json` lists sources.
+- **Expects `raw-code/`** when `wiki/code/codebases/*/` exists or `staging/code-graph/summary.json` lists codebases.
+
+**Behavior**
+
+| Situation | `query` / `doctor` / `audit` | `update` / `fast` / `build_wiki` | `scan_code` / `graphify` / `build_traceability` (when code evidence expected) |
+| --- | --- | --- | --- |
+| Built wiki present, `raw/` missing or empty while expectation holds | Continue; cite `staging/health/latest.json` `evidence_gaps` and `recommended_actions` | **Blocked** (`update_wiki` / `build_wiki` exit 2 with message) | If code expectation holds but `raw-code/` missing → **Blocked** |
+| No source pages yet, empty `raw/` | N/A | Allowed (greenfield) | Skipped if no `raw-code/` and no code expectation |
+
+**Agent rule**: When `evidence_gaps` is non-empty, **tell the user explicitly** to pull/restore `raw/` and/or `raw-code/` before promising a full rebuild or code-side refresh. `query` may still answer from committed `wiki/` when the user only needs read-only Q&A.
+
 ## Completion Rule
 
 Every command must end with `建议下一步`.

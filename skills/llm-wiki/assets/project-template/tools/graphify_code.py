@@ -11,6 +11,8 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from wiki_preflight import raw_code_evidence_preflight_failed, wiki_expects_raw_code
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -92,12 +94,20 @@ def main() -> int:
     project = Path(args.project).resolve()
     raw_code = project / "raw-code"
     if not raw_code.is_dir():
+        err = raw_code_evidence_preflight_failed(project)
+        if err:
+            raise SystemExit(err)
         print("raw-code/ not found; graphify skipped")
         return 0
     if args.codebase:
         codebases = [args.codebase]
     elif args.all:
         codebases = sorted(path.name for path in raw_code.iterdir() if path.is_dir())
+        if wiki_expects_raw_code(project) and not codebases:
+            raise SystemExit(
+                "empty_raw_code_evidence: raw-code/ has no codebase directories while code wiki expects "
+                "implementation evidence. Populate raw-code/<codebase_id>/, then rerun graphify."
+            )
     else:
         raise SystemExit("Pass --all or --codebase <codebase_id>.")
 

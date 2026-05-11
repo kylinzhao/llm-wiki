@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
 
 def utc_now() -> str:
@@ -30,6 +33,15 @@ def main() -> int:
     args = parser.parse_args()
 
     project = Path(args.project).resolve()
+    err = raw_evidence_preflight_failed(project)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+    code_err = raw_code_evidence_preflight_failed(project)
+    if code_err:
+        print(code_err, file=sys.stderr)
+        return 2
+
     source_manifest = read_json(project / "staging" / "source-manifest.json", {"sources": []})
     code_summary = read_json(project / "staging" / "code-graph" / "summary.json", {"codebases": []})
     sources = source_manifest.get("sources", []) if isinstance(source_manifest, dict) else []

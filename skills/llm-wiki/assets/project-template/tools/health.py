@@ -9,6 +9,15 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from wiki_preflight import (
+    raw_code_evidence_preflight_failed,
+    raw_dir_has_files,
+    raw_evidence_preflight_failed,
+    raw_code_has_codebases,
+    wiki_expects_raw,
+    wiki_expects_raw_code,
+)
+
 
 REQUIRED_PATHS = [
     "raw",
@@ -81,10 +90,59 @@ def main() -> int:
     ]
     broken_links = find_broken_links(project, pages)
 
+    expects_raw = wiki_expects_raw(project)
+    expects_raw_code = wiki_expects_raw_code(project)
+    raw_dir = project / "raw"
+    raw_code_dir = project / "raw-code"
+    has_raw_dir = raw_dir.is_dir()
+    has_raw_files = raw_dir_has_files(raw_dir)
+    has_raw_code_dir = raw_code_dir.is_dir()
+    has_raw_code_codebases = raw_code_has_codebases(raw_code_dir)
+    raw_gap_message = raw_evidence_preflight_failed(project)
+    raw_code_gap_message = raw_code_evidence_preflight_failed(project)
+    evidence_gaps: list[str] = []
+    if raw_gap_message:
+        evidence_gaps.append(raw_gap_message)
+    if raw_code_gap_message:
+        evidence_gaps.append(raw_code_gap_message)
+
+    if expects_raw and has_raw_dir and has_raw_files:
+        evidence_mode = "raw_ok"
+    elif expects_raw and (not has_raw_dir or not has_raw_files):
+        evidence_mode = "built_without_raw"
+    elif not expects_raw:
+        evidence_mode = "no_raw_expectation"
+    else:
+        evidence_mode = "unknown"
+
+    if expects_raw_code and has_raw_code_dir and has_raw_code_codebases:
+        code_evidence_mode = "raw_code_ok"
+    elif expects_raw_code and (not has_raw_code_dir or not has_raw_code_codebases):
+        code_evidence_mode = "built_without_raw_code"
+    elif not expects_raw_code:
+        code_evidence_mode = "no_raw_code_expectation"
+    else:
+        code_evidence_mode = "unknown"
+
+    recommended_actions: list[str] = []
+    if raw_gap_message:
+        recommended_actions.append(
+            "Restore raw/ (git submodule, sparse checkout, LFS, or internal sync), then run `uv run python tools/update_wiki.py`."
+        )
+    if raw_code_gap_message:
+        recommended_actions.append(
+            "Restore raw-code/<codebase_id>/, then run `uv run python tools/update_wiki.py` or at least scan_code + build_traceability."
+        )
+
+    wiki_built = (project / "wiki" / "index.md").is_file()
+    query_may_work_without_full_evidence = wiki_built and bool(evidence_gaps)
+
+    content_ok = not missing and not empty_pages and not broken_links and not stale_sources
+    evidence_ok = not evidence_gaps
     report = {
         "generated_at": utc_now(),
         "project": str(project),
-        "ok": not missing and not empty_pages and not broken_links and not stale_sources,
+        "ok": content_ok and evidence_ok,
         "has_business_context": has_business_context,
         "missing_required_paths": missing,
         "wiki_pages": len(pages),
@@ -93,6 +151,17 @@ def main() -> int:
         "broken_wikilinks": broken_links,
         "stale_sources": stale_sources,
         "orphan_source_pages": orphan_source_pages,
+        "expects_raw_evidence": expects_raw,
+        "has_raw_dir": has_raw_dir,
+        "has_raw_files": has_raw_files,
+        "expects_raw_code_evidence": expects_raw_code,
+        "has_raw_code_dir": has_raw_code_dir,
+        "has_raw_code_codebases": has_raw_code_codebases,
+        "evidence_mode": evidence_mode,
+        "code_evidence_mode": code_evidence_mode,
+        "evidence_gaps": evidence_gaps,
+        "recommended_actions": recommended_actions,
+        "query_may_work_without_full_evidence": query_may_work_without_full_evidence,
     }
 
     out = project / "staging" / "health" / "latest.json"

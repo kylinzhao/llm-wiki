@@ -14,6 +14,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from wiki_preflight import raw_evidence_preflight_failed
 
 TEXT_EXTENSIONS = {
     ".md",
@@ -389,9 +390,12 @@ def main() -> int:
     args = parser.parse_args()
 
     project = Path(args.project).resolve()
+    err = raw_evidence_preflight_failed(project)
+    if err:
+        raise SystemExit(err)
     raw_dir = project / "raw"
     if not raw_dir.is_dir():
-        raise SystemExit("Missing required raw/ directory. Create raw/ before running build_wiki.py.")
+        raw_dir.mkdir(parents=True, exist_ok=True)
 
     for rel in REQUIRED_DIRS:
         (project / rel).mkdir(parents=True, exist_ok=True)

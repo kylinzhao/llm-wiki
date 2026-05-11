@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
+
 
 def run(script: Path, project: Path, extra: list[str] | None = None) -> int:
     command = [sys.executable, str(script), "--project", str(project)]
@@ -28,6 +30,11 @@ def main() -> int:
     args = parser.parse_args()
 
     project = Path(args.project).resolve()
+    err = raw_evidence_preflight_failed(project)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+
     tools = project / "tools"
     steps = [
         (tools / "build_wiki.py", []),
@@ -37,7 +44,7 @@ def main() -> int:
         (tools / "build_graph.py", []),
         (tools / "anchor_check.py", []),
     ]
-    if args.graphify and (project / "raw-code").is_dir():
+    if args.graphify:
         steps.insert(2, (tools / "graphify_code.py", ["--all"]))
 
     exit_code = 0
@@ -45,6 +52,11 @@ def main() -> int:
         if not script.is_file():
             print(f"missing script: {script}", file=sys.stderr)
             return 2
+        if script.name in {"scan_code.py", "graphify_code.py"}:
+            code_err = raw_code_evidence_preflight_failed(project)
+            if code_err:
+                print(code_err, file=sys.stderr)
+                return 2
         code = run(script, project, extra)
         if code != 0:
             exit_code = code

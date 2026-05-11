@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from wiki_preflight import raw_code_evidence_preflight_failed, wiki_expects_raw_code
 
 IGNORE_DIRS = {
     ".git",
@@ -241,10 +243,21 @@ def main() -> int:
     project = Path(args.project).resolve()
     raw_code = project / "raw-code"
     if not raw_code.is_dir():
+        err = raw_code_evidence_preflight_failed(project)
+        if err:
+            print(err, file=sys.stderr)
+            return 2
         print("raw-code/ not found; code scan skipped")
         return 0
 
     roots = [raw_code / args.codebase] if args.codebase else sorted(path for path in raw_code.iterdir() if path.is_dir())
+    if wiki_expects_raw_code(project) and not roots:
+        print(
+            "empty_raw_code_evidence: raw-code/ has no codebase directories while code wiki expects "
+            "implementation evidence. Populate raw-code/<codebase_id>/, then rerun scan_code.",
+            file=sys.stderr,
+        )
+        return 2
     results = []
     for root in roots:
         if not root.is_dir():
