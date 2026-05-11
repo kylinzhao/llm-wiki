@@ -140,6 +140,43 @@ llm-wiki-skill/
 
 安装脚本默认安全优先：如果目标 skill 已存在，会拒绝覆盖。使用 `--dry-run` 预览，使用 `--backup` 备份旧目录后安装，只有明确传 `--force` 才会删除旧目录。
 
+## engine-v0.1.0（发布切片）
+
+**标签：** Git tag `engine-v0.1.0` 打在 `llm-wiki-skill` 仓库；对应 **manifest + RSS + 确定性更新链** 契约冻结。
+
+**包含：**
+
+- `skills/llm-wiki/assets/project-template/` 下标准工具链：`tools/update_wiki.py`、`tools/build_wiki.py`、`tools/health.py`、`tools/build_graph.py`、`tools/rss_sync.py`、`config/rss-feeds.yaml` 示例。
+- KB 根目录 **`kb.manifest.yaml`** 声明引擎版本、证据开关、RSS 阶段与可选覆盖。
+- Gateway **`agent-gateway/config/knowledge-bases.yaml`** 必须与各 KB 的 manifest **交叉校验**（`capabilities`、`evidence.*`）；对齐规则见 `knowledge-base` 设计规格 `docs/superpowers/specs/2026-05-11-multi-knowledge-base-upgrade-design.md`。
+
+**`kb.manifest.yaml` 示例（冻结字段）：**
+
+```yaml
+engine_version: "engine-v0.1.0"
+
+capabilities:
+  - wiki.query
+  - wiki.update
+
+evidence:
+  raw: true
+  raw_code: true
+
+phases:
+  rss_sync: false
+
+rss_config_path: "config/rss-feeds.yaml"
+
+overrides:
+  # update_command: ["uv", "run", "python", "tools/custom_update.py"]
+  # skip_phases: ["ai_pass"]
+  # env:
+  #   UV_CACHE_DIR: "/tmp/uv-cache"
+```
+
+**Gateway 提示：** 运维验收时对比仓库内 `kb.manifest.yaml` 与 Gateway 注册表中同名 `kbId` 的配置；漂移时应在 Job `issues[]` 中可见，而非静默失败。
+
 ## 后续维护原则
 
 - 主协议只改 `skills/llm-wiki/`。

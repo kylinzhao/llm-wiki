@@ -82,6 +82,12 @@ uv run python tools/anchor_check.py
 - 检查 traceability 页面中反引号引用的 `raw-code/...` 锚点是否存在
 - 输出 `staging/anchor-check.json`
 
+### `rss_sync.py`
+
+- 读取 `config/rss-feeds.yaml`（或 manifest 覆盖路径），按 feed/host **限速**抓取 RSS/Atom
+- 将摘要写入 `staging/rss/latest.json` 与 `staging/rss/latest.md`；按需落地条目快照到各 feed 的 `target_dir`
+- **无启用 feed** 或仅有空配置时 **退出码 0**（noop），便于管线安全跳过
+
 ### 代码 wiki 阶段
 
 - 扫描 `raw-code/*`，识别每个 `codebase_id`

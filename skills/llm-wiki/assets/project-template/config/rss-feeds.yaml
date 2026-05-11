@@ -1,0 +1,13 @@
+# RSS ingestion config — parsed by tools/rss_sync.py (engine-owned).
+# Gateway only orchestrates the phase; it does not fetch feeds in Node.
+
+feeds: []
+
+rate_limits:
+  default_min_interval_seconds: 60
+  max_concurrency: 1
+  per_host: {}
+
+retry:
+  max_attempts: 2
+  backoff_seconds: 30

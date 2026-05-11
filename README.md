@@ -56,6 +56,10 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 
 0-1 初始化不应只完成确定性骨架。首轮构建必须包含全量语料的大模型 summary 和 AI-native 精修，可以分层推进，但默认应在同一轮里完成首轮 corpus build。
 
+## Engine 发行（`engine-v*`）
+
+- **`engine-v0.1.0`**：冻结 `kb.manifest.yaml` 字段、`config/rss-feeds.yaml` 形状、`tools/rss_sync.py` 抓取与限速语义，以及 **`tools/update_wiki.py`** 优先的确定性更新链。详见仓库根目录 **`INSTRUCTION_AND_RELEASE_PLAN.md`**。对外 Git tag：`engine-v0.1.0`（在 `llm-wiki-skill` 仓库创建）。
+
 ## Bundle 内容
 
 | 路径 | 说明 |
