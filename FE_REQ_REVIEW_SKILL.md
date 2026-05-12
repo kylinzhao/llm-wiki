@@ -14,8 +14,9 @@ description: 当需要对产品需求文档进行前端/交互专业性和完整
 审查任意 PRD 时，**须同时应用**仓库内独立文件（与作者是否使用 AI 无关）：
 
 - [`references/fe-req-signal-noise.md`](references/fe-req-signal-noise.md)：有效信息是否凸显、噪声是否过高、能否映射到按页评审；输出 finding 类型与默认等级见该文。
+- [`references/fe-req-design-deliverables.md`](references/fe-req-design-deliverables.md)：按系统类型（ToC / 中台后台）分层的设计交付物要求。
 
-**输出顺序**：先按 `fe-req-signal-noise.md` 产出「信息结构 / 噪声」类 finding（可置于文首一节）；再按本文下文的**页面边界**与**审查维度**逐页输出。
+**输出顺序**：先按 `fe-req-signal-noise.md` 产出「信息结构 / 噪声」类 finding（可置于文首一节）；涉及 UI 变更时核对 `fe-req-design-deliverables.md`；再按本文下文的**页面边界**与**审查维度**逐页输出。
 
 ## 页面边界定义
 
@@ -52,6 +53,11 @@ description: 当需要对产品需求文档进行前端/交互专业性和完整
 - 只诊断 click（点击） 和 pageload（页面加载）两类新增埋点
 - tracking_type 仅允许输出：click、pageload
 - 不诊断曝光滚动、状态切换、自定义事件等其他类型埋点
+
+### 5. 设计交付物（见 `references/fe-req-design-deliverables.md`）
+- ToC 系统：必须提供设计稿；低保真/高保真原型不能单独作为设计交付物
+- 中台/后台系统：可接受低保真或高保真原型；须在 PRD 标注交付物类型与链接
+- 有 UI 变更但无对应依据时，在「问题与缺失」中记录
 
 ### 常见遗漏
 - 只定义正常流程，忽略边界和异常

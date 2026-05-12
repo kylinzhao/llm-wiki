@@ -21,6 +21,7 @@ Read when frontend is involved or may be involved:
 
 - `references/fe-prd-review.md`
 - `../../references/fe-req-signal-noise.md`（仓库根目录：有效信息 / 噪声 / 按页映射；与作者是否使用 AI 无关）
+- `../../references/fe-req-design-deliverables.md`（仓库根目录：ToC / 中台后台设计交付物分层）
 
 Frontend is involved when the project has frontend code, routes, UI screenshots, HTML prototypes, app/web/H5/console pages, or the requirement mentions pages, buttons, forms, dialogs, user interactions, tracking, or visual states.
 

@@ -66,7 +66,7 @@ Treat prototype behavior as evidence with provenance, and distinguish static pro
 
 ## Frontend Review
 
-Read `fe-prd-review.md` when frontend is involved. **Before** page-level UI/state/tracking checks, read the repository-root reference `references/fe-req-signal-noise.md` (author-agnostic signal/noise and structure rules). Emit document-level findings first, then per-page findings from `fe-prd-review.md`.
+Read `fe-prd-review.md` when frontend is involved. **Before** page-level UI/state/tracking checks, read the repository-root references `references/fe-req-signal-noise.md` and, when UI changes exist, `references/fe-req-design-deliverables.md`. Emit document-level findings first, then per-page findings from `fe-prd-review.md`.
 
 Frontend is involved if any of these are true:
 
