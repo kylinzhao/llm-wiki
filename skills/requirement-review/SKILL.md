@@ -20,6 +20,7 @@ Always read:
 Read when frontend is involved or may be involved:
 
 - `references/fe-prd-review.md`
+- `../../references/fe-req-signal-noise.md`（仓库根目录：有效信息 / 噪声 / 按页映射；与作者是否使用 AI 无关）
 
 Frontend is involved when the project has frontend code, routes, UI screenshots, HTML prototypes, app/web/H5/console pages, or the requirement mentions pages, buttons, forms, dialogs, user interactions, tracking, or visual states.
 
@@ -59,7 +60,7 @@ Use this shape unless the user asks for a shorter version:
 四、全局定位
 五、前后变化
 六、MECE 影响范围
-七、前端需求完整性审查
+七、前端需求完整性审查（须先含「信息结构与噪声」小节，规则见仓库根 `references/fe-req-signal-noise.md`；再按 `fe-prd-review.md` 逐页输出）
 八、图片与 zip 原型证据
 九、建议目标模型
 十、验收清单

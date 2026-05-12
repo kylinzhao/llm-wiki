@@ -66,7 +66,7 @@ Treat prototype behavior as evidence with provenance, and distinguish static pro
 
 ## Frontend Review
 
-Read `fe-prd-review.md` when frontend is involved.
+Read `fe-prd-review.md` when frontend is involved. **Before** page-level UI/state/tracking checks, read the repository-root reference `references/fe-req-signal-noise.md` (author-agnostic signal/noise and structure rules). Emit document-level findings first, then per-page findings from `fe-prd-review.md`.
 
 Frontend is involved if any of these are true:
 
@@ -95,6 +95,7 @@ If frontend details exist, judge whether the logic is reasonable against busines
 | Money/accounting | Deduction, freeze, refund, negative balance, reconciliation, idempotency |
 | Role/account model | Normal account, KA, parent-child account, store, group, external actor |
 | Frontend scope | Pages, buttons, dialogs, disabled/loading/empty/error/success states, routes, tracking |
+| Document signal/noise | Change summary, scope/non-goals, live baseline links; noise heuristics per `references/fe-req-signal-noise.md` |
 | Backend capability | API, service, job, message, table, external dependencies, existing gaps |
 | Data migration | Old status, new status, compatibility, gray release, rollback |
 | Notification/ops | Push, site message, announcement, help center, CS script, manual operation |

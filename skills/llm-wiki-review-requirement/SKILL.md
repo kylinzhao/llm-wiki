@@ -9,7 +9,7 @@ description: LLM Wiki 需求评审兼容入口。用于用户仍以 llm-wiki 方
 
 1. 读取 **requirement-review** skill 包根目录下的 `SKILL.md`（路径由环境解析，勿写死本机绝对路径）。
 2. 读取同包内 `references/review-protocol.md`。
-3. 若涉及前端，读取同包内 `references/fe-prd-review.md`。
+3. 若涉及前端，读取同包内 `references/fe-prd-review.md`（文内「关联规范」要求先读仓库根目录 `references/fe-req-signal-noise.md`，须一并遵循）。
 4. 将 `$llm-wiki-review-requirement` 后面的用户文本作为 `$requirement-review` 的目标需求参数。
 5. 如果当前项目是 LLM Wiki 项目，可以把 `BUSINESS_CONTEXT.md`、`raw/`、`wiki/`、`raw-code/`、`wiki/code/` 作为证据层；不要再依赖 `$llm-wiki` 主 skill 的命令协议。
 6. 输出 findings-first 完整报告、前端需求完整性审查、图片与 zip 原型证据、验收清单、待决问题、Cwiki 评论版和 `建议下一步`。
