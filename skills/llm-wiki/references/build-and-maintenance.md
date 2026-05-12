@@ -88,6 +88,12 @@ uv run python tools/anchor_check.py
 - 将摘要写入 `staging/rss/latest.json` 与 `staging/rss/latest.md`；按需落地条目快照到各 feed 的 `target_dir`
 - **无启用 feed** 或仅有空配置时 **退出码 0**（noop），便于管线安全跳过
 
+### `tools/confluence_sync/`（Confluence 正文导出）
+
+- **`export_obsidian_wiki.py`**：入口脚本（Cookie、`--project-dir`、`--levels`、`--update`）。
+- **`export_confluence_tree.py`**：REST API 拉取页面树、本地化 wiki 域内图片、写 Markdown。
+- 页面证据落在 **`raw/<pageId>-<slug>/index.md`**（及 `assets/`）；导出状态与 manifest 默认在 **`staging/wiki-export/`**，与 `rss_sync.py` 的通用 RSS 快照不同用途——前者拉完整 wiki 页面内容，后者只做 feed 条目镜像。
+
 ### 代码 wiki 阶段
 
 - 扫描 `raw-code/*`，识别每个 `codebase_id`

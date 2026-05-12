@@ -64,6 +64,8 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 该模板提供 `tools/build_wiki.py`、`tools/scan_code.py`、`tools/graphify_code.py`、`tools/build_traceability.py`、`tools/health.py`、`tools/build_graph.py`、`tools/anchor_check.py`、项目 `AGENTS.md`、`.gitignore` 和依赖说明。模板脚本只做确定性扫描、脚手架、校验和图谱构建；语义 summary、实体归一、能力判断和证据强度仍由 Codex / subagent 完成。
 
+**内置 Confluence/Cwiki 下载（无需单独安装 obsidian-wiki-export skill）**：模板中包含 `tools/confluence_sync/export_obsidian_wiki.py`。安装模板并 `uv sync` 后，用带 `pageId` 的空间页面 URL 可把 wiki 树落入 **`raw/<pageId>-<slug>/index.md`**（每页目录 + `assets/`），同步元数据（`export-state.json`、`progress/`、`manifest-*.json`）默认写在 **`staging/wiki-export/`**，不把状态文件放进 `raw/`。详见 `references/bootstrapping.md`「从 wiki URL 拉取 raw」。
+
 ## 阅读顺序
 
 ### 新项目 / 构建任务

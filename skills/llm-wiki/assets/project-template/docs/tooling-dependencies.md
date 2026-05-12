@@ -5,7 +5,9 @@
 - Python 3.10+
 - `uv` for the documented command style
 
-The bundled project scripts use only the Python standard library. They do not call local model SDKs.
+Most bundled wiki-build scripts use only the Python standard library (plus PyYAML where noted). They do not call local model SDKs.
+
+The optional **`tools/confluence_sync/`** Confluence exporters require **`requests`** and **`beautifulsoup4`** (declared in `pyproject.toml`). Install with `uv sync` before running wiki download commands.
 
 ## Optional: graphify
 

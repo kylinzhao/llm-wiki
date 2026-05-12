@@ -20,11 +20,32 @@
 - `tools/`
 - `AGENTS.md`
 
-## 3. 初始化顺序
+## 3. 从 wiki URL 拉取 raw（可选）
+
+若证据在内网 Confluence/Cwiki，可先安装模板并同步依赖，再用内置导出器（来自同一模板下的 `tools/confluence_sync/`，与独立 obsidian-wiki-export 脚本同源能力）：
+
+```bash
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"
+uv sync
+COOKIE_HEADER='从浏览器 DevTools 复制的完整 Cookie' \
+  uv run python tools/confluence_sync/export_obsidian_wiki.py \
+  --url "https://cwiki.example.com/pages/viewpage.action?pageId=369287297" \
+  --levels 3 \
+  --project-dir "$PWD"
+```
+
+- **`--project-dir`**：页面 Markdown 写入 `<项目>/raw/`，每页为 `raw/<pageId>-<slug>/index.md` 及同目录 `assets/`（不再使用中间的 `pages-<rootId>/` 一层）。
+- **状态文件**：默认在 `<项目>/staging/wiki-export/`（`export-state.json`、`progress/*.json`、`manifest-*.json`），不在 `raw/`。
+- **增量更新**：首次导出后可在项目根执行  
+  `COOKIE_HEADER='...' uv run python tools/confluence_sync/export_obsidian_wiki.py --update --project-dir "$PWD"`。
+
+需要手动指定元数据目录时用 **`--metadata-dir`**；否则当输出目录为 `raw/` 时自动使用 `staging/wiki-export/`。
+
+## 4. 初始化顺序
 
 推荐顺序：
 
-1. 检查 `raw/`
+1. 检查 `raw/`（可为空；若上一步已从 wiki 拉取则已有页面）
 2. 检查 `BUSINESS_CONTEXT.md`
 3. 安装随 skill 打包的项目模板：
 
@@ -68,7 +89,7 @@
 - `docs/implementation-workflow.md`
 - 项目级 `AGENTS.md`
 
-## 4. 关键判断
+## 5. 关键判断
 
 ### 如果只有 raw，没有 BUSINESS_CONTEXT
 
@@ -81,7 +102,7 @@
 
 就应该把 `BUSINESS_CONTEXT.md` 作为生成基线，而不是等生成出错后再补。
 
-## 5. 推荐策略
+## 6. 推荐策略
 
 新项目首轮默认：
 
