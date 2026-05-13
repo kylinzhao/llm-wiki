@@ -124,14 +124,15 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `llm-wiki init`：0-1 初始化，可分阶段汇报。
 - `llm-wiki resume`：读取状态文件，从未完成阶段续跑。
 - `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，指出健康度、缺口、优化建议和下一步命令。
-- `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新。
+- `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新；结束前自动运行 health/graph/必要 anchor 检查，检查通过后提示是否进入 ship。
 - `llm-wiki add-wiki`：把另一个文档/wiki 目录或 wiki URL 接入当前项目，作为新的 `raw/` 需求/业务证据来源；wiki URL 应尝试推导 RSS/feed，无法推导时要求用户手动提供，否则该来源 RSS 留空且不具备后续自动更新能力。
 - `llm-wiki add-code`：把另一个项目代码库接入当前项目，作为新的 `raw-code/<codebase_id>/` 代码证据来源。
 - `llm-wiki refine`：source / concepts / entities / layered pages 精修。
 - `llm-wiki gplus`：综合层二次校准、查询验收、质量审查。
 - `llm-wiki build-code`：构建或刷新 `wiki/code/codebases` 和 `wiki/code/capabilities`。兼容旧别名：`llm-wiki code`。
 - `llm-wiki code-trace`：构建或更新 `wiki/code/traceability` 需求到代码追踪矩阵。兼容旧别名：`llm-wiki trace`。
-- `llm-wiki query`：按检索协议回答业务或代码问题。
+- `llm-wiki query`：按意图分流回答业务或代码问题；业务知识默认不展开大量代码实现证据。
+- `llm-wiki query-plus`：同时拉通业务/需求证据和代码实现证据，输出更详尽的联合答案。
 - `llm-wiki review-requirement`：对新 PRD、Cwiki 页面或需求文档做证据型需求评审，纳入 raw 原文、图片、zip 原型、前端评审和代码能力证据。
 - `llm-wiki audit`：findings-first 质量审查。
 - `llm-wiki image`：高价值图片证据补充。
@@ -225,7 +226,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - 先查哪一层目录
 - 有没有用 `concepts / entities` 扩展
 - 最终依据了哪些 `sources`
-- 如果使用代码证据，还要说明使用了哪些 `wiki/code/` 页面、代码库、接口、类或方法
+- 只有当问题涉及代码、实现状态或使用 `query-plus` 时，才说明使用了哪些 `wiki/code/` 页面、代码库、接口、类或方法；业务知识查询不要为了填格式而展开代码证据
 
 ### 8. 规范实体优先
 
@@ -279,6 +280,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - 如果适合继续执行，直接推荐对应二级命令，例如 `llm-wiki update`、`llm-wiki code-trace`、`llm-wiki doctor`、`llm-wiki ship`。
 - 如果同一轮变更同时留下 source 精修和代码追踪缺口，优先推荐继续 `llm-wiki update` 一次性收口；只有 traceability-only 时才单独推荐 `llm-wiki code-trace`。
 - 对 `llm-wiki update` 来说，低风险 pending/stale/source/code-trace/health/graph 收口应在当前命令里继续完成；不要把“再跑一次 update”当成默认建议，除非有明确 blocker 或用户要求只做诊断/确定性阶段。
+- 对 `llm-wiki update` 来说，最终建议必须根据检查结果分流：检查失败时建议修复或继续 update；检查通过且无阻塞时，提醒用户可以选择 `llm-wiki ship` 做发布/提交/推送前收口，但不要自动 ship。
 - 如果当前状态已经健康，说明“可以暂停”的条件和后续触发 `update` 的时机。
 
 ## 任务模式
@@ -415,7 +417,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 `用 $llm-wiki doctor 诊断整个 LLM Wiki 站点状态，告诉我哪里健康、哪里缺口最大、下一步建议怎么做。`
 
-`用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围，只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。`
+`用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围；如果项目已配置 raw 或接入了 raw-code codebase，就先默认刷新它们，再只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph；检查通过后提醒我是否要继续 llm-wiki ship。`
 
 `用 $llm-wiki add-wiki 添加这个文档目录或 wiki URL 到当前项目。保持 raw 不可变，建立来源记录；如果是 wiki URL，尝试推导 RSS，失败则要求我手动提供 RSS。`
 
@@ -437,7 +439,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 ### 查询已有 wiki
 
-`Use $llm-wiki against this project. Read BUSINESS_CONTEXT.md first, state the query type and retrieval path, then answer with supporting wiki pages and unresolved points.`
+`Use $llm-wiki against this project. Read BUSINESS_CONTEXT.md first, state the query type and retrieval path, then answer with supporting wiki pages and unresolved points. If the question is business-only, do not include detailed code evidence unless necessary.`
 
 ### 质量审查
 

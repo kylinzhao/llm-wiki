@@ -1,0 +1,25 @@
+engine_version: "engine-v0.1.0"
+
+capabilities:
+  - wiki.query
+  - wiki.update
+
+evidence:
+  raw: true
+  raw_code: true
+
+phases:
+  rss_sync: false
+
+rss_config_path: "config/rss-feeds.yaml"
+
+overrides:
+  # By default, update_wiki.py auto-runs `git pull --ff-only` for clean git
+  # worktrees under raw-code/<codebase_id>/. Use the overrides below only when
+  # a codebase needs a different refresh command.
+  #
+  # raw_code_update_commands:
+  #   - codebase: "example-service"
+  #     command: "git checkout main && git pull --ff-only"
+  #   - cwd: "raw-code/another-service"
+  #     command: "git fetch --all --prune && git pull --ff-only"

@@ -22,7 +22,8 @@
 - `$llm-wiki-update`：增量更新 raw、raw-code 和受影响 wiki。
 - `$llm-wiki-resume`：从 checkpoint 和状态文件续跑。
 - `$llm-wiki-doctor`：只读诊断健康度和缺口。
-- `$llm-wiki-query`：按检索协议回答业务或代码问题。
+- `$llm-wiki-query`：按意图分流回答业务或代码问题；业务知识默认不展开大量代码证据。
+- `$llm-wiki-query-plus`：同时回答业务/需求口径与代码实现证据。
 - `$llm-wiki-build-code`：构建或刷新 `wiki/code/`。
 - `$llm-wiki-code-trace`：构建需求到代码追踪矩阵。
 - `$llm-wiki-audit`：问题优先审查 wiki 质量。

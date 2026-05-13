@@ -10,14 +10,15 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki init` | New project, user wants phased initialization | Skeleton, deterministic build, first-pass plan |
 | `llm-wiki resume` | Existing project has partial work | Resume from latest status / checkpoint |
 | `llm-wiki doctor` | User wants a site-wide status, diagnosis, and recommendations | Health portrait and prioritized next steps |
-| `llm-wiki update` | `raw/`, `BUSINESS_CONTEXT.md`, `raw-code/`, wiki, configured RSS/upstream wiki sources, or source code changed | Impact-scoped wiki update |
+| `llm-wiki update` | `raw/`, `BUSINESS_CONTEXT.md`, `raw-code/`, wiki, configured RSS/upstream wiki sources, or source code changed; default-refresh configured upstream raw inputs and connected raw-code git worktrees first | Impact-scoped wiki update, validation, and ship-readiness prompt |
 | `llm-wiki add-wiki` | Add another document/wiki directory or wiki URL as business or requirement evidence | Imported raw evidence, source provenance, RSS/update status, and affected wiki updates |
 | `llm-wiki add-code` | Add another project codebase as implementation evidence | New raw-code codebase and code wiki updates |
 | `llm-wiki refine` | Improve source, concepts, entities, or layered pages | AI-native text refinement |
 | `llm-wiki gplus` | Text layer exists and needs query readiness | Query acceptance, quality audit, health, graph |
 | `llm-wiki build-code` | Build or refresh code wiki. `llm-wiki code` is a backward-compatible alias | codebases, capabilities, mappings |
 | `llm-wiki code-trace` | Need audit-grade requirement-to-code tracking. `llm-wiki trace` is a backward-compatible alias | traceability matrix |
-| `llm-wiki query` | Answer a business or implementation question | Evidence-grounded answer |
+| `llm-wiki query` | Answer a business or implementation question; business-only questions should not include detailed code evidence by default | Evidence-grounded answer with intent-based evidence scope |
+| `llm-wiki query-plus` | Answer with business/requirement evidence and code implementation evidence together | Detailed business+code evidence analysis |
 | `llm-wiki review-requirement` | Review a new PRD, Cwiki page, Markdown requirement, or prototype package against wiki, raw, image, zip, frontend, and code evidence | Findings-first requirement review and Cwiki comment draft |
 | `llm-wiki audit` | Review wiki quality | Findings-first report |
 | `llm-wiki image` | Add high-value image evidence after text completion | image notes and linked facts |
@@ -69,6 +70,7 @@ Run order:
 1. Validate `raw/` and `BUSINESS_CONTEXT.md`.
 2. Install the bundled project template unless equivalent scripts already exist: after bundle install, use your client's skills root (for example Codex: `python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"`), or use `python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"` when the package lives elsewhere (see main `SKILL.md` "Skill 包路径").
 3. Run deterministic build with `uv run python tools/update_wiki.py`.
+   - when the standard template is installed, this command should auto-refresh enabled RSS/feed raw inputs and connected clean `raw-code/<codebase_id>/` git worktrees before rebuilding deterministic code outputs
 4. If `raw-code/` exists and code graph extraction is useful, run `uv run python tools/graphify_code.py --all`, then rerun `scan_code.py` and `build_traceability.py`.
 5. Complete first-pass source summary and AI-native refinement.
 6. Build layered pages, concepts, entities, truth, conflicts, evidence, proposals, reference, operations.
@@ -137,12 +139,16 @@ Default update order:
 
 1. Identify changed files and classify the trigger.
 2. Refresh upstream inputs when the project has a declared updater:
-   - run the configured `raw/` wiki sync command, RSS watcher, or feed-based wiki sync command, if present
+   - if the project has enabled RSS feeds or a configured `raw/` updater, run that upstream sync before the deterministic update
+   - when the repo uses the standard template and `config/rss-feeds.yaml` already has enabled feed URLs, treat RSS sync as the default `raw/` refresh step instead of waiting for the user to ask explicitly
    - if upstream wiki URLs are configured but RSS/feed URLs are missing, attempt deterministic feed discovery from the wiki URL and platform metadata before syncing
    - if an RSS/feed URL cannot be inferred, tell the user exactly which wiki URL needs a manually supplied RSS URL; if the user does not provide one, leave the RSS/feed field empty and report that automatic future updates for that source cannot be completed
-   - update clean `raw-code/*` repositories, if requested or configured
-   - never silently overwrite dirty `raw-code/*` worktrees
+   - if the project has connected `raw-code/<codebase_id>/` git worktrees, refresh them by default before code wiki rebuild; for the standard template this means auto-running a safe code sync inside `tools/update_wiki.py`
+   - default code sync should use a safe fast-forward-only strategy for git worktrees unless the project manifest explicitly overrides the command
+   - never silently overwrite dirty `raw-code/*` worktrees; block and report the specific codebase instead
 3. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
+   - when RSS sync is enabled in the project, prefer an update command path that includes the raw refresh automatically, for example by auto-running `tools/rss_sync.py` inside `tools/update_wiki.py` or by passing `--raw-sync-command`
+   - when `raw-code/` codebases are connected as git worktrees, prefer an update command path that includes the code refresh automatically, for example by auto-running `git pull --ff-only` per clean codebase or a manifest-defined override inside `tools/update_wiki.py`
 4. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
 5. Refresh affected pages:
    - changed `raw/` pages update matching source pages, layered pages, concepts, entities, query readiness, health, and graph
@@ -166,6 +172,12 @@ Default update order:
 10. Rebuild graph after AI-native edits when wikilinks changed.
 11. Run optional traceability anchor check when traceability pages changed.
 12. Update `staging/refinement-status.md`.
+13. Treat validation as part of update completion, not as a separate ship-only step:
+   - run health before final reporting when `tools/health.py` exists or the project has an equivalent health check
+   - rebuild graph before final reporting when `tools/build_graph.py` exists or wikilinks changed
+   - run `tools/anchor_check.py` when traceability pages or code anchors changed
+   - if validation fails and the fix is low-risk and in scope, fix it before final reporting
+   - if validation fails and cannot be fixed safely, report the blocker and do not recommend ship
 
 Project command convention:
 
@@ -187,10 +199,12 @@ Final report:
 - trigger
 - changed inputs
 - upstream sync status, including missing RSS/feed URLs when automatic wiki updates are configured
+- code sync status, including which `raw-code/<codebase_id>/` worktrees were refreshed, skipped, overridden, or blocked as dirty
 - affected wiki layers
 - pages updated
 - pages intentionally left untouched
 - validation results
+- ship readiness: ready / not ready / blocked, with the reason
 - remaining stale or missing evidence
 
 Recommendation rule:
@@ -199,6 +213,8 @@ Recommendation rule:
 - If affected source pages remain stale and affected code traceability also needs refresh but a hard blocker prevents completion, report the blocker and checkpoint, then recommend one combined continuation: `llm-wiki update` to resume the integrated source refinement plus code-trace refresh.
 - Recommend `llm-wiki code-trace` separately only when the source wiki is already current and the remaining work is traceability-only.
 - Recommend source-only refinement separately only when no affected code evidence or traceability pages are in scope.
+- When validation passes and there are no blockers, end `建议下一步` by asking whether the user wants to run `llm-wiki ship` for publish/commit/push readiness. Do not run ship automatically unless the user explicitly asked to ship.
+- When validation fails, do not suggest ship; recommend the smallest safe continuation or fix instead.
 
 ## `llm-wiki add-wiki`
 
@@ -258,6 +274,7 @@ Default order:
 2. Inspect the provided code path, detect repo root, stack, entry points, docs, and whether it is a git repository.
 3. Choose a stable `codebase_id` from the repo or directory name; ask only if it collides or is misleading.
 4. Add the codebase under `raw-code/<codebase_id>/` by copying, symlinking, or recording the existing path according to project convention. Do not mix it into `raw/`.
+   - if the added codebase is a git worktree, future `llm-wiki update` runs should treat it as default-refreshable code evidence unless the project explicitly disables or overrides that behavior
 5. Scan the codebase for README, AGENTS, OpenSpec, API contracts, routes, controllers, services, jobs, messages, data access, and config.
 6. Run graphify if available and useful; otherwise record why it was skipped.
 7. Create or update `wiki/code/codebases/<codebase_id>/` and affected `wiki/code/capabilities/`.
@@ -593,6 +610,27 @@ Add another project codebase as `raw-code/<codebase_id>/`. Build codebase pages,
 ### `llm-wiki query`
 
 State query type, retrieval path, conclusion, supporting pages, unresolved points, and evidence class.
+
+Default behavior:
+
+- If the question is about business knowledge, product rules, 需求口径, terminology, operations, or document facts, answer from `BUSINESS_CONTEXT.md` and business/requirement wiki layers. Do not include detailed code evidence, code paths, endpoints, services, controllers, classes, tables, jobs, or implementation traces unless they are necessary to avoid a wrong answer.
+- If the question is about code implementation, architecture, APIs, source locations, call chains, frontend/backend mapping, testing, or whether a requirement has landed in code, use `wiki/code/` normally.
+- If the question is ambiguous, prefer the business-only path and mention that `llm-wiki query-plus` can be used for a full business+code answer.
+
+Read `references/query-logic.md` before answering.
+
+### `llm-wiki query-plus`
+
+Answer with both business/requirement evidence and code implementation evidence. Use this when the user explicitly wants a fuller answer that connects business口径, requirement evidence, implementation status, traceability, and gaps.
+
+Required behavior:
+
+- Read `BUSINESS_CONTEXT.md`, relevant business/requirement wiki layers, and relevant `wiki/code/` layers.
+- Distinguish business conclusions, code implementation facts, inferred links, and missing evidence.
+- Preserve traceability evidence strength (`strong`, `partial`, `inferred`, `external`, `missing`) and do not upgrade inferred graph or matrix links into source facts.
+- Be more detailed than ordinary `query` when useful, but keep the answer organized around the user's question.
+
+Read `references/query-logic.md` before answering.
 
 ### `llm-wiki review-requirement`
 

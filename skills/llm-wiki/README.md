@@ -24,7 +24,7 @@
 
 - `用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，一次性跑完标准首轮。`
 - `用 $llm-wiki doctor 看看整个站点健康度、缺口和下一步建议。`
-- `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面。`
+- `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面；如果项目已配置 RSS/feed 或接入了 raw-code codebase，就先默认刷新它们；结束前自动检查收口，通过后提示是否 ship。`
 - `用 $llm-wiki review-requirement 帮我 review 这个 Cwiki 需求，并输出评论稿。`
 - `用 $llm-wiki trace 补某个业务能力的需求到代码追踪矩阵。`
 
@@ -38,13 +38,14 @@
 | `$llm-wiki-init` | `llm-wiki init` | 新项目分阶段初始化。 |
 | `$llm-wiki-resume` | `llm-wiki resume` | 从 `staging/refinement-status.md`、health、graph 或 checkpoint 续跑。 |
 | `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断项目健康度、缺口和下一步。 |
-| `$llm-wiki-update` | `llm-wiki update` | 输入、wiki 或源码变化后的影响范围更新。 |
+| `$llm-wiki-update` | `llm-wiki update` | 输入、wiki 或源码变化后的影响范围更新；已配置 RSS/feed 或 raw-code codebase 时默认先刷新对应证据，结束前自动检查，通过后提示是否 ship。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 接入新的文档/wiki 来源到 `raw/`。 |
 | `$llm-wiki-add-code` | `llm-wiki add-code` | 接入新的源码库到 `raw-code/`。 |
 | `$llm-wiki-refine` | `llm-wiki refine` | 精修 source、concept、entity、layered page 或冲突页。 |
 | `$llm-wiki-build-code` | `llm-wiki build-code` | 构建或刷新 `wiki/code/`。 |
 | `$llm-wiki-code-trace` | `llm-wiki code-trace` | 构建需求到代码追踪矩阵。 |
-| `$llm-wiki-query` | `llm-wiki query` | 按检索协议回答业务或实现问题。 |
+| `$llm-wiki-query` | `llm-wiki query` | 按意图回答业务或实现问题；业务知识默认不展开大量代码证据。 |
+| `$llm-wiki-query-plus` | `llm-wiki query-plus` | 同时回答业务/需求口径与代码实现证据，适合需要更详尽联动分析的问题。 |
 | `$llm-wiki-audit` | `llm-wiki audit` | findings-first 审查 wiki 质量。 |
 | `$llm-wiki-image` | `llm-wiki image` | 补充高价值图片证据。 |
 | `$llm-wiki-ship` | `llm-wiki ship` | 发布前验证、graph/health 收口和可选提交。 |
@@ -400,7 +401,7 @@ uv run python tools/graphify_code.py --all
 ```
 
 ```text
-用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围，只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。
+用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围；如果项目已配置 raw 或接入了 raw-code codebase，就先默认刷新它们，再只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph；检查通过后提醒我是否要继续 llm-wiki ship。
 ```
 
 ```text
@@ -428,7 +429,7 @@ Use $llm-wiki to bootstrap a new LLM Wiki project from raw/ and BUSINESS_CONTEXT
 ### 已有项目查询
 
 ```text
-Use $llm-wiki against this project. Read BUSINESS_CONTEXT.md first, state the query type and retrieval path, then answer with supporting wiki pages and unresolved points.
+Use $llm-wiki against this project. Read BUSINESS_CONTEXT.md first, state the query type and retrieval path, then answer with supporting wiki pages and unresolved points. If the question is business-only, do not include detailed code evidence unless necessary.
 ```
 
 ### 质量审查

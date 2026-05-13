@@ -87,6 +87,7 @@ uv run python tools/anchor_check.py
 - 读取 `config/rss-feeds.yaml`（或 manifest 覆盖路径），按 feed/host **限速**抓取 RSS/Atom
 - 将摘要写入 `staging/rss/latest.json` 与 `staging/rss/latest.md`；按需落地条目快照到各 feed 的 `target_dir`
 - **无启用 feed** 或仅有空配置时 **退出码 0**（noop），便于管线安全跳过
+- 当项目已经配置启用 feed 时，`llm-wiki update` / `tools/update_wiki.py` 应默认先运行这一阶段刷新 `raw/`，而不是要求用户手动补 `--raw-sync-command`
 
 ### `tools/confluence_sync/`（Confluence 正文导出）
 
