@@ -29,6 +29,33 @@ REQUIRED_PATHS = [
 ]
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+IMAGE_VALUE_KEYWORDS = {
+    "流程": 5,
+    "流程图": 8,
+    "状态": 4,
+    "规则": 4,
+    "费用": 6,
+    "保证金": 7,
+    "订金": 6,
+    "风控": 7,
+    "权限": 6,
+    "验收": 6,
+    "测试结论": 7,
+    "数据表": 6,
+    "埋点": 5,
+    "上线": 3,
+    "接口": 3,
+    "退款": 7,
+    "合同": 6,
+    "发票": 6,
+    "金融": 5,
+    "账户": 6,
+    "银行": 6,
+    "push": 4,
+    "AB": 3,
+    "实验": 4,
+}
 
 
 def utc_now() -> str:
@@ -66,6 +93,111 @@ def find_broken_links(project: Path, pages: list[Path]) -> list[dict[str, str]]:
             if normalized not in names:
                 broken.append({"page": rel, "target": target})
     return broken
+
+
+def count_raw_images(project: Path) -> int:
+    raw = project / "raw"
+    if not raw.is_dir():
+        return 0
+    return sum(
+        1
+        for path in raw.rglob("*")
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+    )
+
+
+def count_image_notes(project: Path) -> int:
+    notes = project / "staging" / "image-notes"
+    if not notes.is_dir():
+        return 0
+    return sum(1 for path in notes.rglob("*.md") if path.is_file())
+
+
+def page_title(index_path: Path) -> str:
+    text = index_path.read_text(encoding="utf-8", errors="replace")
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            return stripped.lstrip("#").strip()
+        if stripped.startswith("title:"):
+            return stripped.split(":", 1)[1].strip().strip('"')
+    return index_path.parent.name
+
+
+def source_page_for_raw_index(project: Path, index_path: Path) -> str | None:
+    raw = project / "raw"
+    try:
+        rel_parent = index_path.parent.relative_to(raw)
+    except ValueError:
+        return None
+    parts = rel_parent.parts
+    if len(parts) < 2:
+        return None
+    collection = parts[0]
+    page_dir = parts[-1]
+    source_page = project / "wiki" / "sources" / f"{collection}-{page_dir}-index.md"
+    if source_page.is_file():
+        return source_page.relative_to(project).as_posix()
+    matches = sorted((project / "wiki" / "sources").glob(f"*{page_dir}*index.md"))
+    if matches:
+        return matches[0].relative_to(project).as_posix()
+    return None
+
+
+def image_refinement_candidates(project: Path, limit: int = 20) -> list[dict]:
+    raw = project / "raw"
+    if not raw.is_dir():
+        return []
+
+    candidates: list[dict] = []
+    for index_path in sorted(raw.rglob("index.md")):
+        page_dir = index_path.parent
+        images = [
+            path
+            for path in page_dir.rglob("*")
+            if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+        ]
+        if not images:
+            continue
+
+        text = index_path.read_text(encoding="utf-8", errors="replace")
+        hits = [
+            keyword
+            for keyword in IMAGE_VALUE_KEYWORDS
+            if keyword.lower() in text.lower()
+        ]
+        score = min(len(images), 20) + sum(IMAGE_VALUE_KEYWORDS[keyword] for keyword in hits)
+        if not hits and len(images) < 3:
+            continue
+
+        candidates.append(
+            {
+                "raw_page": index_path.relative_to(project).as_posix(),
+                "wiki_source_page": source_page_for_raw_index(project, index_path),
+                "title": page_title(index_path),
+                "image_count": len(images),
+                "signals": hits[:12],
+                "score": score,
+            }
+        )
+
+    candidates.sort(key=lambda item: (-item["score"], -item["image_count"], item["raw_page"]))
+    return candidates[:limit]
+
+
+def refinement_status(project: Path) -> dict:
+    status_path = project / "staging" / "refinement-status.md"
+    if not status_path.is_file():
+        return {}
+    text = status_path.read_text(encoding="utf-8", errors="replace")
+    match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.S)
+    if not match:
+        return {}
+    try:
+        parsed = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def main() -> int:
@@ -106,6 +238,17 @@ def main() -> int:
     if raw_code_gap_message:
         evidence_gaps.append(raw_code_gap_message)
 
+    raw_image_count = count_raw_images(project)
+    image_note_count = count_image_notes(project)
+    image_candidates = image_refinement_candidates(project)
+    status_doc = refinement_status(project)
+    image_evidence_status = str(status_doc.get("image_evidence_status", "")).strip() or "unknown"
+    image_evidence_gaps: list[str] = []
+    if raw_image_count and image_note_count == 0 and image_evidence_status not in {"complete", "not_applicable", "skipped_by_user"}:
+        image_evidence_gaps.append(
+            "raw/ contains image assets but no staging/image-notes/ were found; after text/G+ completion, review high-value image evidence with `llm-wiki image`."
+        )
+
     if expects_raw and has_raw_dir and has_raw_files:
         evidence_mode = "raw_ok"
     elif expects_raw and (not has_raw_dir or not has_raw_files):
@@ -132,6 +275,10 @@ def main() -> int:
     if raw_code_gap_message:
         recommended_actions.append(
             "Restore raw-code/<codebase_id>/, then run `uv run python tools/update_wiki.py` or at least scan_code + build_traceability."
+        )
+    if image_evidence_gaps:
+        recommended_actions.append(
+            "Run `llm-wiki image` for selective high-value image evidence after confirming the text layer is complete; do not batch-analyze low-value screenshots by default."
         )
 
     wiki_built = (project / "wiki" / "index.md").is_file()
@@ -160,6 +307,11 @@ def main() -> int:
         "evidence_mode": evidence_mode,
         "code_evidence_mode": code_evidence_mode,
         "evidence_gaps": evidence_gaps,
+        "raw_image_assets": raw_image_count,
+        "image_notes": image_note_count,
+        "image_evidence_status": image_evidence_status,
+        "image_evidence_gaps": image_evidence_gaps,
+        "image_refinement_candidates": image_candidates,
         "recommended_actions": recommended_actions,
         "query_may_work_without_full_evidence": query_may_work_without_full_evidence,
     }

@@ -108,6 +108,7 @@ COOKIE_HEADER='从浏览器 DevTools 复制的完整 Cookie' \
 
 - 文本优先
 - 不做图片多模态，除非文本不足以支撑首轮精修
+- 但必须盘点 `raw/` 中是否存在图片资产；文本层完成后若图片存在且没有 image notes，必须把“阶段 H 高价值图片证据补充”写入状态和建议下一步
 - 必须完成全量语料的首轮 summary 和 AI-native 精修
 - 可以按层推进，但应在同一轮里做完
 - 推荐顺序是先完成 `wiki/sources`，再完成 layered pages，最后补 `concepts / entities / graph`

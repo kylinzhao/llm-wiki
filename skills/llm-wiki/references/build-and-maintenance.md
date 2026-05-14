@@ -123,6 +123,7 @@ uv run python tools/anchor_check.py
 - 阶段 E source 精修是否完成。
 - G+ text synthesis 是否完成。
 - image evidence 是否完成。
+- `raw/` 是否存在图片资产，以及 `staging/image-notes/` 是否已有高价值图片证据笔记。
 - code wiki 是否存在、是否 stale。
 - health / graph 是否为最新。
 - 下一步维护建议。
@@ -139,6 +140,9 @@ uv run python tools/anchor_check.py
 - `last_verified_inputs`
 - `last_output_paths`
 - `blocked_reason`
+- `image_asset_count`
+- `image_note_count`
+- `image_evidence_status`：`not_applicable` / `pending` / `in_progress` / `complete` / `skipped_by_user`
 - `next_action`
 
 如果项目已有精修产物、人工编辑或 `wiki/code/`，不要用确定性构建覆盖它们。只在确认输入或规则变化影响范围后，更新受影响页面。
@@ -193,6 +197,7 @@ uv run python tools/anchor_check.py
 - `docs/gplus-quality-audit.md`。
 - health pass。
 - graph rebuilt。
+- 图片证据状态：如果 `raw/` 存在图片资产但尚未完成高价值图片证据补充，明确记录为阶段 H pending，并在建议下一步中推荐 `llm-wiki image`。
 
 `docs/query-acceptance.md` 至少覆盖 8-10 个真实查询，查询项应包含：
 

@@ -187,6 +187,16 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 文本层完成后可以进入阶段 H，但只处理高价值图片证据。图片 note 必须结合图片在 `raw/**/index.md` 中的前后文，不做裸图 OCR。低价值页面走查、重复 UI 截图、装饰图默认跳过。
 
+**重要：文本优先不等于静默跳过图片。** 当项目的 `raw/` 中存在图片资产、截图、图表或附件图片时，`init` / `fast` / `gplus` / `refine` / `doctor` 在收尾或诊断里必须明确说明：
+
+- 是否发现图片资产，以及大致数量或范围。
+- 是否已有 `staging/image-notes/` 或 `staging/refinement-status.md` 中的 `image_evidence_status`。
+- 如果需要阶段 H，列出优先候选页面，而不只是报总图片数。
+- 如果文本/G+ 已完成但图片证据未处理，必须把“阶段 H：选择性高价值图片证据补充”列为显式建议下一步，例如 `llm-wiki image`。
+- 如果核心页面高度依赖流程图、表格截图、状态截图、账户/费用/保证金/风控/权限/验收图，不能把项目描述为“完全完成”；应描述为“文本层健康，图片证据待筛选/待补充”。
+
+不要因为图片数量很大就自动批量识图；应先做高价值候选筛选，再让 `llm-wiki image` 处理最能增强事实的图片。
+
 例外：`llm-wiki review-requirement` 是需求评审命令。如果目标项目或目标需求证据中存在图片、截图、图表、附件图片或 zip 原型，必须把这些材料纳入需求证据层分析；图片必须用多模态详细识别，zip 很可能是 HTML 原型，必须解压到临时工作区并审查页面结构、交互、状态和静态资源关系。
 
 ### 5. 代码 wiki 是可选但一等的证据层
@@ -210,6 +220,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 大型 wiki 构建、代码 wiki 构建和质量审查默认应追求吞吐，不应把可并行工作串行化。
 
 - 可以独立推进的 codebase、目录层、能力页、source 批次、graphify 分析、health 审查，应使用 subagent 并发执行。
+- 阶段 H 图片证据补充也应使用 subagent 并发执行：按 source page 或相关页面包切分，每个 worker 只写自己负责的 `staging/image-notes/<source-page-id>/`，主 agent 负责候选排序、去重、wiki 合并、health/graph 和状态收口。
 - 多个简单、相近、低风险的小任务可以打包给同一个 subagent，一次性完成，避免为每个小页面启动单独 subagent。
 - 不要让多个 subagent 写同一文件或同一能力页；并发任务必须有清晰、互不重叠的输出范围。
 - 主 agent 负责全局协议、命名、跨层链接、最终整合和质量口径；subagent 负责局部扫描、摘要、页面草稿、映射表和审查发现。
@@ -282,6 +293,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - 对 `llm-wiki update` 来说，低风险 pending/stale/source/code-trace/health/graph 收口应在当前命令里继续完成；不要把“再跑一次 update”当成默认建议，除非有明确 blocker 或用户要求只做诊断/确定性阶段。
 - 对 `llm-wiki update` 来说，最终建议必须根据检查结果分流：检查失败时建议修复或继续 update；检查通过且无阻塞时，提醒用户可以选择 `llm-wiki ship` 做发布/提交/推送前收口，但不要自动 ship。
 - 如果当前状态已经健康，说明“可以暂停”的条件和后续触发 `update` 的时机。
+- 如果文本、health、graph 都已通过，但 `raw/` 存在图片资产且没有 image notes / image evidence 完成标记，说明“文本层可暂停；如需补强核心页面证据，下一步运行 `llm-wiki image` 做高价值图片筛选与多模态精修”。
 
 ## 任务模式
 
@@ -370,6 +382,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 5. 校验层：health、broken links、graph、可选 anchor check
 6. 风险与缺口
 7. 优先级建议和下一步命令
+8. 图片证据层：`raw/` 图片资产数量、`staging/image-notes/` 状态、是否应进入阶段 H、优先候选页面
 
 ### G+ 任务
 
@@ -380,6 +393,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 3. `docs/query-acceptance.md` 状态
 4. `docs/gplus-quality-audit.md` 状态
 5. health / broken wikilinks / graph 状态
+6. 图片证据层是否仍待阶段 H；若待处理，给出 `llm-wiki image` 作为建议下一步
 
 ### 代码 wiki 任务
 

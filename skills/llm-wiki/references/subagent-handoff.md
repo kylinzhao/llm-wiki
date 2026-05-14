@@ -142,6 +142,32 @@ auto_fix_safe: true | false
 business_confirmation_needed: true | false
 ```
 
+### Image Evidence Batch
+
+```text
+image_batch:
+  raw_page:
+  wiki_source_page:
+  output_dir:
+  images_reviewed:
+  images_skipped:
+  notes_created:
+  strengthened_facts:
+  proposed_wiki_updates:
+  conflicts_with_text:
+  sensitive_values_redacted:
+  confidence:
+  remaining_questions:
+```
+
+Rules:
+
+- Read the raw page section around each image before interpreting visual content.
+- Write only to the assigned `staging/image-notes/<source-page-id>/` directory unless explicitly told otherwise.
+- Do not edit `raw/`.
+- Do not edit shared `wiki/` pages; propose updates for the main agent to integrate.
+- Redact tokens, account numbers, private personal data, and internal credentials visible in screenshots.
+
 ## Ownership Rules
 
 - Subagents may produce local pages, drafts, tables, findings, and mapping fragments.

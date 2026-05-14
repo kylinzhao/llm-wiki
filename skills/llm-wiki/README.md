@@ -383,8 +383,11 @@ uv run python tools/graphify_code.py --all
 
 - 先用文本 wiki 回答
 - 不默认启动图片分析
+- 但会盘点 `raw/` 图片资产；如果文本层/G+ 已完成而图片证据未处理，会在 `doctor`、`refine`、`gplus` 或初始化收尾里明确提示阶段 H
 
 文本层完成后，可以进入阶段 H：选择性高价值图片证据补充。图片识别必须结合 `raw/**/index.md` 中图片前后文，输出到 `staging/image-notes/`，低价值页面走查和重复 UI 截图默认跳过。详见 [image-evidence.md](./references/image-evidence.md)。
+
+如果核心页面依赖流程图、状态截图、数据表、验收图、账户/费用/保证金/风控/权限类图片，项目只能称为“文本层健康”；仍应把 `llm-wiki image` 作为高价值证据补强的建议下一步。
 
 例外：`llm-wiki review-requirement` 进行需求评审时，图片、截图、图表和 zip 原型都属于需求证据；必须分析图片内容，并把 zip 优先当作 HTML 原型检查。
 

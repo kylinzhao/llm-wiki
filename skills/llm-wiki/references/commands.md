@@ -77,8 +77,9 @@ Run order:
 7. If `raw-code/` exists, refine codebase indexes, capability pages, and traceability evidence strengths.
 8. If implementation audit is in scope, create traceability pages for highest-value capabilities.
 9. Run G+ readiness checks when feasible: query acceptance and quality audit.
-10. Run health, graph, and anchor check.
-11. Update `staging/refinement-status.md`.
+10. Inventory raw image assets and image-note status. Do not batch-analyze images by default, but if images exist and no image evidence pass is complete, record phase H as pending and recommend `llm-wiki image`.
+11. Run health, graph, and anchor check.
+12. Update `staging/refinement-status.md`.
 
 Default behavior:
 
@@ -100,6 +101,7 @@ Final report:
 - files created / updated
 - codebases included
 - traceability coverage
+- image evidence status: not applicable / pending high-value screening / complete / skipped by user
 - validation results
 - blocked items
 - recommended next pass
@@ -316,12 +318,15 @@ Read:
 10. `wiki/code/traceability/index.md`
 11. `docs/query-acceptance.md`
 12. `docs/gplus-quality-audit.md`
+13. `staging/image-notes/` and `staging/refinement-status.md` image evidence fields when present
 
 If any file is missing, report it as a signal. Do not create or modify files.
 
 Optional read-only checks:
 
 - Count `raw/*/index.md` and `wiki/sources/*.md`.
+- Count image assets under `raw/**/assets/` and image notes under `staging/image-notes/`.
+- When image assets exist without a completed image evidence pass, list prioritized image refinement candidate pages, using signals such as flow diagrams, state screenshots, money/account/risk/permission terms, launch tables, test conclusions, data tables, tracking, and pages already central to overview/concepts/query acceptance.
 - Count `wiki/code/codebases/*`, `wiki/code/capabilities/*.md`, and `wiki/code/traceability/*.md`.
 - Inspect latest health status.
 - Inspect graph node / edge counts.
@@ -341,6 +346,7 @@ Output shape:
 状态画像：
 - 输入层：
 - 文档层：
+- 图片证据层：
 - 代码层：
 - 追踪矩阵：
 - 校验层：
@@ -369,6 +375,8 @@ Recommendation rules:
 - If required inputs or entry docs are missing, recommend `llm-wiki init` or `llm-wiki update`.
 - If source coverage or refinement is incomplete, recommend `llm-wiki refine`.
 - If G+ artifacts are missing, recommend `llm-wiki gplus`.
+- If text/G+ is healthy but `raw/` contains image assets and no image evidence pass is recorded, recommend `llm-wiki image` for selective high-value multimodal refinement. Treat this as a non-blocking evidence gap unless core pages depend on diagrams, table screenshots, state screenshots, money/account/risk/permission flows, launch tables, or test conclusions.
+- When recommending `llm-wiki image`, include the top candidate pages from health output or a read-only scan, not only the total image count.
 - If code wiki exists but traceability is thin, recommend `llm-wiki code-trace`.
 - If files changed recently or stale markers exist, recommend `llm-wiki update`.
 - If everything is healthy and remote publishing is desired, recommend `llm-wiki ship`.
@@ -584,10 +592,12 @@ Read-only project status diagnosis. Never edit files. End with prioritized next 
 ### `llm-wiki refine`
 
 Limit work to the requested scope: source pages, concepts, entities, layered pages, or conflicts. Preserve evidence trails.
+When text refinement completes, check whether `raw/` contains image assets and whether `staging/image-notes/` or `image_evidence_status=complete` exists. If images remain unprocessed, the final `建议下一步` must explicitly mention phase H / `llm-wiki image` for high-value multimodal evidence.
 
 ### `llm-wiki gplus`
 
 Produce query acceptance and quality audit. Fix low-risk structural issues automatically. Do not decide business conflicts without evidence.
+At the end of G+, record whether image evidence is not applicable, pending, complete, or skipped by user. If pending, recommend `llm-wiki image` instead of presenting G+ as the whole-project finish line.
 
 ### `llm-wiki build-code`
 
@@ -643,6 +653,9 @@ Findings first. Check entry usability, semantic consistency, source coverage, ev
 ### `llm-wiki image`
 
 Only after text completion or explicit user request. Follow `image-evidence.md`.
+Start by inventorying candidate pages and images, then process only high-value evidence by default.
+For whole-project, multi-page, or large image scopes, use subagents by default when available. Split by source page or related page bundles, keep each worker's write scope under a unique `staging/image-notes/<source-page-id>/` directory, and let the main agent own final wiki integration, health/graph, and `staging/refinement-status.md`.
+Update `staging/refinement-status.md` with `image_evidence_status` and a concise checkpoint.
 
 ### `llm-wiki ship`
 
