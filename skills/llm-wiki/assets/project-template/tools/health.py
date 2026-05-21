@@ -202,6 +202,28 @@ def refinement_status(project: Path) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def code_intelligence_status(project: Path) -> dict[str, object]:
+    root = project / "staging" / "code-graph"
+    detected: list[str] = []
+    fallback_only: list[str] = []
+    if not root.is_dir():
+        return {"detected_codebases": detected, "fallback_only_codebases": fallback_only}
+    for summary_path in sorted(root.glob("*/upstream-summary.json")):
+        try:
+            payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        codebase_id = str(payload.get("codebase_id") or summary_path.parent.name)
+        upstream_type = str(payload.get("upstream_type") or "none")
+        if upstream_type == "none":
+            fallback_only.append(codebase_id)
+        else:
+            detected.append(codebase_id)
+    return {"detected_codebases": detected, "fallback_only_codebases": fallback_only}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", default=".", help="Project root. Defaults to current directory.")
@@ -283,6 +305,7 @@ def main() -> int:
             "Run `llm-wiki image` for selective high-value image evidence after confirming the text layer is complete; do not batch-analyze low-value screenshots by default."
         )
 
+    code_intelligence = code_intelligence_status(project)
     wiki_built = (project / "wiki" / "index.md").is_file()
     query_may_work_without_full_evidence = wiki_built and bool(evidence_gaps)
 
@@ -316,6 +339,7 @@ def main() -> int:
         "image_evidence_status": image_evidence_status,
         "image_evidence_gaps": image_evidence_gaps,
         "image_refinement_candidates": image_candidates,
+        "code_intelligence": code_intelligence,
         "recommended_actions": recommended_actions,
         "query_may_work_without_full_evidence": query_may_work_without_full_evidence,
     }

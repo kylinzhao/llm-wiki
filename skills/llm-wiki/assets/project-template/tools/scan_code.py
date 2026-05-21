@@ -10,6 +10,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from code_intelligence import collect_upstream_summary, resolve_code_intelligence
 from wiki_preflight import raw_code_evidence_preflight_failed, wiki_expects_raw_code
 
 IGNORE_DIRS = {
@@ -157,7 +158,12 @@ def write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def codebase_page(codebase: str, stack: list[str], facts: list[dict[str, object]]) -> str:
+def codebase_page(
+    codebase: str,
+    stack: list[str],
+    facts: list[dict[str, object]],
+    upstream_summary: dict[str, object],
+) -> str:
     roles: dict[str, int] = {}
     endpoints = []
     routes = []
@@ -171,6 +177,21 @@ def codebase_page(codebase: str, stack: list[str], facts: list[dict[str, object]
         for item in endpoints[:80]
     ) or "- No endpoint-like strings discovered."
     route_lines = "\n".join(f"- `{route}`" for route in sorted(set(routes))[:80]) or "- No route-like strings discovered."
+    upstream_type = str(upstream_summary.get("upstream_type") or "none")
+    upstream_section = ""
+    if upstream_type != "none":
+        upstream_section = f"""
+## Upstream Code Intelligence
+
+- Type: `{upstream_type}`
+- Discovery mode: `{upstream_summary.get('discovery_mode', 'unknown')}`
+- Root: `{upstream_summary.get('root', '')}`
+- Topics: {upstream_summary.get('topic_count', 0)}
+- Concepts: {upstream_summary.get('concept_count', 0)}
+- Source map entries: {upstream_summary.get('source_map_entries', 0)}
+
+This upstream wiki is a derived hint. Codex must still verify direct code anchors before claiming implementation certainty.
+"""
     return f"""# Codebase: {codebase}
 
 ## Scan Status
@@ -190,6 +211,7 @@ def codebase_page(codebase: str, stack: list[str], facts: list[dict[str, object]
 ## Route Candidates
 
 {route_lines}
+{upstream_section}
 
 ## Evidence Boundary
 
@@ -202,6 +224,8 @@ def scan_codebase(project: Path, root: Path) -> dict[str, object]:
     files = iter_code_files(root)
     facts = [extract_facts(path, root) for path in files]
     stack = detect_stack(root)
+    upstream = resolve_code_intelligence(project, codebase)
+    upstream_summary = collect_upstream_summary(project, codebase, upstream)
 
     out_dir = project / "staging" / "code-graph" / codebase
     write(
@@ -230,8 +254,18 @@ def scan_codebase(project: Path, root: Path) -> dict[str, object]:
         for endpoint in fact["endpoints"]  # type: ignore[union-attr]
     ]
     write(out_dir / "endpoint-map.json", json.dumps(endpoint_rows, ensure_ascii=False, indent=2) + "\n")
-    write(project / "wiki" / "code" / "codebases" / codebase / "index.md", codebase_page(codebase, stack, facts))
-    return {"codebase_id": codebase, "stack": stack, "file_count": len(files), "endpoint_candidates": len(endpoint_rows)}
+    write(out_dir / "upstream-summary.json", json.dumps(upstream_summary, ensure_ascii=False, indent=2) + "\n")
+    write(
+        project / "wiki" / "code" / "codebases" / codebase / "index.md",
+        codebase_page(codebase, stack, facts, upstream_summary),
+    )
+    return {
+        "codebase_id": codebase,
+        "stack": stack,
+        "file_count": len(files),
+        "endpoint_candidates": len(endpoint_rows),
+        "upstream_type": upstream_summary.get("upstream_type", "none"),
+    }
 
 
 def main() -> int:
@@ -271,4 +305,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

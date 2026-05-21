@@ -27,6 +27,16 @@ def write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def build_code_seed_row(codebase: dict[str, object]) -> str:
+    codebase_id = str(codebase.get("codebase_id", "unknown"))
+    stack = ", ".join(str(item) for item in codebase.get("stack", []) or [])
+    upstream_type = str(codebase.get("upstream_type") or "none")
+    notes = "Deterministic code scan only."
+    if upstream_type != "none":
+        notes = "Derived upstream topic matched; direct code anchor still required."
+    return f"| [[code/codebases/{codebase_id}/index|{codebase_id}]] | {stack} | pending | partial | {notes} |"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", default=".", help="Project root. Defaults to current directory.")
@@ -51,10 +61,7 @@ def main() -> int:
         f"| [[sources/{source['slug']}|{source['title']}]] | pending | pending | missing | Codex must map requirement facts. |"
         for source in sources
     ) or "| pending | pending | pending | missing | No source manifest found. |"
-    code_rows = "\n".join(
-        f"| [[code/codebases/{codebase['codebase_id']}/index|{codebase['codebase_id']}]] | {', '.join(codebase.get('stack', []))} | pending | partial | Deterministic code scan only. |"
-        for codebase in codebases
-    ) or "| pending | pending | pending | missing | No codebase scan found. |"
+    code_rows = "\n".join(build_code_seed_row(codebase) for codebase in codebases) or "| pending | pending | pending | missing | No codebase scan found. |"
 
     content = f"""# Traceability Matrix
 
@@ -91,4 +98,3 @@ Codex must replace seed rows with verified requirement points, pages, APIs, serv
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
