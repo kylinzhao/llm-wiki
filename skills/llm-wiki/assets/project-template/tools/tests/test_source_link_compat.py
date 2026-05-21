@@ -56,6 +56,27 @@ class SourceLinkCompatTest(unittest.TestCase):
             summary = json.loads((project / "staging" / "graph" / "latest.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["broken_edges"], 0)
 
+    def test_graph_accepts_bare_page_stem_wikilink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "wiki" / "entities" / "KA商户.md"
+            source = project / "wiki" / "truth" / "当前基线.md"
+            target.parent.mkdir(parents=True)
+            source.parent.mkdir(parents=True)
+            target.write_text("# KA商户\n", encoding="utf-8")
+            source.write_text("# 当前基线\n\n参考 [[KA商户]]。\n", encoding="utf-8")
+
+            result = subprocess.run(
+                [sys.executable, str(TOOLS_DIR / "build_graph.py"), "--project", str(project)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            summary = json.loads((project / "staging" / "graph" / "latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["broken_edges"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

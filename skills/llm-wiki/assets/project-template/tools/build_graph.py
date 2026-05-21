@@ -26,6 +26,7 @@ def title_for(path: Path) -> str:
 
 def node_aliases(node_id: str) -> set[str]:
     aliases = {node_id}
+    aliases.add(node_id.rsplit("/", 1)[-1])
     if node_id.endswith("/index"):
         aliases.add(node_id[: -len("/index")])
     if node_id.startswith("sources/") and node_id.endswith("-index"):
