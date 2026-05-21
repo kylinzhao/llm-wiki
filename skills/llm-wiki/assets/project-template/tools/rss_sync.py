@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
+import os
 import random
 import sys
 import time
@@ -22,6 +24,11 @@ try:
 except ImportError:  # pragma: no cover
     print("rss_sync: PyYAML is required (pip/uv: pyyaml)", file=sys.stderr)
     sys.exit(2)
+
+try:
+    import requests  # type: ignore
+except ImportError:  # pragma: no cover
+    requests = None
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,14 +71,31 @@ def host_from_url(url: str) -> str:
         return "unknown"
 
 
+def auth_headers() -> dict[str, str]:
+    headers = {
+        "User-Agent": "llm-wiki-rss-sync/1.0 (+engine rss_sync.py)",
+        "Accept": "application/rss+xml, application/xml, text/xml, */*",
+    }
+    cookie = os.environ.get("RSS_COOKIE", "").strip()
+    if cookie:
+        headers["Cookie"] = cookie
+
+    user = os.environ.get("RSS_BASIC_AUTH_USER", "").strip()
+    password = os.environ.get("RSS_BASIC_AUTH_PASS", "")
+    if user and password:
+        token = base64.b64encode(f"{user}:{password}".encode()).decode()
+        headers["Authorization"] = f"Basic {token}"
+    return headers
+
+
 def fetch_url(url: str, timeout: float = 30.0) -> bytes:
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "llm-wiki-rss-sync/1.0 (+engine rss_sync.py)",
-            "Accept": "application/rss+xml, application/xml, text/xml, */*",
-        },
-    )
+    headers = auth_headers()
+    if requests is not None:
+        response = requests.get(url, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        return response.content
+
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read()
 
@@ -236,7 +260,7 @@ def main() -> int:
                 xml_bytes = fetch_url(url)
                 last_err = None
                 break
-            except (urllib.error.URLError, TimeoutError, OSError) as e:
+            except (urllib.error.URLError, TimeoutError, OSError, Exception) as e:
                 last_err = str(e)
                 if attempt < max_attempts:
                     time.sleep(backoff + random.uniform(0, 1))

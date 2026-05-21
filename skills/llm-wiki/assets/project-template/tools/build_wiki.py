@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -129,6 +130,10 @@ def write_if_missing(path: Path, content: str) -> bool:
 def write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def read_json(path: Path) -> object:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def source_page(source: dict[str, object]) -> str:
@@ -345,7 +350,83 @@ def source_page_sha(path: Path) -> str | None:
         return None
     text = path.read_text(encoding="utf-8", errors="replace")
     match = re.search(r"SHA-256:\s*`?([a-f0-9]{64})`?", text)
-    return match.group(1) if match else None
+    if match:
+        return match.group(1)
+    metadata = source_page_metadata(path)
+    raw_hash = metadata.get("raw_hash") if isinstance(metadata, dict) else None
+    if isinstance(raw_hash, str) and re.fullmatch(r"[a-f0-9]{8,64}", raw_hash):
+        return raw_hash
+    return None
+
+
+def source_page_metadata(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    text = path.read_text(encoding="utf-8", errors="replace")
+    match = re.search(r"## Source Metadata\s*```json\s*(\{.*?\})\s*```", text, re.S)
+    if not match:
+        return {}
+    try:
+        data = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def source_page_raw_rel(path: Path) -> str | None:
+    metadata = source_page_metadata(path)
+    raw_rel = metadata.get("raw_rel") if isinstance(metadata, dict) else None
+    if isinstance(raw_rel, str) and raw_rel.strip():
+        return raw_rel.strip()
+    text = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
+    match = re.search(r"Raw path:\s*`([^`]+)`", text)
+    return match.group(1).strip() if match else None
+
+
+def hash_matches(existing: str | None, current: str) -> bool:
+    if not existing:
+        return False
+    return current.startswith(existing) or existing.startswith(current)
+
+
+def is_operational_metadata_source(source: dict[str, object]) -> bool:
+    raw_path = str(source.get("raw_path") or "")
+    return (
+        raw_path.startswith("raw/.obsidian-wiki-export/")
+        or raw_path == "raw/export-state.json"
+        or raw_path.startswith("raw/progress/")
+        or raw_path.startswith("raw/rss/")
+        or raw_path.startswith("raw/staging/rss/")
+    )
+
+
+def legacy_source_page_for(source: dict[str, object], source_dir: Path) -> Path | None:
+    raw_path = str(source.get("raw_path") or "")
+    slug = str(source.get("slug") or "")
+    if not raw_path.endswith("/index.md") or not slug.endswith("-index"):
+        return None
+    return source_dir / f"{slug[:-len('-index')]}.md"
+
+
+def maybe_migrate_legacy_source_page(source: dict[str, object], canonical_page: Path) -> None:
+    legacy_page = legacy_source_page_for(source, canonical_page.parent)
+    if legacy_page is None or not legacy_page.is_file():
+        return
+    raw_rel = source_page_raw_rel(legacy_page)
+    if raw_rel != source.get("raw_path"):
+        return
+    if canonical_page.exists():
+        legacy_page.unlink()
+        return
+    canonical_page.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(legacy_page), str(canonical_page))
+
+
+def is_refreshable_seed_source_page(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return "Deterministic seed page." in text
 
 
 def update_status(
@@ -384,12 +465,8 @@ def update_status(
     )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--project", default=".", help="Project root. Defaults to current directory.")
-    args = parser.parse_args()
-
-    project = Path(args.project).resolve()
+def main_for_project(project: Path) -> int:
+    project = project.resolve()
     err = raw_evidence_preflight_failed(project)
     if err:
         raise SystemExit(err)
@@ -404,9 +481,17 @@ def main() -> int:
     stale_sources: list[dict[str, object]] = []
     for source in sources:
         page = project / "wiki" / "sources" / f"{source['slug']}.md"
+        maybe_migrate_legacy_source_page(source, page)
         existing_sha = source_page_sha(page)
         created = write_if_missing(page, source_page(source))
-        if not created and existing_sha != source["sha256"]:
+        if not created and not hash_matches(existing_sha, str(source["sha256"])) and is_refreshable_seed_source_page(page):
+            write(page, source_page(source))
+            existing_sha = str(source["sha256"])
+        if (
+            not created
+            and not hash_matches(existing_sha, str(source["sha256"]))
+            and not (existing_sha is None and is_operational_metadata_source(source))
+        ):
             stale_sources.append(
                 {
                     "slug": source["slug"],
@@ -432,7 +517,7 @@ def main() -> int:
     orphan_source_pages = sorted(
         f"wiki/sources/{path.name}"
         for path in source_dir.glob("*.md")
-        if path.name not in current_pages
+        if path.name != "index.md" and path.name not in current_pages
     )
     update_status(project, sources, codebases, stale_sources, orphan_source_pages)
 
@@ -443,6 +528,13 @@ def main() -> int:
     print(f"codebases={len(codebases)}")
     print("status=deterministic_seed_complete")
     return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--project", default=".", help="Project root. Defaults to current directory.")
+    args = parser.parse_args()
+    return main_for_project(Path(args.project))
 
 
 if __name__ == "__main__":

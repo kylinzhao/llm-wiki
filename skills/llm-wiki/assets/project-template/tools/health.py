@@ -77,6 +77,8 @@ def build_page_index(pages: list[Path], project: Path) -> set[str]:
         names.add(rel)
         if rel.endswith("/index"):
             names.add(rel[: -len("/index")])
+        if rel.startswith("sources/") and rel.endswith("-index"):
+            names.add(rel[: -len("-index")])
         names.add(page.stem)
     return names
 
@@ -286,10 +288,12 @@ def main() -> int:
 
     content_ok = not missing and not empty_pages and not broken_links and not stale_sources
     evidence_ok = not evidence_gaps
+    ok = content_ok and evidence_ok
     report = {
         "generated_at": utc_now(),
         "project": str(project),
-        "ok": content_ok and evidence_ok,
+        "ok": ok,
+        "status": "pass" if ok else "fail",
         "has_business_context": has_business_context,
         "missing_required_paths": missing,
         "wiki_pages": len(pages),

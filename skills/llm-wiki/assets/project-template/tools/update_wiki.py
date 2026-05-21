@@ -4,14 +4,21 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import shlex
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
 import yaml
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def run_python_script(script: Path, project: Path, extra: Sequence[str] | None = None) -> int:
@@ -43,6 +50,58 @@ def load_yaml_dict(path: Path) -> dict:
         return {}
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     return data if isinstance(data, dict) else {}
+
+
+def read_json_if_present(path: Path) -> object | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def write_failure_report(project: Path, failed_step: str, returncode: int, details: dict[str, object] | None = None) -> None:
+    report_dir = project / "staging" / "update"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": 1,
+        "status": "failed",
+        "generated_at": utc_now(),
+        "failed_step": failed_step,
+        "returncode": returncode,
+        "details": details or {},
+    }
+    (report_dir / "latest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    lines = [
+        "# LLM Wiki Update Report",
+        "",
+        "- Status: `failed`",
+        f"- Failed step: `{failed_step}`",
+        f"- Return code: `{returncode}`",
+        f"- Generated at: `{payload['generated_at']}`",
+        "",
+        "## Failure Details",
+        "",
+    ]
+    for key, value in (details or {}).items():
+        lines.append(f"- {key}: `{value}`")
+    if not details:
+        lines.append("- No structured details were available.")
+    (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def health_failure_details(project: Path) -> dict[str, object]:
+    health = read_json_if_present(project / "staging" / "health" / "latest.json")
+    if not isinstance(health, dict):
+        return {}
+    return {
+        "status": health.get("status"),
+        "ok": health.get("ok"),
+        "stale_sources": len(health.get("stale_sources") or []),
+        "orphan_source_pages": len(health.get("orphan_source_pages") or []),
+        "broken_wikilinks": len(health.get("broken_wikilinks") or []),
+        "missing_required_paths": len(health.get("missing_required_paths") or []),
+        "evidence_gaps": len(health.get("evidence_gaps") or []),
+    }
 
 
 def resolve_rss_config(project: Path) -> Path:
@@ -253,20 +312,26 @@ def main() -> int:
     err = raw_evidence_preflight_failed(project)
     if err:
         print(err, file=sys.stderr)
+        write_failure_report(project, "raw_evidence_preflight", 2, {"error": err})
         return 2
 
     tools = project / "tools"
     raw_sync_command = args.raw_sync_command.strip()
-    if not raw_sync_command and not args.no_auto_raw_sync:
+    no_auto_raw_sync = args.no_auto_raw_sync or os.environ.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
+    no_auto_code_sync = args.no_auto_code_sync or os.environ.get("LLM_WIKI_NO_AUTO_CODE_SYNC") == "1"
+
+    if not raw_sync_command and not no_auto_raw_sync:
         raw_sync_command = auto_raw_sync_command(project) or ""
 
     if raw_sync_command:
         code = run_shell(raw_sync_command, project)
         if code != 0:
+            write_failure_report(project, "raw_sync", code)
             return code
 
-    code = run_code_sync(project, args.code_sync_command, args.no_auto_code_sync)
+    code = run_code_sync(project, args.code_sync_command, no_auto_code_sync)
     if code != 0:
+        write_failure_report(project, "code_sync", code)
         return code
 
     steps = [
@@ -289,10 +354,13 @@ def main() -> int:
             code_err = raw_code_evidence_preflight_failed(project)
             if code_err:
                 print(code_err, file=sys.stderr)
+                write_failure_report(project, "raw_code_evidence_preflight", 2, {"error": code_err})
                 return 2
         code = run_python_script(script, project, extra)
         if code != 0:
             exit_code = code
+            details = health_failure_details(project) if script.name == "health.py" else {}
+            write_failure_report(project, script.stem, code, details)
             if script.name != "health.py":
                 break
     return exit_code

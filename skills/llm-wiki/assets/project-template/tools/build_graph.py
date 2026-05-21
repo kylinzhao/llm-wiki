@@ -24,6 +24,15 @@ def title_for(path: Path) -> str:
     return path.stem
 
 
+def node_aliases(node_id: str) -> set[str]:
+    aliases = {node_id}
+    if node_id.endswith("/index"):
+        aliases.add(node_id[: -len("/index")])
+    if node_id.startswith("sources/") and node_id.endswith("-index"):
+        aliases.add(node_id[: -len("-index")])
+    return aliases
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", default=".", help="Project root. Defaults to current directory.")
@@ -40,7 +49,7 @@ def main() -> int:
     node_ids = set()
     for page in pages:
         rel = page.relative_to(wiki).with_suffix("").as_posix()
-        node_ids.add(rel)
+        node_ids.update(node_aliases(rel))
         nodes.append(
             {
                 "id": rel,
@@ -58,7 +67,7 @@ def main() -> int:
                 {
                     "source": source,
                     "target": normalized,
-                    "target_exists": normalized in node_ids or f"{normalized}/index" in node_ids,
+                    "target_exists": normalized in node_ids,
                 }
             )
 

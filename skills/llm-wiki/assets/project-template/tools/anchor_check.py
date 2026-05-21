@@ -11,10 +11,21 @@ from pathlib import Path
 
 
 RAW_CODE_RE = re.compile(r"`(raw-code/[^`]+)`")
+LINE_REF_RE = re.compile(r"^(raw-code/.+):(\d+)(?::\d+)?$")
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def normalize_anchor(ref: str) -> tuple[str, str | None]:
+    value = ref.strip()
+    if "..." in value or "*" in value:
+        return value, "symbolic"
+    line_match = LINE_REF_RE.match(value)
+    if line_match:
+        return line_match.group(1), None
+    return value, None
 
 
 def main() -> int:
@@ -25,17 +36,29 @@ def main() -> int:
     project = Path(args.project).resolve()
     trace_dir = project / "wiki" / "code" / "traceability"
     missing = []
+    skipped = []
     checked = 0
     if trace_dir.is_dir():
         for page in sorted(trace_dir.rglob("*.md")):
             text = page.read_text(encoding="utf-8", errors="replace")
             for ref in RAW_CODE_RE.findall(text):
+                normalized, skip_reason = normalize_anchor(ref)
+                if skip_reason:
+                    skipped.append(
+                        {
+                            "page": str(page.relative_to(project)),
+                            "anchor": ref,
+                            "reason": skip_reason,
+                        }
+                    )
+                    continue
                 checked += 1
-                if not (project / ref).exists():
+                if not (project / normalized).exists():
                     missing.append({"page": str(page.relative_to(project)), "anchor": ref})
     report = {
         "generated_at": utc_now(),
         "checked": checked,
+        "skipped": skipped,
         "missing": missing,
         "ok": not missing,
     }
@@ -48,4 +71,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
