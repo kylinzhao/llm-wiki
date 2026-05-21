@@ -55,6 +55,7 @@ class SourceLinkCompatTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             summary = json.loads((project / "staging" / "graph" / "latest.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["broken_edges"], 0)
+            self.assertTrue((project / "graph" / "graph.json").is_file())
 
     def test_graph_accepts_bare_page_stem_wikilink(self):
         with tempfile.TemporaryDirectory() as tmp:

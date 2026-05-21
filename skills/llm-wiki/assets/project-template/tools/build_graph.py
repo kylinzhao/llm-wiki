@@ -74,15 +74,18 @@ def main() -> int:
 
     graph_dir = project / "graph"
     graph_dir.mkdir(parents=True, exist_ok=True)
-    (graph_dir / "nodes.json").write_text(json.dumps(nodes, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (graph_dir / "edges.json").write_text(json.dumps(edges, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
     summary = {
         "generated_at": utc_now(),
         "nodes": len(nodes),
         "edges": len(edges),
         "broken_edges": sum(1 for edge in edges if not edge["target_exists"]),
     }
+    (graph_dir / "nodes.json").write_text(json.dumps(nodes, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (graph_dir / "edges.json").write_text(json.dumps(edges, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (graph_dir / "graph.json").write_text(
+        json.dumps({"nodes": nodes, "edges": edges, "summary": summary}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     staging_graph = project / "staging" / "graph"
     staging_graph.mkdir(parents=True, exist_ok=True)
     (staging_graph / "latest.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
