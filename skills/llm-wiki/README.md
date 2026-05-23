@@ -313,6 +313,14 @@ uv run python tools/build_graph.py
 uv run python tools/anchor_check.py
 ```
 
+已构建的老 KB 如果只需要补齐 agent 查询路由规则，不要使用 `--force` 覆盖模板文件；在 KB 根目录运行：
+
+```text
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD" --agent-rules-only
+```
+
+该命令会把当前模板中的 `## Query Routing` 合并进 `AGENTS.md`，保留原有规则，且重复执行不会重复插入。
+
 这些步骤分别负责：
 
 - `install_project_template.py`：把完整项目脚手架复制到目标 wiki 项目

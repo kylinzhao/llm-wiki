@@ -54,6 +54,13 @@ COOKIE_HEADER='从浏览器 DevTools 复制的完整 Cookie' \
    ```
 
    `$LLM_WIKI_SKILL_ROOT` 为 llm-wiki skill 包根目录，定义见主 `SKILL.md` 的「Skill 包路径」。
+   已构建的老 KB 如只需补齐 agent 查询路由规则，运行：
+
+   ```bash
+   python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD" --agent-rules-only
+   ```
+
+   该命令只把模板中的 `## Query Routing` 合并进 `AGENTS.md`，不会覆盖已有项目规则。
 
 4. 运行确定性初始化：
 
