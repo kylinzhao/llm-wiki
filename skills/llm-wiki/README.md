@@ -40,6 +40,7 @@
 | `$llm-wiki-resume` | `llm-wiki resume` | 从 `staging/refinement-status.md`、health、graph 或 checkpoint 续跑。 |
 | `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断项目健康度、缺口和下一步。 |
 | `$llm-wiki-update` | `llm-wiki update` | 输入、wiki 或源码变化后的影响范围更新；会自动维护 `AGENTS.md` 查询路由规则；已配置 RSS/feed 或 raw-code codebase 时默认先刷新对应证据，结束前自动检查，通过后提示是否 ship。 |
+| `$llm-wiki-update-skill` | `llm-wiki update-skill` | 显式更新本机安装的 llm-wiki skill bundle；不更新当前 KB 内容。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 接入新的文档/wiki 来源到 `raw/`。 |
 | `$llm-wiki-add-code` | `llm-wiki add-code` | 接入新的源码库到 `raw-code/`。 |
 | `$llm-wiki-refine` | `llm-wiki refine` | 精修 source、concept、entity、layered page 或冲突页。 |
@@ -327,6 +328,8 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 ```text
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --client auto --backup
 ```
+
+更新来源不是脚本里写死的 URL，而是本地 `llm-wiki-skill` bundle checkout 的 git upstream。内部标准 checkout 的 `main` 跟踪 `origin/main`，`origin` 为 GitLab 地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git`；GitHub remote 只作为额外远端，除非显式指定，不默认使用。
 
 如果当前安装目录是复制出来的、脚本无法推断源码 checkout，则传入 bundle 仓库路径：
 
