@@ -11,6 +11,7 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki resume` | Existing project has partial work | Resume from latest status / checkpoint |
 | `llm-wiki doctor` | User wants a site-wide status, diagnosis, and recommendations | Health portrait and prioritized next steps |
 | `llm-wiki update` | `raw/`, `BUSINESS_CONTEXT.md`, `raw-code/`, wiki, configured RSS/upstream wiki sources, or source code changed; default-refresh configured upstream raw inputs and connected raw-code git worktrees first | Impact-scoped wiki update, validation, and ship-readiness prompt |
+| `llm-wiki update-skill` | User explicitly asks to update the llm-wiki skill bundle itself, not the current KB content | Pull/reinstall the installed skill bundle, then optionally refresh project tooling |
 | `llm-wiki add-wiki` | Add another document/wiki directory or wiki URL as business or requirement evidence | Imported raw evidence, source provenance, RSS/update status, and affected wiki updates |
 | `llm-wiki add-code` | Add another project codebase as implementation evidence | New raw-code codebase and code wiki updates |
 | `llm-wiki refine` | Improve source, concepts, entities, or layered pages | AI-native text refinement |
@@ -110,6 +111,8 @@ Final report:
 
 Purpose: respond to changes without rebuilding the whole project.
 
+If the user asks to update the **llm-wiki skill itself** rather than KB content, route to `llm-wiki update-skill` semantics below. Do not mix global skill installation changes into an ordinary KB update unless the user explicitly asked for it.
+
 Common triggers:
 
 - New or edited `raw/**/index.md`.
@@ -140,7 +143,18 @@ Impact analysis:
 Default update order:
 
 1. Identify changed files and classify the trigger.
-2. Refresh upstream inputs when the project has a declared updater:
+2. Repair project agent query-routing rules when the standard template tooling is available:
+   - Before running a local `tools/update_wiki.py` that may be from an older KB, refresh engine-owned project tooling from the installed skill template:
+
+     ```bash
+     python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD" --engine-only --refresh-agent-rules
+     ```
+
+   - This is the automatic migration path for existing KB projects; do not ask the user to run `--agent-rules-only` manually during normal `llm-wiki update`.
+   - `tools/update_wiki.py` refreshes `AGENTS.md` by default so older KB projects gain the `## Query Routing` rules automatically.
+   - use `--no-agent-rules-refresh` only when the user explicitly wants a deterministic update without touching project-level agent instructions.
+   - `llm-wiki doctor` should only report missing agent rules; it should not modify files.
+3. Refresh upstream inputs when the project has a declared updater:
    - if the project has enabled RSS feeds or a configured `raw/` updater, run that upstream sync before the deterministic update
    - when the repo uses the standard template and `config/rss-feeds.yaml` already has enabled feed URLs, treat RSS sync as the default `raw/` refresh step instead of waiting for the user to ask explicitly
    - if upstream wiki URLs are configured but RSS/feed URLs are missing, attempt deterministic feed discovery from the wiki URL and platform metadata before syncing
@@ -148,7 +162,7 @@ Default update order:
    - if the project has connected `raw-code/<codebase_id>/` git worktrees, refresh them by default before code wiki rebuild; for the standard template this means auto-running a safe code sync inside `tools/update_wiki.py`
    - default code sync should use a safe fast-forward-only strategy for git worktrees unless the project manifest explicitly overrides the command
    - never silently overwrite dirty `raw-code/*` worktrees; block and report the specific codebase instead
-3. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
+4. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
    - when RSS sync is enabled in the project, prefer an update command path that includes the raw refresh automatically, for example by auto-running `tools/rss_sync.py` inside `tools/update_wiki.py` or by passing `--raw-sync-command`
    - when `raw-code/` codebases are connected as git worktrees, prefer an update command path that includes the code refresh automatically, for example by auto-running `git pull --ff-only` per clean codebase or a manifest-defined override inside `tools/update_wiki.py`
 4. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
@@ -158,12 +172,12 @@ Default update order:
    - changed `raw-code/` files update affected codebase pages, endpoint maps, capability pages, traceability rows, and graphify status when needed
    - changed `BUSINESS_CONTEXT.md` updates canonical aliases, concepts, entities, conflicts, truth, and retrieval guidance
    - if health or the update report shows remaining `pending` or `stale` source pages, resolve them in the same command when they are in scope or the backlog is small enough to finish safely
-6. When the same update affects both requirement/source evidence and implementation/code evidence, treat source refinement and code traceability refresh as one integrated update pass:
+7. When the same update affects both requirement/source evidence and implementation/code evidence, treat source refinement and code traceability refresh as one integrated update pass:
    - refine stale affected source pages first
    - immediately update affected `wiki/code/capabilities/` and `wiki/code/traceability/` rows against the refined requirement evidence
    - re-check evidence strength after both sides are updated
    - do not present these as separate optional next commands unless the user explicitly asked to stop after one layer
-7. Continue automatically through all low-risk update completion work:
+8. Continue automatically through all low-risk update completion work:
    - affected source AI refinement
    - affected concept/entity/layer page refresh
    - affected codebase and capability page refresh
@@ -204,6 +218,7 @@ Final report:
 - changed inputs
 - upstream sync status, including missing RSS/feed URLs when automatic wiki updates are configured
 - code sync status, including which `raw-code/<codebase_id>/` worktrees were refreshed, skipped, overridden, or blocked as dirty
+- agent rules status: created / updated / already present / skipped
 - affected wiki layers
 - pages updated
 - pages intentionally left untouched
@@ -219,6 +234,38 @@ Recommendation rule:
 - Recommend source-only refinement separately only when no affected code evidence or traceability pages are in scope.
 - When validation passes and there are no blockers, end `建议下一步` by asking whether the user wants to run `llm-wiki ship` for publish/commit/push readiness. Do not run ship automatically unless the user explicitly asked to ship.
 - When validation fails, do not suggest ship; recommend the smallest safe continuation or fix instead.
+
+## `llm-wiki update-skill`
+
+Purpose: update the installed llm-wiki skill bundle itself. Use only when the user explicitly asks to update the skill, skill bundle, installed skill, or global llm-wiki tooling.
+
+Default behavior:
+
+1. Prefer the bundled updater when available:
+
+   ```bash
+   python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --client auto --backup
+   ```
+
+2. If the installed skill was copied and the updater cannot infer the source checkout, ask for or use a known local bundle checkout:
+
+   ```bash
+   python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --source /path/to/llm-wiki-skill --client auto --backup
+   ```
+
+3. The updater runs `git pull --ff-only` in the bundle checkout when it is a git worktree, then runs `install.sh` with backup semantics.
+4. Do not use `--force` unless the user explicitly accepts discarding the previous installed copy.
+5. After updating the installed skill, if the current directory is an LLM Wiki KB project and the user wants project tooling refreshed too, run:
+
+   ```bash
+   python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD" --engine-only --refresh-agent-rules
+   ```
+
+Stop when:
+
+- No bundle checkout is available and the user has not provided `--source`.
+- `git pull --ff-only` fails because the bundle checkout has local conflicts or diverged history.
+- installation reports destination conflicts without `--backup` or `--force`.
 
 ## `llm-wiki add-wiki`
 
