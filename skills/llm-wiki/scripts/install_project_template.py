@@ -17,6 +17,8 @@ ENGINE_PREFIXES = (
     "docs/implementation-workflow.md",
 )
 
+QUERY_ROUTING_HEADING = "## Query Routing"
+
 
 def copy_tree(src: Path, dst: Path, force: bool, engine_only: bool = False) -> tuple[list[str], list[str]]:
     copied: list[str] = []
@@ -43,6 +45,44 @@ def copy_tree(src: Path, dst: Path, force: bool, engine_only: bool = False) -> t
         copied.append(str(rel))
 
     return copied, skipped
+
+
+def extract_template_query_routing() -> str:
+    template_agents = TEMPLATE_ROOT / "AGENTS.md"
+    text = template_agents.read_text(encoding="utf-8")
+    start = text.find(QUERY_ROUTING_HEADING)
+    if start == -1:
+        raise SystemExit(f"Missing {QUERY_ROUTING_HEADING!r} in {template_agents}")
+
+    next_heading = text.find("\n## ", start + len(QUERY_ROUTING_HEADING))
+    if next_heading == -1:
+        section = text[start:].strip()
+    else:
+        section = text[start:next_heading].strip()
+    return section + "\n"
+
+
+def refresh_agent_rules(project: Path) -> str:
+    agents = project / "AGENTS.md"
+    query_routing = extract_template_query_routing()
+
+    if not agents.is_file():
+        agents.write_text("# LLM Wiki Project Rules\n\n" + query_routing, encoding="utf-8")
+        return "created"
+
+    text = agents.read_text(encoding="utf-8")
+    if QUERY_ROUTING_HEADING in text:
+        return "already_present"
+
+    if text.startswith("# "):
+        first_break = text.find("\n")
+        insert_at = first_break + 1 if first_break != -1 else len(text)
+        refreshed = text[:insert_at].rstrip() + "\n\n" + query_routing + "\n" + text[insert_at:].lstrip()
+    else:
+        refreshed = "# LLM Wiki Project Rules\n\n" + query_routing + "\n" + text.lstrip()
+
+    agents.write_text(refreshed.rstrip() + "\n", encoding="utf-8")
+    return "updated"
 
 
 def parse_dependency_lines(pyproject: Path) -> list[str]:
@@ -110,6 +150,16 @@ def main() -> int:
         action="store_true",
         help="Refresh only engine-owned files such as tools/ and engine docs; preserve project evidence/config files.",
     )
+    parser.add_argument(
+        "--refresh-agent-rules",
+        action="store_true",
+        help="Merge current LLM Wiki agent query-routing rules into AGENTS.md without overwriting existing content.",
+    )
+    parser.add_argument(
+        "--agent-rules-only",
+        action="store_true",
+        help="Only merge current LLM Wiki agent query-routing rules into AGENTS.md; do not copy template files.",
+    )
     args = parser.parse_args()
 
     project = Path(args.project).resolve()
@@ -117,8 +167,16 @@ def main() -> int:
         raise SystemExit(f"Missing project template: {TEMPLATE_ROOT}")
 
     project.mkdir(parents=True, exist_ok=True)
+    if args.agent_rules_only:
+        agent_rules_status = refresh_agent_rules(project)
+        print(f"project={project}")
+        print(f"template={TEMPLATE_ROOT}")
+        print(f"agent_rules={agent_rules_status}")
+        return 0
+
     copied, skipped = copy_tree(TEMPLATE_ROOT, project, args.force, args.engine_only)
     merged_deps = merge_pyproject_dependencies(project) if args.engine_only else []
+    agent_rules_status = refresh_agent_rules(project) if args.refresh_agent_rules else None
     # build_wiki.py requires raw/; the template does not ship evidence files (often gitignored).
     (project / "raw").mkdir(parents=True, exist_ok=True)
 
@@ -135,6 +193,8 @@ def main() -> int:
         print(f"merged_dependencies={len(merged_deps)}")
         for item in merged_deps:
             print(f"  ~ {item}")
+    if agent_rules_status:
+        print(f"agent_rules={agent_rules_status}")
     print("next_commands:")
     print("  uv run python tools/update_wiki.py")
     print("  # optional when raw-code/ exists and graphify is installed:")
