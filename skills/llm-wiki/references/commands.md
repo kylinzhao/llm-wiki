@@ -150,19 +150,21 @@ Default update order:
    - use `--no-agent-rules-refresh` only when the user explicitly wants a deterministic update without touching project-level agent instructions.
    - `llm-wiki doctor` should only report missing agent rules; it should not modify files.
 3. Refresh upstream inputs when the project has a declared updater:
-   - if the project has enabled RSS feeds or a configured `raw/` updater, run that upstream sync before the deterministic update
-   - when the repo uses the standard template and `config/rss-feeds.yaml` already has enabled feed URLs, treat RSS sync as the default `raw/` refresh step instead of waiting for the user to ask explicitly
+   - treat `upstream/wiki-sources.json` as the standard source of truth for upstream inputs; `type: confluence` refreshes full Cwiki pages, `type: rss` refreshes RSS/Atom snapshots
+   - keep every wiki relationship in that source object: 0-1 root, later added wiki, source role, depth, RSS URL, output/metadata paths, and `filters.updated_since`
+   - if the project has enabled RSS feeds or Cwiki sources, run that upstream sync before the deterministic update
+   - when an older repo only has `config/rss-feeds.yaml`, treat it as legacy input and let `tools/update_wiki.py` migrate it into `upstream/wiki-sources.json`
    - if upstream wiki URLs are configured but RSS/feed URLs are missing, attempt deterministic feed discovery from the wiki URL and platform metadata before syncing
    - if an RSS/feed URL cannot be inferred, tell the user exactly which wiki URL needs a manually supplied RSS URL; if the user does not provide one, leave the RSS/feed field empty and report that automatic future updates for that source cannot be completed
    - if the project has connected `raw-code/<codebase_id>/` git worktrees, refresh them by default before code wiki rebuild; for the standard template this means auto-running a safe code sync inside `tools/update_wiki.py`
    - default code sync should use a safe fast-forward-only strategy for git worktrees unless the project manifest explicitly overrides the command
    - never silently overwrite dirty `raw-code/*` worktrees; block and report the specific codebase instead
 4. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
-   - when RSS sync is enabled in the project, prefer an update command path that includes the raw refresh automatically, for example by auto-running `tools/rss_sync.py` inside `tools/update_wiki.py` or by passing `--raw-sync-command`
+   - when upstream sync is enabled in the project, prefer an update command path that includes the raw refresh automatically, for example by auto-running Cwiki sync and `tools/rss_sync.py` inside `tools/update_wiki.py` or by passing `--raw-sync-command`
    - when `raw-code/` codebases are connected as git worktrees, prefer an update command path that includes the code refresh automatically, for example by auto-running `git pull --ff-only` per clean codebase or a manifest-defined override inside `tools/update_wiki.py`
-4. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
+5. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
    - Read `staging/refinement-plan.json` and `references/refinement-contract.md`; use them as the write-scope and acceptance contract for semantic refinement.
-5. Refresh affected pages:
+6. Refresh affected pages:
    - changed `raw/` pages update matching source pages, layered pages, concepts, entities, query readiness, health, and graph
    - changed `raw-code/` files update affected codebase pages, endpoint maps, capability pages, traceability rows, and graphify status when needed
    - changed `BUSINESS_CONTEXT.md` updates canonical aliases, concepts, entities, conflicts, truth, and retrieval guidance
@@ -283,14 +285,15 @@ Default order:
 1. Read `BUSINESS_CONTEXT.md`, existing `docs/build-and-maintenance.md`, and current `staging/refinement-status.md`.
 2. Inspect the provided source directory or wiki URL and identify its document unit pattern.
 3. If the input is a live wiki URL, attempt deterministic RSS/feed discovery from URL structure and platform metadata.
-4. If RSS/feed discovery succeeds, record the discovered RSS/feed URL with the source provenance or updater config.
+4. If RSS/feed discovery succeeds, record the discovered RSS/feed URL in the same `upstream/wiki-sources.json` source object with the source provenance. Prefer `uv run python tools/discover_wiki_feeds.py --project "$PWD" --input upstream/wiki-sources.json --write-upstream` when doing deterministic feed discovery.
 5. If RSS/feed discovery fails, explicitly tell the user that the RSS URL cannot be inferred, ask the user to manually provide the RSS URL, and explain that automatic future update work for that source cannot be completed without it. If the user does not provide one, leave the RSS/feed field empty.
-6. Confirm whether the input can be copied, linked, downloaded, or synced into `raw/`; do not rewrite or normalize source evidence in place.
-7. Preserve provenance: original path, source URL when present, RSS/feed URL when known, RSS/feed status, imported_at, and source collection name.
-8. Place imported documents under a stable `raw/` subdirectory naming scheme that will not collide with existing page IDs.
-9. Run the project update command when available, such as `uv run python tools/update_wiki.py`.
-10. AI-native refine only affected source, concept, entity, and layered pages.
-11. Run health and graph.
+6. If the user specifies page filters such as "only docs updated after YYYY-MM-DD", persist them under that source's `filters` object, e.g. `filters.updated_since`.
+7. Confirm whether the input can be copied, linked, downloaded, or synced into `raw/`; do not rewrite or normalize source evidence in place.
+8. Preserve provenance: original path, source URL when present, RSS/feed URL when known, RSS/feed status, imported_at, source collection name, and relationship role.
+9. Place imported documents under a stable `raw/` subdirectory naming scheme that will not collide with existing page IDs.
+10. Run the project update command when available, such as `uv run python tools/update_wiki.py`.
+11. AI-native refine only affected source, concept, entity, and layered pages.
+12. Run health and graph.
 
 Stop for confirmation when:
 

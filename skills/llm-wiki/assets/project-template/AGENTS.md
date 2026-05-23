@@ -28,14 +28,12 @@ before answering from general model memory.
 
 ## Build Commands
 
-Use these deterministic commands before and after AI-native refinement:
+Use `update_wiki.py` as the deterministic primary entrypoint:
 
 ```bash
-uv run python tools/build_wiki.py
-uv run python tools/scan_code.py
-uv run python tools/build_traceability.py
-uv run python tools/health.py --json
-uv run python tools/build_graph.py
+uv run python tools/update_wiki.py
+# optional when raw-code/ exists and graphify is installed:
+uv run python tools/update_wiki.py --graphify
 ```
 
-Use Codex-native work for summaries, entity normalization, business judgment, implementation judgment, and final traceability strength.
+`tools/update_wiki.py` runs the deterministic chain (including health/graph/anchor checks). Use Codex-native work for summaries, entity normalization, business judgment, implementation judgment, and final traceability strength.

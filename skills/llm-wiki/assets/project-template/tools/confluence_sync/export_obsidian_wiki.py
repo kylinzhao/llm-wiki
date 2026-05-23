@@ -54,6 +54,16 @@ def parse_args() -> argparse.Namespace:
         help="Raw Cookie header. Falls back to COOKIE_HEADER env var.",
     )
     parser.add_argument(
+        "--sso-skill-root",
+        default=os.environ.get("GUAZI_SSO_SKILL_ROOT", ""),
+        help="Path to guazi-sso-login skill root (directory containing run.sh).",
+    )
+    parser.add_argument(
+        "--auto-cookie-from-sso",
+        action="store_true",
+        help="When cookie is missing, call guazi-sso-login wiki --validate --plain automatically.",
+    )
+    parser.add_argument(
         "--prompt-cookie",
         action="store_true",
         help="Prompt for the wiki Cookie header with hidden input before running.",
@@ -72,6 +82,27 @@ def parse_args() -> argparse.Namespace:
         "--jira-token",
         default=os.environ.get("JIRA_TOKEN", ""),
         help="Optional Jira bearer token. Used to read Jira issue pages and extract linked wiki docs.",
+    )
+    parser.add_argument(
+        "--jira-cookie",
+        default=os.environ.get("JIRA_COOKIE", ""),
+        help="Optional Jira Cookie header for Jira API requests.",
+    )
+    parser.add_argument(
+        "--jira-chdsso",
+        default=os.environ.get("JIRA_CHDSSO", ""),
+        help="Optional CHDSSO token used as `chdsso` header for Jira API requests.",
+    )
+    parser.add_argument(
+        "--auto-jira-chdsso-from-sso",
+        action="store_true",
+        help="When jira-chdsso is missing, call guazi-sso-login chdsso --validate --plain automatically.",
+    )
+    parser.add_argument(
+        "--jira-chdsso-env",
+        choices=("test", "pre", "online"),
+        default=os.environ.get("JIRA_CHDSSO_ENV", "test"),
+        help="Target env for auto-fetched Jira CHDSSO token. Default: test.",
     )
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
@@ -133,6 +164,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Forwarded to export_confluence_tree.py — overrides default metadata location "
             "(otherwise resolved next to raw/)."
+        ),
+    )
+    parser.add_argument(
+        "--updated-since",
+        default="",
+        help=(
+            "Only persist pages whose updated_at/created_at is on or after this time "
+            "(YYYY-MM-DD or ISO-8601 datetime)."
         ),
     )
     return parser.parse_args()
@@ -243,8 +282,22 @@ def build_command(args: argparse.Namespace) -> list[str]:
         command.extend(["--change-report-dir", args.change_report_dir.strip()])
     if getattr(args, "metadata_dir", "").strip():
         command.extend(["--metadata-dir", args.metadata_dir.strip()])
+    if getattr(args, "sso_skill_root", "").strip():
+        command.extend(["--sso-skill-root", args.sso_skill_root.strip()])
+    if getattr(args, "auto_cookie_from_sso", False):
+        command.append("--auto-cookie-from-sso")
+    if getattr(args, "updated_since", "").strip():
+        command.extend(["--updated-since", args.updated_since.strip()])
     if args.jira_token.strip():
         command.extend(["--jira-token", args.jira_token.strip()])
+    if getattr(args, "jira_cookie", "").strip():
+        command.extend(["--jira-cookie", args.jira_cookie.strip()])
+    if getattr(args, "jira_chdsso", "").strip():
+        command.extend(["--jira-chdsso", args.jira_chdsso.strip()])
+    if getattr(args, "auto_jira_chdsso_from_sso", False):
+        command.append("--auto-jira-chdsso-from-sso")
+    if getattr(args, "jira_chdsso_env", "").strip():
+        command.extend(["--jira-chdsso-env", args.jira_chdsso_env.strip()])
     return command
 
 

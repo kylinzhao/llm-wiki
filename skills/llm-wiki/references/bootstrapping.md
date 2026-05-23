@@ -36,8 +36,18 @@ COOKIE_HEADER='从浏览器 DevTools 复制的完整 Cookie' \
 
 - **`--project-dir`**：页面 Markdown 写入 `<项目>/raw/`，每页为 `raw/<pageId>-<slug>/index.md` 及同目录 `assets/`（不再使用中间的 `pages-<rootId>/` 一层）。
 - **状态文件**：默认在 `<项目>/staging/wiki-export/`（`export-state.json`、`progress/*.json`、`manifest-*.json`），不在 `raw/`。
+- **上游配置**：导出成功后同步写入 `<项目>/upstream/wiki-sources.json`，记录 root wiki URL、层级、RSS URL、metadata 路径、启用状态、来源关系和筛选条件，供后续 `llm-wiki update` 自动刷新。0-1 根 wiki 和后续新增 wiki 来源都必须进入这个文件。
+- **按更新时间硬过滤**：可加 `--updated-since`，仅落盘该时间点及之后更新的页面，例如 `--updated-since 2026-01-01` 或 `--updated-since 2026-01-01T00:00:00+08:00`。该条件会持久化为 `upstream/wiki-sources.json` 中对应 source 的 `filters.updated_since`。
 - **增量更新**：首次导出后可在项目根执行  
   `COOKIE_HEADER='...' uv run python tools/confluence_sync/export_obsidian_wiki.py --update --project-dir "$PWD"`。
+- **SSO 自动取登录态（可选）**：若已安装 `guazi-sso-login` skill，可在不手填 `COOKIE_HEADER` 时自动获取 cwiki Cookie：  
+  `uv run python tools/confluence_sync/export_obsidian_wiki.py --url "<cwiki-url>" --project-dir "$PWD" --sso-skill-root "<guazi-sso-login 目录>" --auto-cookie-from-sso`。
+- **环境变量优先自动刷新（推荐）**：把 SSO 凭据放到环境变量后，脚本会在 Cookie/token 缺失或校验失效时自动登录并刷新，不需要手工复制 Cookie。最小配置：
+  - `GUAZI_SSO_USER_NAME`
+  - `GUAZI_SSO_PASSWORD`
+  - `GUAZI_SSO_APPLY_PHONE`
+- **cjira 补充解析（可选）**：如需从 Jira issue 提取关联 wiki 链接，可继续加：  
+  `--auto-jira-chdsso-from-sso --jira-chdsso-env test`（或显式传 `--jira-token/--jira-cookie/--jira-chdsso`）。
 
 需要手动指定元数据目录时用 **`--metadata-dir`**；否则当输出目录为 `raw/` 时自动使用 `staging/wiki-export/`。
 

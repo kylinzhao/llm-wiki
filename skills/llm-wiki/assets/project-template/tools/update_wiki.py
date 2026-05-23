@@ -6,12 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
+from urllib.parse import urlparse
 
 import yaml
 from agent_rules import refresh_agent_rules
@@ -58,6 +60,11 @@ def read_json_if_present(path: Path) -> object | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def write_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def write_failure_report(project: Path, failed_step: str, returncode: int, details: dict[str, object] | None = None) -> None:
@@ -114,26 +121,143 @@ def resolve_rss_config(project: Path) -> Path:
     return config_path
 
 
-def rss_sync_enabled(project: Path) -> bool:
-    config_path = resolve_rss_config(project)
-    config = load_yaml_dict(config_path)
+def default_rss_settings(project: Path) -> dict[str, object]:
+    config = load_yaml_dict(resolve_rss_config(project))
+    return {
+        "rate_limits": config.get(
+            "rate_limits",
+            {"default_min_interval_seconds": 60, "max_concurrency": 1, "per_host": {}},
+        ),
+        "retry": config.get("retry", {"max_attempts": 2, "backoff_seconds": 30}),
+    }
+
+
+def legacy_rss_config_sources(project: Path) -> list[dict[str, object]]:
+    config = load_yaml_dict(resolve_rss_config(project))
     feeds = config.get("feeds")
     if not isinstance(feeds, list):
-        return False
+        return []
+    sources: list[dict[str, object]] = []
     for feed in feeds:
         if not isinstance(feed, dict):
             continue
-        if feed.get("enabled") is False:
+        feed_id = str(feed.get("id") or "").strip()
+        url = str(feed.get("url") or "").strip()
+        if not feed_id or not url:
             continue
-        if str(feed.get("url") or "").strip():
-            return True
-    return False
+        source_url = str(feed.get("source_url") or "").strip()
+        confluence_page_id = confluence_page_id_from_legacy_feed(feed_id, source_url, url)
+        if confluence_page_id:
+            sources.append(
+                {
+                    "type": "confluence",
+                    "enabled": feed.get("enabled", True),
+                    "source_id": f"cwiki-{confluence_page_id}",
+                    "page_id": confluence_page_id,
+                    "url": source_url or f"https://cwiki.guazi.com/pages/viewpage.action?pageId={confluence_page_id}",
+                    "site_base": confluence_site_base(source_url or url),
+                    "depth": int(feed.get("depth", 3) or 3),
+                    "weekly_from_title": "",
+                    "space_key": "",
+                    "rss_url": url,
+                    "rss_url_is_custom": True,
+                    "rss_max_results": int(feed.get("rss_max_results", 200) or 200),
+                    "output_dir": "raw",
+                    "metadata_dir": "staging/wiki-export",
+                    "migrated_from": relative_path(resolve_rss_config(project), project),
+                }
+            )
+            continue
+        sources.append(
+            {
+                "type": "rss",
+                "enabled": feed.get("enabled", True),
+                "id": feed_id,
+                "url": url,
+                "source_url": source_url,
+                "target_dir": str(feed.get("target_dir") or f"raw/rss/{feed_id}"),
+                "migrated_from": relative_path(resolve_rss_config(project), project),
+            }
+        )
+    return sources
+
+
+def confluence_site_base(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return "https://cwiki.guazi.com"
+
+
+def confluence_page_id_from_legacy_feed(feed_id: str, source_url: str, feed_url: str) -> str:
+    source_match = re.search(r"[?&]pageId=(\d+)", source_url)
+    if source_match:
+        return source_match.group(1)
+    if feed_id.isdigit() and "cwiki.guazi.com" in feed_url:
+        return feed_id
+    return ""
+
+
+def enabled_rss_sources(project: Path) -> list[dict[str, object]]:
+    sources = ensure_upstream_wiki_sources(project)
+    rss_sources: list[dict[str, object]] = []
+    for source in sources:
+        if str(source.get("type") or "") != "rss":
+            continue
+        if source.get("enabled") is False:
+            continue
+        source_id = str(source.get("id") or "").strip()
+        url = str(source.get("url") or "").strip()
+        if not source_id or not url:
+            continue
+        rss_sources.append(source)
+    return rss_sources
+
+
+def write_generated_rss_config(project: Path, sources: list[dict[str, object]]) -> Path:
+    settings = default_rss_settings(project)
+    feeds: list[dict[str, object]] = []
+    for source in sources:
+        source_id = str(source.get("id") or "").strip()
+        url = str(source.get("url") or "").strip()
+        feeds.append(
+            {
+                "id": source_id,
+                "url": url,
+                "source_url": str(source.get("source_url") or ""),
+                "target_dir": str(source.get("target_dir") or f"raw/rss/{source_id}"),
+                "enabled": source.get("enabled", True),
+            }
+        )
+    generated = project / "staging" / "update" / "rss-feeds.generated.yaml"
+    generated.parent.mkdir(parents=True, exist_ok=True)
+    generated.write_text(
+        yaml.safe_dump(
+            {
+                "feeds": feeds,
+                "rate_limits": settings["rate_limits"],
+                "retry": settings["retry"],
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return generated
+
+
+def rss_sync_enabled(project: Path) -> bool:
+    manifest = load_manifest(project)
+    phases = manifest.get("phases")
+    if isinstance(phases, dict) and phases.get("rss_sync") is False:
+        return False
+    return bool(enabled_rss_sources(project))
 
 
 def auto_raw_sync_command(project: Path) -> str | None:
     if not rss_sync_enabled(project):
         return None
-    config_path = resolve_rss_config(project)
+    config_path = write_generated_rss_config(project, enabled_rss_sources(project))
     return " ".join(
         [
             shlex.quote(sys.executable),
@@ -146,6 +270,254 @@ def auto_raw_sync_command(project: Path) -> str | None:
 
 def load_manifest(project: Path) -> dict:
     return load_yaml_dict(project / "kb.manifest.yaml")
+
+
+def upstream_wiki_sources_path(project: Path) -> Path:
+    return project / "upstream" / "wiki-sources.json"
+
+
+def relative_path(path: Path, project: Path) -> str:
+    try:
+        return path.resolve().relative_to(project.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def load_upstream_wiki_sources(project: Path) -> dict:
+    payload = read_json_if_present(upstream_wiki_sources_path(project))
+    return payload if isinstance(payload, dict) else {}
+
+
+def write_upstream_wiki_sources(project: Path, sources: list[dict[str, object]]) -> None:
+    write_json(
+        upstream_wiki_sources_path(project),
+        {
+            "version": 1,
+            "updated_at": utc_now(),
+            "sources": sources,
+        },
+    )
+
+
+def source_filters(source: dict[str, object]) -> dict[str, object]:
+    filters = source.get("filters")
+    return dict(filters) if isinstance(filters, dict) else {}
+
+
+def source_updated_since(source: dict[str, object]) -> str:
+    filters = source_filters(source)
+    return str(filters.get("updated_since") or source.get("updated_since") or "").strip()
+
+
+def normalize_upstream_source(source: dict[str, object], *, default_relationship: str = "additional") -> dict[str, object]:
+    normalized = dict(source)
+    source_type = str(normalized.get("type") or "").strip()
+    if source_type == "confluence":
+        page_id = str(normalized.get("page_id") or "").strip()
+        if page_id and not str(normalized.get("source_id") or "").strip():
+            normalized["source_id"] = f"cwiki-{page_id}"
+    elif source_type == "rss":
+        source_id = str(normalized.get("id") or normalized.get("source_id") or "").strip()
+        if source_id and not str(normalized.get("source_id") or "").strip():
+            normalized["source_id"] = f"rss-{source_id}"
+
+    relationship = normalized.get("relationship")
+    if not isinstance(relationship, dict):
+        normalized["relationship"] = {"role": default_relationship}
+    elif not str(relationship.get("role") or "").strip():
+        relationship = dict(relationship)
+        relationship["role"] = default_relationship
+        normalized["relationship"] = relationship
+
+    updated_since = str(normalized.pop("updated_since", "") or "").strip()
+    filters = source_filters(normalized)
+    if updated_since and not str(filters.get("updated_since") or "").strip():
+        filters["updated_since"] = updated_since
+    if filters:
+        normalized["filters"] = filters
+    return normalized
+
+
+def export_state_to_upstream_sources(project: Path) -> list[dict[str, object]]:
+    state_path = next(
+        (
+            candidate
+            for candidate in [
+                project / "staging" / "wiki-export" / "export-state.json",
+                project / "staging" / "wiki-export-state" / "export-state.json",
+                project / "raw" / "export-state.json",
+            ]
+            if candidate.is_file()
+        ),
+        project / "staging" / "wiki-export" / "export-state.json",
+    )
+    state = read_json_if_present(state_path)
+    if not isinstance(state, dict):
+        return []
+    roots = state.get("roots")
+    if not isinstance(roots, list):
+        return []
+    sources: list[dict[str, object]] = []
+    for root in roots:
+        if not isinstance(root, dict):
+            continue
+        page_id = str(root.get("page_id") or "").strip()
+        url = str(root.get("url") or "").strip()
+        if not page_id or not url:
+            continue
+        sources.append(
+            {
+                "type": "confluence",
+                "enabled": True,
+                "source_id": f"cwiki-{page_id}",
+                "page_id": page_id,
+                "url": url,
+                "site_base": str(root.get("site_base") or ""),
+                "depth": int(root.get("depth_limit", 0) or 0),
+                "weekly_from_title": str(root.get("weekly_from_title") or ""),
+                "space_key": str(root.get("space_key") or ""),
+                "rss_url": str(root.get("rss_url") or ""),
+                "rss_url_is_custom": bool(root.get("rss_url_is_custom", False)),
+                "rss_max_results": int(root.get("rss_max_results", 200) or 200),
+                "output_dir": "raw",
+                "metadata_dir": relative_path(state_path.parent, project),
+                "migrated_from": relative_path(state_path, project),
+            }
+        )
+    return sources
+
+
+def ensure_upstream_wiki_sources(project: Path) -> list[dict[str, object]]:
+    config = load_upstream_wiki_sources(project)
+    existing = config.get("sources")
+    sources = (
+        [
+            normalize_upstream_source(dict(item), default_relationship="additional")
+            for item in existing
+            if isinstance(item, dict)
+        ]
+        if isinstance(existing, list)
+        else []
+    )
+    migrated = export_state_to_upstream_sources(project)
+    migrated.extend(legacy_rss_config_sources(project))
+    migrated = [
+        normalize_upstream_source(source, default_relationship="primary" if not sources and index == 0 else "additional")
+        for index, source in enumerate(migrated)
+    ]
+    if not migrated:
+        return sources
+
+    def source_key(source: dict[str, object]) -> str:
+        source_type = str(source.get("type") or "")
+        if source_type == "confluence":
+            return f"confluence:{source.get('page_id')}"
+        if source_type == "rss":
+            return f"rss:{source.get('id')}"
+        return json.dumps(source, sort_keys=True, ensure_ascii=False)
+
+    by_key = {source_key(source): source for source in sources}
+    changed = False
+    for source in migrated:
+        key = source_key(source)
+        if key not in by_key:
+            by_key[key] = source
+            changed = True
+    if changed or not upstream_wiki_sources_path(project).is_file():
+        merged = [by_key[key] for key in sorted(by_key)]
+        write_upstream_wiki_sources(project, merged)
+        return merged
+    return sources
+
+
+def confluence_sync_commands(project: Path) -> list[list[str]]:
+    sources = ensure_upstream_wiki_sources(project)
+    commands: list[list[str]] = []
+    exporter = project / "tools" / "confluence_sync" / "export_obsidian_wiki.py"
+    if not exporter.is_file():
+        return []
+
+    saved_state_groups: dict[str, list[dict[str, object]]] = {}
+    for source in sources:
+        if str(source.get("type") or "") != "confluence":
+            continue
+        if source.get("enabled") is False:
+            continue
+        page_id = str(source.get("page_id") or "").strip()
+        if not page_id:
+            continue
+        metadata_dir_text = str(source.get("metadata_dir") or "staging/wiki-export")
+        metadata_dir = project / metadata_dir_text if not Path(metadata_dir_text).is_absolute() else Path(metadata_dir_text)
+        output_dir_text = str(source.get("output_dir") or "raw")
+        output_dir = project / output_dir_text if not Path(output_dir_text).is_absolute() else Path(output_dir_text)
+        has_state = (metadata_dir / "export-state.json").is_file() or (output_dir / "export-state.json").is_file()
+        if has_state:
+            saved_state_groups.setdefault(str(metadata_dir), []).append(source)
+            continue
+        command = [
+            sys.executable,
+            str(exporter),
+            "--project-dir",
+            str(project),
+            "--metadata-dir",
+            str(metadata_dir),
+            "--levels",
+            str(int(source.get("depth", 0) or 0)),
+            "--no-cookie-prompt",
+        ]
+        url = str(source.get("url") or "").strip()
+        if not url:
+            continue
+        command.extend(["--url", url])
+        sso_skill_root = os.environ.get("GUAZI_SSO_SKILL_ROOT", "").strip()
+        if sso_skill_root:
+            command.extend(["--sso-skill-root", sso_skill_root])
+        updated_since = source_updated_since(source)
+        if updated_since:
+            command.extend(["--updated-since", updated_since])
+        rss_url = str(source.get("rss_url") or "").strip()
+        if page_id and rss_url:
+            command.extend(["--rss-url", f"{page_id}={rss_url}"])
+        commands.append(command)
+
+    for metadata_dir, grouped_sources in sorted(saved_state_groups.items()):
+        command = [
+            sys.executable,
+            str(exporter),
+            "--project-dir",
+            str(project),
+            "--metadata-dir",
+            metadata_dir,
+            "--no-cookie-prompt",
+            "--update",
+        ]
+        sso_skill_root = os.environ.get("GUAZI_SSO_SKILL_ROOT", "").strip()
+        if sso_skill_root:
+            command.extend(["--sso-skill-root", sso_skill_root])
+        updated_since_values = {
+            source_updated_since(source)
+            for source in grouped_sources
+            if source_updated_since(source)
+        }
+        if len(updated_since_values) == 1:
+            command.extend(["--updated-since", next(iter(updated_since_values))])
+        for source in grouped_sources:
+            page_id = str(source.get("page_id") or "").strip()
+            rss_url = str(source.get("rss_url") or "").strip()
+            if page_id and rss_url:
+                command.extend(["--rss-url", f"{page_id}={rss_url}"])
+        if any(source.get("rss_include_new") is not False for source in grouped_sources):
+            command.append("--rss-include-new")
+        commands.append(command)
+    return commands
+
+
+def run_confluence_sync(project: Path) -> int:
+    for command in confluence_sync_commands(project):
+        code = run_command(command, project)
+        if code != 0:
+            return code
+    return 0
 
 
 def git_worktree_dirty(path: Path) -> bool:
@@ -331,6 +703,12 @@ def main() -> int:
 
     if not raw_sync_command and not no_auto_raw_sync:
         raw_sync_command = auto_raw_sync_command(project) or ""
+
+    if not no_auto_raw_sync:
+        code = run_confluence_sync(project)
+        if code != 0:
+            write_failure_report(project, "confluence_sync", code)
+            return code
 
     if raw_sync_command:
         code = run_shell(raw_sync_command, project)

@@ -8,6 +8,7 @@ import json
 import os
 import random
 import re
+import subprocess
 import sys
 import time
 from collections import deque
@@ -78,6 +79,62 @@ def cookie_refresh_help(reason: str) -> str:
             "   or set COOKIE_HEADER='...' in the environment for non-interactive automation.",
             "",
             "Do not commit or paste this cookie into project files.",
+        ]
+    )
+
+
+def run_guazi_sso_skill(
+    skill_root: str,
+    subcommand: str,
+    *,
+    extra_args: list[str] | None = None,
+) -> str:
+    root = Path(skill_root).expanduser().resolve()
+    run_sh = root / "run.sh"
+    if not run_sh.is_file():
+        raise RuntimeError(f"guazi-sso-login run.sh not found: {run_sh}")
+    command = ["bash", str(run_sh), subcommand]
+    if extra_args:
+        command.extend(extra_args)
+    result = subprocess.run(
+        command,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        stdout = (result.stdout or "").strip()
+        detail = stderr or stdout or f"exit={result.returncode}"
+        raise RuntimeError(f"guazi-sso-login {subcommand} failed: {detail}")
+    output = (result.stdout or "").strip()
+    if not output:
+        raise RuntimeError(f"guazi-sso-login {subcommand} returned empty output.")
+    return output
+
+
+def load_json(path: Path, default: Any) -> Any:
+    if not path.is_file():
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return default
+
+
+def sso_env_setup_help() -> str:
+    return "\n".join(
+        [
+            "To enable non-interactive auto-login, set SSO credentials in environment variables:",
+            "  export GUAZI_SSO_USER_NAME='<userName>'",
+            "  export GUAZI_SSO_PASSWORD='<password>'",
+            "  export GUAZI_SSO_APPLY_PHONE='<applyPhone>'",
+            "Optional for Jira CHDSSO auto-refresh:",
+            "  export GUAZI_CHDSSO_TEST_PHONE='<phone>'",
+            "  export GUAZI_CHDSSO_TEST_CODE='<code>'",
+            "  # or PRE/ONLINE variants:",
+            "  export GUAZI_CHDSSO_PRE_PHONE='...'; export GUAZI_CHDSSO_PRE_CODE='...'",
+            "  export GUAZI_CHDSSO_ONLINE_PHONE='...'; export GUAZI_CHDSSO_ONLINE_CODE='...'",
         ]
     )
 
@@ -199,6 +256,16 @@ def parse_args() -> argparse.Namespace:
         help="Raw Cookie header. Falls back to COOKIE_HEADER env var.",
     )
     parser.add_argument(
+        "--sso-skill-root",
+        default=os.environ.get("GUAZI_SSO_SKILL_ROOT", ""),
+        help="Path to guazi-sso-login skill root (directory containing run.sh).",
+    )
+    parser.add_argument(
+        "--auto-cookie-from-sso",
+        action="store_true",
+        help="When cookie is missing, call guazi-sso-login wiki --validate --plain automatically.",
+    )
+    parser.add_argument(
         "--output-dir",
         default="confluence-export",
         help="Directory to write Markdown files into.",
@@ -252,6 +319,27 @@ def parse_args() -> argparse.Namespace:
         help="Optional Jira bearer token used to resolve wiki links from Jira issue pages.",
     )
     parser.add_argument(
+        "--jira-cookie",
+        default=os.environ.get("JIRA_COOKIE", ""),
+        help="Optional Jira Cookie header used to resolve wiki links from Jira issue pages.",
+    )
+    parser.add_argument(
+        "--jira-chdsso",
+        default=os.environ.get("JIRA_CHDSSO", ""),
+        help="Optional CHDSSO token used as `chdsso` header for Jira API requests.",
+    )
+    parser.add_argument(
+        "--auto-jira-chdsso-from-sso",
+        action="store_true",
+        help="When jira-chdsso is missing, call guazi-sso-login chdsso --validate --plain automatically.",
+    )
+    parser.add_argument(
+        "--jira-chdsso-env",
+        choices=("test", "pre", "online"),
+        default=os.environ.get("JIRA_CHDSSO_ENV", "test"),
+        help="Target env for auto-fetched Jira CHDSSO token. Default: test.",
+    )
+    parser.add_argument(
         "--rss-max-results",
         type=int,
         default=0,
@@ -288,6 +376,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Directory for export-state.json, progress/*.json, and manifest-*.json. "
             "When omitted and --output-dir ends with raw/, defaults to <project>/staging/wiki-export."
+        ),
+    )
+    parser.add_argument(
+        "--updated-since",
+        default="",
+        help=(
+            "Only persist pages whose updated_at/created_at is on or after this time "
+            "(ISO-8601, for example 2026-01-01 or 2026-01-01T00:00:00+08:00)."
         ),
     )
     return parser.parse_args()
@@ -398,6 +494,55 @@ def slugify(value: str) -> str:
     slug = re.sub(r"[^\w\- ]+", "", value, flags=re.UNICODE).strip().lower()
     slug = re.sub(r"[\s\-]+", "-", slug)
     return slug or "untitled"
+
+
+def resolve_cookie_header(
+    cookie_header: str,
+    *,
+    sso_skill_root: str,
+    auto_cookie_from_sso: bool,
+) -> str:
+    cookie = cookie_header.strip()
+    if cookie:
+        return cookie
+    if sso_skill_root.strip():
+        try:
+            return run_guazi_sso_skill(
+                sso_skill_root,
+                "wiki",
+                extra_args=["--validate", "--plain"],
+            )
+        except RuntimeError as exc:
+            message = str(exc)
+            if "E_MISSING_CREDENTIALS" in message:
+                raise RuntimeError(message + "\n\n" + sso_env_setup_help()) from exc
+            raise
+    return ""
+
+
+def resolve_jira_chdsso(
+    jira_chdsso: str,
+    *,
+    sso_skill_root: str,
+    auto_jira_chdsso_from_sso: bool,
+    jira_chdsso_env: str,
+) -> str:
+    token = jira_chdsso.strip()
+    if token:
+        return token
+    if sso_skill_root.strip():
+        try:
+            return run_guazi_sso_skill(
+                sso_skill_root,
+                "chdsso",
+                extra_args=["--env", jira_chdsso_env, "--validate", "--plain"],
+            )
+        except RuntimeError as exc:
+            message = str(exc)
+            if "E_MISSING_CREDENTIALS" in message:
+                raise RuntimeError(message + "\n\n" + sso_env_setup_help()) from exc
+            raise
+    return ""
 
 
 def build_session(cookie_header: str, timeout: int) -> requests.Session:
@@ -756,16 +901,20 @@ def fetch_jira_linked_page_ids(
     site_base: str,
 ) -> set[str]:
     jira_token = getattr(session, "jira_token", "").strip()
-    if not jira_token:
+    jira_chdsso = getattr(session, "jira_chdsso", "").strip()
+    jira_cookie = getattr(session, "jira_cookie", "").strip()
+    if not jira_token and not jira_chdsso and not jira_cookie:
         return set()
 
     issue_cache: dict[str, set[str]] = getattr(session, "jira_issue_cache", {})
     linked_page_ids: set[str] = set()
-    headers = {
-        "Authorization": f"Bearer {jira_token}",
-        "Accept": "application/json",
-        "User-Agent": USER_AGENT,
-    }
+    headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+    if jira_token:
+        headers["Authorization"] = f"Bearer {jira_token}"
+    if jira_chdsso:
+        headers["chdsso"] = jira_chdsso
+    if jira_cookie:
+        headers["Cookie"] = jira_cookie
 
     for issue_url in extract_jira_issue_urls(html, page_url):
         if issue_url in issue_cache:
@@ -1590,6 +1739,47 @@ def parse_iso_datetime(value: str) -> Optional[datetime]:
     return parsed.astimezone(timezone.utc)
 
 
+def parse_updated_since(value: str) -> Optional[datetime]:
+    text = (value or "").strip()
+    if not text:
+        return None
+    parsed = parse_iso_datetime(text)
+    if parsed is not None:
+        return parsed
+    try:
+        date_only = datetime.strptime(text, "%Y-%m-%d")
+    except ValueError as exc:
+        raise SystemExit(
+            f"Invalid --updated-since '{value}'. Use YYYY-MM-DD or ISO-8601 datetime."
+        ) from exc
+    return date_only.replace(tzinfo=timezone.utc)
+
+
+def page_timestamp(page: PageNode) -> Optional[datetime]:
+    updated = parse_iso_datetime(page.updated_at)
+    if updated is not None:
+        return updated
+    return parse_iso_datetime(page.created_at)
+
+
+def page_matches_updated_since(page: PageNode, cutoff: Optional[datetime]) -> bool:
+    if cutoff is None:
+        return True
+    timestamp = page_timestamp(page)
+    if timestamp is None:
+        return False
+    return timestamp >= cutoff
+
+
+def filter_pages_by_updated_since(
+    pages: dict[str, PageNode],
+    cutoff: Optional[datetime],
+) -> dict[str, PageNode]:
+    if cutoff is None:
+        return pages
+    return {page_id: page for page_id, page in pages.items() if page_matches_updated_since(page, cutoff)}
+
+
 def feed_entry_is_newer(entry: FeedEntry, page: PageNode) -> bool:
     if entry.version_number is not None and page.version_number:
         return entry.version_number > page.version_number
@@ -1757,6 +1947,7 @@ def update_root_from_rss(
     page_path_overrides: Optional[dict[str, str | Path]] = None,
     change_report_dir: Optional[Path] = None,
     write_report: bool = True,
+    updated_since: Optional[datetime] = None,
 ) -> UpdateResult:
     progress_file = resolve_existing_progress_file(metadata_dir, output_dir, root_page_id)
     state = load_progress_state(
@@ -1782,6 +1973,10 @@ def update_root_from_rss(
     change_records: list[dict[str, Any]] = []
 
     for entry in feed_entries:
+        entry_time = parse_iso_datetime(entry.updated_at) or parse_iso_datetime(entry.published_at)
+        if updated_since is not None and (entry_time is None or entry_time < updated_since):
+            ignored_page_ids.append(entry.page_id)
+            continue
         existing_page = pages.get(entry.page_id)
         if existing_page is None:
             if not include_new:
@@ -1817,6 +2012,9 @@ def update_root_from_rss(
             )
         else:
             new_page = fetch_page(session, site_base, entry.page_id, depth=depth)
+            if not page_matches_updated_since(new_page, updated_since):
+                ignored_page_ids.append(entry.page_id)
+                continue
             pages[entry.page_id] = new_page
         new_path = build_page_paths(
             {entry.page_id: new_page},
@@ -1934,6 +2132,88 @@ def save_export_state(metadata_dir: Path, root_states: list[dict[str, Any]]) -> 
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def project_root_for_output(output_dir: Path) -> Optional[Path]:
+    if output_dir.name == "raw":
+        return output_dir.parent
+    return None
+
+
+def relative_to_project(path: Path, project: Path) -> str:
+    try:
+        return path.resolve().relative_to(project.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def write_upstream_wiki_sources(
+    *,
+    output_dir: Path,
+    metadata_dir: Path,
+    root_states: list[dict[str, Any]],
+    updated_since: Optional[str] = None,
+) -> None:
+    project = project_root_for_output(output_dir)
+    if project is None:
+        return
+
+    upstream_dir = project / "upstream"
+    upstream_dir.mkdir(parents=True, exist_ok=True)
+    config_path = upstream_dir / "wiki-sources.json"
+    existing = load_json(config_path, {})
+    existing_sources = existing.get("sources") if isinstance(existing, dict) else None
+    by_page_id: dict[str, dict[str, Any]] = {}
+    if isinstance(existing_sources, list):
+        for item in existing_sources:
+            if isinstance(item, dict) and str(item.get("page_id") or "").strip():
+                by_page_id[str(item["page_id"])] = dict(item)
+    existing_page_ids = set(by_page_id)
+
+    for root_state in root_states:
+        page_id = str(root_state.get("page_id") or "").strip()
+        if not page_id:
+            continue
+        source = by_page_id.get(page_id, {})
+        relationship = source.get("relationship")
+        if not isinstance(relationship, dict):
+            relationship = {"role": "primary" if not existing_page_ids and not by_page_id else "additional"}
+        filters = source.get("filters")
+        filters = dict(filters) if isinstance(filters, dict) else {}
+        legacy_updated_since = str(source.pop("updated_since", "") or "").strip()
+        if legacy_updated_since and not str(filters.get("updated_since") or "").strip():
+            filters["updated_since"] = legacy_updated_since
+        source.update(
+            {
+                "type": "confluence",
+                "enabled": source.get("enabled", True),
+                "source_id": source.get("source_id") or f"cwiki-{page_id}",
+                "relationship": relationship,
+                "page_id": page_id,
+                "url": str(root_state.get("url") or ""),
+                "site_base": str(root_state.get("site_base") or ""),
+                "depth": int(root_state.get("depth_limit", 0) or 0),
+                "weekly_from_title": str(root_state.get("weekly_from_title") or ""),
+                "space_key": str(root_state.get("space_key") or ""),
+                "rss_url": str(root_state.get("rss_url") or ""),
+                "rss_url_is_custom": bool(root_state.get("rss_url_is_custom", False)),
+                "rss_max_results": int(root_state.get("rss_max_results", DEFAULT_RSS_MAX_RESULTS) or DEFAULT_RSS_MAX_RESULTS),
+                "output_dir": relative_to_project(output_dir, project),
+                "metadata_dir": relative_to_project(metadata_dir, project),
+            }
+        )
+        if updated_since:
+            filters["updated_since"] = updated_since
+        if filters:
+            source["filters"] = filters
+        by_page_id[page_id] = source
+
+    payload = {
+        "version": 1,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "sources": [by_page_id[key] for key in sorted(by_page_id)],
+    }
+    config_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def scan_existing_flat_export_pages(output_dir: Path, site_base: str = "") -> tuple[dict[str, PageNode], dict[str, str]]:
@@ -2103,6 +2383,7 @@ def root_states_from_saved_state(metadata_dir: Path, *, raw_output_dir: Optional
 
 def main() -> int:
     args = parse_args()
+    updated_since = parse_updated_since(args.updated_since)
     if not args.url and not args.update:
         raise SystemExit("--url is required unless --update is used with a saved output directory.")
     weekly_from_map = parse_page_value_args(args.weekly_from)
@@ -2122,6 +2403,12 @@ def main() -> int:
             rss_url_entries=args.rss_url,
             metadata_dir=metadata_dir,
         )
+        write_upstream_wiki_sources(
+            output_dir=output_dir,
+            metadata_dir=metadata_dir,
+            root_states=root_states,
+            updated_since=args.updated_since.strip(),
+        )
         total_pages = sum(int(root_state.get("page_count", 0) or 0) for root_state in root_states)
         print(
             f"Initialized update state for {total_pages} existing pages "
@@ -2130,9 +2417,27 @@ def main() -> int:
         )
         return 0
 
-    session = build_session(args.cookie, args.timeout)
+    try:
+        resolved_cookie = resolve_cookie_header(
+            args.cookie,
+            sso_skill_root=args.sso_skill_root,
+            auto_cookie_from_sso=bool(args.auto_cookie_from_sso),
+        )
+    except RuntimeError as exc:
+        raise SystemExit(cookie_refresh_help(str(exc))) from exc
+    session = build_session(resolved_cookie, args.timeout)
     session.request_interval = args.request_interval
     session.jira_token = args.jira_token.strip()
+    session.jira_cookie = args.jira_cookie.strip()
+    try:
+        session.jira_chdsso = resolve_jira_chdsso(
+            args.jira_chdsso,
+            sso_skill_root=args.sso_skill_root,
+            auto_jira_chdsso_from_sso=bool(args.auto_jira_chdsso_from_sso),
+            jira_chdsso_env=args.jira_chdsso_env,
+        )
+    except RuntimeError as exc:
+        raise SystemExit(f"Failed to resolve Jira CHDSSO: {exc}") from exc
 
     if args.update:
         if args.url:
@@ -2210,6 +2515,7 @@ def main() -> int:
                 ),
                 change_report_dir=change_report_dir,
                 write_report=False,
+                updated_since=updated_since,
             )
             total_scanned += result.scanned_count
             total_updated += len(result.updated_page_ids)
@@ -2258,6 +2564,12 @@ def main() -> int:
         )
         if not args.dry_run:
             save_export_state(metadata_dir, root_states)
+            write_upstream_wiki_sources(
+                output_dir=output_dir,
+                metadata_dir=metadata_dir,
+                root_states=root_states,
+                updated_since=args.updated_since.strip(),
+            )
         print(
             f"{'Detected' if args.dry_run else 'Updated'} {total_updated} pages from {total_scanned} RSS entries "
             f"across {len(root_states)} roots in {output_dir} (metadata: {metadata_dir})"
@@ -2276,6 +2588,7 @@ def main() -> int:
             max_pages=args.max_pages,
             depth_one_child_filter=build_depth_one_child_filter(root_spec.weekly_from_title),
         )
+        root_pages = filter_pages_by_updated_since(root_pages, updated_since)
         write_root_export(
             root_spec.page_id,
             root_pages,
@@ -2291,6 +2604,12 @@ def main() -> int:
         rss_url_entries=args.rss_url,
     )
     save_export_state(metadata_dir, root_states)
+    write_upstream_wiki_sources(
+        output_dir=output_dir,
+        metadata_dir=metadata_dir,
+        root_states=root_states,
+        updated_since=args.updated_since.strip(),
+    )
 
     total_pages = 0
     for root_spec in root_specs:

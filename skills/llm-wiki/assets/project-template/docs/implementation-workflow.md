@@ -2,7 +2,7 @@
 
 ## 0-1 Build
 
-1. Put source documents in `raw/`.
+1. Put static source documents in `raw/`, or declare live wiki/RSS sources in `upstream/wiki-sources.json`.
 2. Put business context in `BUSINESS_CONTEXT.md`.
 3. Optionally put source repositories under `raw-code/<codebase_id>/`.
 4. Run deterministic seed:
@@ -11,7 +11,9 @@
 uv run python tools/update_wiki.py
 ```
 
-If `config/rss-feeds.yaml` already contains enabled feed URLs, this update command should first refresh `raw/` through `tools/rss_sync.py` automatically.
+`upstream/wiki-sources.json` is the single source of truth for upstream wiki relationships. It stores the 0-1 root wiki, later added wiki sources, relationship role, depth, RSS URL, output/metadata paths, and filters such as `filters.updated_since`.
+
+If `upstream/wiki-sources.json` contains enabled Cwiki or RSS sources, this update command should first refresh `raw/` automatically. Legacy `config/rss-feeds.yaml` is only a migration input.
 
 If `raw-code/<codebase_id>/` contains clean git worktrees, the same update command should also refresh them by default before `scan_code.py` and `build_traceability.py`. If a codebase needs a non-default refresh flow, configure `kb.manifest.yaml` `overrides.raw_code_update_commands`.
 

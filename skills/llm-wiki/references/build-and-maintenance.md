@@ -84,16 +84,25 @@ uv run python tools/anchor_check.py
 
 ### `rss_sync.py`
 
-- 读取 `config/rss-feeds.yaml`（或 manifest 覆盖路径），按 feed/host **限速**抓取 RSS/Atom
+- 标准上游清单是 `upstream/wiki-sources.json`。0-1 根 wiki、后续 `add-wiki` 新增关系、RSS URL、层级和筛选条件都必须写入这个文件；不要把 URL 写死在 shell 脚本、agent 提示词或单独 RSS 配置里。
+- Cwiki 根页树用一个 source object 记录：`type: confluence`、`source_id`、`relationship.role`、`page_id`、`url`、`depth`、`rss_url`、`metadata_dir`、`output_dir`、`filters.updated_since`。
+- 普通 RSS/Atom 来源只在无法导出完整 wiki 正文树时使用：`{"type":"rss","source_id":"...","id":"...","url":"...","target_dir":"raw/rss/..."}`。
+- `tools/update_wiki.py` 会从 `upstream/wiki-sources.json` 生成本轮 RSS 同步配置并调用 `rss_sync.py`；旧项目只有 `config/rss-feeds.yaml` 时会自动迁移为 `type: rss` 来源。
+- `tools/discover_wiki_feeds.py --write-upstream` 会把验证后的 RSS/feed URL 和发现状态回写到同一个 `upstream/wiki-sources.json`，供 `add-wiki` 和 0-1 构建复用。
+- `rss_sync.py` 读取生成后的 RSS 配置，按 feed/host **限速**抓取 RSS/Atom
 - 将摘要写入 `staging/rss/latest.json` 与 `staging/rss/latest.md`；按需落地条目快照到各 feed 的 `target_dir`
 - **无启用 feed** 或仅有空配置时 **退出码 0**（noop），便于管线安全跳过
 - 当项目已经配置启用 feed 时，`llm-wiki update` / `tools/update_wiki.py` 应默认先运行这一阶段刷新 `raw/`，而不是要求用户手动补 `--raw-sync-command`
+- 新项目模板默认 `kb.manifest.yaml` 中 `phases.rss_sync: true`。只有显式设置为 `false` 才关闭该阶段；如果没有 enabled `type: rss` 来源，RSS 阶段自然 no-op。
 
 ### `tools/confluence_sync/`（Confluence 正文导出）
 
 - **`export_obsidian_wiki.py`**：入口脚本（Cookie、`--project-dir`、`--levels`、`--update`）。
 - **`export_confluence_tree.py`**：REST API 拉取页面树、本地化 wiki 域内图片、写 Markdown。
 - 页面证据落在 **`raw/<pageId>-<slug>/index.md`**（及 `assets/`）；导出状态与 manifest 默认在 **`staging/wiki-export/`**，与 `rss_sync.py` 的通用 RSS 快照不同用途——前者拉完整 wiki 页面内容，后者只做 feed 条目镜像。
+- 项目级上游配置落在 **`upstream/wiki-sources.json`**。0-1 从 Cwiki URL 导出成功后必须写入该文件；`tools/update_wiki.py` 会优先读取它并在确定性构建前自动运行 Cwiki `--update`。
+- 日期筛选统一写在 `filters.updated_since`，例如 `"filters": {"updated_since": "2025-10-01"}`。历史顶层 `updated_since` 只作为兼容输入。
+- 旧项目如果只有 `staging/wiki-export/export-state.json` 或历史 `raw/export-state.json`，`tools/update_wiki.py` 会自动迁移生成 `upstream/wiki-sources.json`，再按该配置刷新 Cwiki raw 页面。
 
 ### 代码 wiki 阶段
 

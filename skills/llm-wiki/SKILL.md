@@ -64,7 +64,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 该模板提供 `tools/build_wiki.py`、`tools/scan_code.py`、`tools/graphify_code.py`、`tools/build_traceability.py`、`tools/health.py`、`tools/build_graph.py`、`tools/anchor_check.py`、项目 `AGENTS.md`、`.gitignore` 和依赖说明。模板脚本只做确定性扫描、脚手架、校验和图谱构建；语义 summary、实体归一、能力判断和证据强度仍由 Codex / subagent 完成。
 
-**内置 Confluence/Cwiki 下载（无需单独安装 obsidian-wiki-export skill）**：模板中包含 `tools/confluence_sync/export_obsidian_wiki.py`。安装模板并 `uv sync` 后，用带 `pageId` 的空间页面 URL 可把 wiki 树落入 **`raw/<pageId>-<slug>/index.md`**（每页目录 + `assets/`），同步元数据（`export-state.json`、`progress/`、`manifest-*.json`）默认写在 **`staging/wiki-export/`**，不把状态文件放进 `raw/`。详见 `references/bootstrapping.md`「从 wiki URL 拉取 raw」。
+**内置 Confluence/Cwiki 下载（无需单独安装 obsidian-wiki-export skill）**：模板中包含 `tools/confluence_sync/export_obsidian_wiki.py`。安装模板并 `uv sync` 后，用带 `pageId` 的空间页面 URL 可把 wiki 树落入 **`raw/<pageId>-<slug>/index.md`**（每页目录 + `assets/`），同步元数据（`export-state.json`、`progress/`、`manifest-*.json`）默认写在 **`staging/wiki-export/`**，不把状态文件放进 `raw/`。项目的根 wiki、后续新增 wiki、RSS URL、层级和筛选条件统一落在 **`upstream/wiki-sources.json`**；日期筛选使用对应 source 的 `filters.updated_since`。详见 `references/bootstrapping.md`「从 wiki URL 拉取 raw」。
 
 ## 阅读顺序
 
@@ -125,7 +125,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，集合原 audit 能力，指出健康度、质量问题、缺口、优化建议和下一步命令。
 - `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新；也负责续跑、source/concept/entity 精修、代码 wiki 和 traceability 收口；结束前自动运行 health/graph/必要 anchor 检查。
 - `llm-wiki update-skill`：显式更新已安装的 llm-wiki skill bundle 本体；不要混入普通 KB 内容更新，除非用户明确要求。
-- `llm-wiki add-wiki`：把另一个文档/wiki 目录或 wiki URL 接入当前项目，作为新的 `raw/` 需求/业务证据来源；wiki URL 应尝试推导 RSS/feed，无法推导时要求用户手动提供，否则该来源 RSS 留空且不具备后续自动更新能力。
+- `llm-wiki add-wiki`：把另一个文档/wiki 目录或 wiki URL 接入当前项目，作为新的 `raw/` 需求/业务证据来源；wiki URL 应在同一个 `upstream/wiki-sources.json` source object 中记录关系、层级、RSS/feed URL 和筛选条件，无法推导 RSS/feed 时要求用户手动提供，否则该来源 RSS 留空且不具备后续自动更新能力。
 - `llm-wiki add-code`：把另一个项目代码库接入当前项目，作为新的 `raw-code/<codebase_id>/` 代码证据来源，并构建代码 wiki、capability 和 traceability。
 - `llm-wiki query`：按意图分流回答业务或代码问题；业务知识默认不展开大量代码实现证据。
 - `llm-wiki query-plus`：同时拉通业务/需求证据和代码实现证据，输出更详尽的联合答案。
@@ -427,7 +427,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 `用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围；如果项目已配置 raw 或接入了 raw-code codebase，就先默认刷新它们，再只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。`
 
-`用 $llm-wiki add-wiki 添加这个文档目录或 wiki URL 到当前项目。保持 raw 不可变，建立来源记录；如果是 wiki URL，尝试推导 RSS，失败则要求我手动提供 RSS。`
+`用 $llm-wiki add-wiki 添加这个文档目录或 wiki URL 到当前项目。保持 raw 不可变，把来源关系、层级、RSS 和筛选条件统一写入 upstream/wiki-sources.json；如果是 wiki URL，尝试推导 RSS，失败则要求我手动提供 RSS。`
 
 `用 $llm-wiki add-code 添加这个代码项目到当前项目。把它作为 raw-code 下独立 codebase，构建代码 wiki 和必要的能力链接。`
 
