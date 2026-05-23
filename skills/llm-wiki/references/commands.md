@@ -239,6 +239,13 @@ Recommendation rule:
 
 Purpose: update the installed llm-wiki skill bundle itself. Use only when the user explicitly asks to update the skill, skill bundle, installed skill, or global llm-wiki tooling.
 
+Update source:
+
+- The updater does not hard-code a hosted repository URL. It updates from the local llm-wiki-skill bundle checkout, using that checkout's configured git upstream.
+- In the canonical internal checkout, `main` tracks `origin/main`, where `origin` is the GitLab remote `https://git.guazi-corp.com/c2b-fe/llm-wiki.git`.
+- A GitHub remote may exist as a mirror, but do not switch to it unless the user explicitly asks or the local checkout is configured that way.
+- If the installed skill was copied and no source checkout can be inferred, ask for `--source /path/to/llm-wiki-skill`.
+
 Default behavior:
 
 1. Prefer the bundled updater when available:

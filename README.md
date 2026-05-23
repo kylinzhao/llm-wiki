@@ -91,6 +91,8 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/update_installed_skill.py" --source "$PWD" --client auto --backup
 ```
 
+更新来源由本地 bundle checkout 的 git upstream 决定；内部标准 checkout 的 `main` 跟踪公司 GitLab `origin/main`，`origin` 为 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git`。仓库里可能还有 GitHub mirror remote，但不作为默认更新源。
+
 如果 skill 是通过 `--link` 从本仓库安装的，也可以省略 `--source`，脚本会尝试从当前 skill 路径推断 bundle checkout 并执行 `git pull --ff-only` 后重新安装。
 
 安装完成后，在**空的 wiki 项目目录**中初始化脚手架（会创建 `raw/` 与工具脚本；随后请补全 `BUSINESS_CONTEXT.md` 与 `raw/` 证据）：
@@ -160,6 +162,7 @@ cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
 | `$llm-wiki-resume` | `llm-wiki resume` | 上次构建、精修、代码 wiki、追踪矩阵、图片、健康检查或图谱任务中断后，从状态文件续跑。 |
 | `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断 wiki 健康度、缺口、过期页面、下一步动作。 |
 | `$llm-wiki-update` | `llm-wiki update` | `raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 页面或源码变化后的影响范围更新；自动维护 `AGENTS.md` 查询路由规则；结束前自动检查，通过后提示是否 ship。 |
+| `$llm-wiki-update-skill` | `llm-wiki update-skill` | 显式更新本机安装的 llm-wiki skill bundle、模板脚本和命令协议；不更新当前 KB 内容。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 把另一个文档库、wiki 导出、Markdown 目录、Confluence 导出、文档目录或 wiki URL 加入 `raw/` 原始证据层。 |
 | `$llm-wiki-add-code` | `llm-wiki add-code` | 把另一个本地项目、仓库或源码目录加入 `raw-code/<codebase_id>/` 代码证据层，并构建对应代码 wiki 页面。 |
 | `$llm-wiki-refine` | `llm-wiki refine` | 精修来源页、概念页、实体页、分层页面、冲突页或 AI-native 文案，同时保留证据链和确定性构建块。 |
