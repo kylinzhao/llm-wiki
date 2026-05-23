@@ -95,6 +95,8 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/update_installed_sk
 
 如果 skill 是通过 `--link` 从本仓库安装的，也可以省略 `--source`，脚本会尝试从当前 skill 路径推断 bundle checkout 并执行 `git pull --ff-only` 后重新安装。
 
+安装脚本会清理已下线的 llm-wiki wrapper；使用 `--backup` 时旧目录会移动到目标 skills 目录的 `.backups/` 下。
+
 安装完成后，在**空的 wiki 项目目录**中初始化脚手架（会创建 `raw/` 与工具脚本；随后请补全 `BUSINESS_CONTEXT.md` 与 `raw/` 证据）：
 
 ```bash
@@ -147,7 +149,7 @@ cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
 
 - `用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，一次性跑完标准首轮。`
 - `用 $llm-wiki doctor 看看整个站点健康度、缺口和下一步建议。`
-- `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面，自动检查收口，通过后提示是否 ship。`
+- `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面，并自动检查收口。`
 - `用 $llm-wiki review-requirement 帮我 review 这个 Cwiki 需求，并输出评论稿。`
 - `用 $llm-wiki trace 补某个业务能力的需求到代码追踪矩阵。`
 
@@ -159,20 +161,14 @@ cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
 | --- | --- | --- |
 | `$llm-wiki-fast` | `llm-wiki fast` | 从 `raw/` 和 `BUSINESS_CONTEXT.md` 一口气完成标准首轮构建、精修、可选代码 wiki、health 和 graph 收口。 |
 | `$llm-wiki-init` | `llm-wiki init` | 分阶段初始化新 LLM Wiki 项目，适合需要边构建边汇报的 0-1 场景。 |
-| `$llm-wiki-resume` | `llm-wiki resume` | 上次构建、精修、代码 wiki、追踪矩阵、图片、健康检查或图谱任务中断后，从状态文件续跑。 |
-| `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断 wiki 健康度、缺口、过期页面、下一步动作。 |
-| `$llm-wiki-update` | `llm-wiki update` | `raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 页面或源码变化后的影响范围更新；自动维护 `AGENTS.md` 查询路由规则；结束前自动检查，通过后提示是否 ship。 |
+| `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断 wiki 健康度、质量问题、缺口、过期页面和下一步动作；集合原 audit 能力。 |
+| `$llm-wiki-update` | `llm-wiki update` | `raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 页面或源码变化后的影响范围更新；也负责续跑、精修、代码 wiki、traceability 和收口检查；自动维护 `AGENTS.md` 查询路由规则。 |
 | `$llm-wiki-update-skill` | `llm-wiki update-skill` | 显式更新本机安装的 llm-wiki skill bundle、模板脚本和命令协议；不更新当前 KB 内容。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 把另一个文档库、wiki 导出、Markdown 目录、Confluence 导出、文档目录或 wiki URL 加入 `raw/` 原始证据层。 |
-| `$llm-wiki-add-code` | `llm-wiki add-code` | 把另一个本地项目、仓库或源码目录加入 `raw-code/<codebase_id>/` 代码证据层，并构建对应代码 wiki 页面。 |
-| `$llm-wiki-refine` | `llm-wiki refine` | 精修来源页、概念页、实体页、分层页面、冲突页或 AI-native 文案，同时保留证据链和确定性构建块。 |
-| `$llm-wiki-build-code` | `llm-wiki build-code` | 扫描或刷新 `raw-code/*`，生成 `wiki/code/codebases`、`wiki/code/capabilities`、接口映射、graphify 记录和代码证据页。 |
-| `$llm-wiki-code-trace` | `llm-wiki code-trace` | 构建需求到代码追踪矩阵，映射前端页面、URI、Controller/Dubbo/Service 方法、配置、表、消息、任务和证据强度。 |
+| `$llm-wiki-add-code` | `llm-wiki add-code` | 把另一个本地项目、仓库或源码目录加入 `raw-code/<codebase_id>/` 代码证据层，并构建代码 wiki、能力页和必要 traceability。 |
 | `$llm-wiki-query` | `llm-wiki query` | 按意图回答业务、产品、需求、实现或代码问题；业务知识默认不展开大量代码证据。 |
 | `$llm-wiki-query-plus` | `llm-wiki query-plus` | 同时回答业务/需求口径与代码实现证据，适合需要更详尽联动分析的问题。 |
-| `$llm-wiki-audit` | `llm-wiki audit` | 以 findings-first 方式审查 wiki 可用性、语义一致性、来源页覆盖、实体冲突、证据强度、追踪矩阵、过期页面和图谱质量。 |
 | `$llm-wiki-image` | `llm-wiki image` | 文本层完成后补充高价值图片、截图、图表或附件证据；默认不批量分析低价值截图。 |
-| `$llm-wiki-ship` | `llm-wiki ship` | 发布收口：运行 health、graph、可选 anchor check，并在 remote 和意图明确时提交、推送或发布。 |
 | `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧的 `llm-wiki review-requirement` 调用；实际转向 `$requirement-review` 做 evidence-first 需求评审。 |
 
 ## 独立需求评审 Skill

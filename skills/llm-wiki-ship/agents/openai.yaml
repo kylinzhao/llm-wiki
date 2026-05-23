@@ -1,4 +1,0 @@
-interface:
-  display_name: "LLM Wiki Ship"
-  short_description: "验证并准备提交、推送或发布 wiki 成果"
-  default_prompt: "用 $llm-wiki-ship 收口并准备发布当前项目。"

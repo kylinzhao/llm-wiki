@@ -19,19 +19,14 @@
 
 - `$llm-wiki-fast`：一口气初始化新 LLM Wiki。
 - `$llm-wiki-init`：分阶段初始化。
-- `$llm-wiki-update`：增量更新 raw、raw-code 和受影响 wiki。
-- `$llm-wiki-resume`：从 checkpoint 和状态文件续跑。
-- `$llm-wiki-doctor`：只读诊断健康度和缺口。
+- `$llm-wiki-update`：增量更新 raw、raw-code 和受影响 wiki；也负责续跑、精修、代码 wiki 和 traceability 收口。
+- `$llm-wiki-doctor`：只读诊断健康度、缺口和质量问题，集合原 audit 能力。
 - `$llm-wiki-query`：按意图分流回答业务或代码问题；业务知识默认不展开大量代码证据。
 - `$llm-wiki-query-plus`：同时回答业务/需求口径与代码实现证据。
-- `$llm-wiki-build-code`：构建或刷新 `wiki/code/`。
-- `$llm-wiki-code-trace`：构建需求到代码追踪矩阵。
-- `$llm-wiki-audit`：问题优先审查 wiki 质量。
 - `$llm-wiki-image`：补充高价值图片证据。
-- `$llm-wiki-ship`：发布前 health、graph、raw 不提交检查。
 - `$llm-wiki-add-wiki`：添加其他文档/wiki 目录到 raw 证据层。
-- `$llm-wiki-add-code`：添加其他项目代码到 raw-code 证据层。
-- `$llm-wiki-refine`：精修 source、concept、entity 和分层页面。
+- `$llm-wiki-add-code`：添加其他项目代码到 raw-code 证据层，并构建代码 wiki、能力页和必要 traceability。
+- `$llm-wiki-update-skill`：更新本机安装的 llm-wiki skill bundle。
 
 命名约定：
 
@@ -41,11 +36,12 @@
 
 ## 命令命名调整
 
-为了提高可读性：
+为了降低用户心智负担：
 
-- `llm-wiki code` 改为主命令 `llm-wiki build-code`。
-- `llm-wiki trace` 改为主命令 `llm-wiki code-trace`。
-- 保留旧别名 `code` 和 `trace` 兼容已有提示词。
+- `resume`、`refine`、`build-code`、`code-trace` 合并进 `llm-wiki update`。
+- `audit` 合并进 `llm-wiki doctor`。
+- `ship` 不再作为二级入口暴露；提交、推送、发布走用户明确要求下的普通 git 流程。
+- 新代码库接入仍使用 `llm-wiki add-code`。
 
 ## update 收口规则
 

@@ -4,7 +4,7 @@
 
 这次对「直联风控&处罚-秒杀、DCN拉齐处罚方案」做 review 时，`llm-wiki` 已经证明了一个很有价值的使用方式：不是单独读一篇 PRD，而是把目标需求放回现有业务 wiki、历史需求、知识点、代码能力和实现边界里交叉审查。
 
-现有 `$llm-wiki query` 可以回答问题，`$llm-wiki audit` 可以审查 wiki 质量，但都不是专门为“新需求评审”设计的。需求 review 需要一套独立流程：接收原始需求 URL，确保它进入 `raw/` 证据层，拉通历史语境和代码证据，输出 findings-first 的审查意见，并能把评论发布回原始 wiki。
+现有 `$llm-wiki query` 可以回答问题，`$llm-wiki doctor` 可以审查 wiki 质量，但都不是专门为“新需求评审”设计的。需求 review 需要一套独立流程：接收原始需求 URL，确保它进入 `raw/` 证据层，拉通历史语境和代码证据，输出 findings-first 的审查意见，并能把评论发布回原始 wiki。
 
 ## 目标
 

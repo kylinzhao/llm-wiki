@@ -1,6 +1,6 @@
 ---
 name: llm-wiki-add-code
-description: LLM Wiki 添加代码库入口。用于把另一个本地项目、仓库或源码目录加入当前项目的 raw-code/ 代码证据层，并构建对应代码 wiki 页面。
+description: LLM Wiki 添加代码库入口。用于把另一个本地项目、仓库或源码目录加入当前项目的 raw-code/ 代码证据层，并构建代码 wiki、能力页和必要 traceability。
 ---
 
 # LLM Wiki Add Code
@@ -11,5 +11,6 @@ description: LLM Wiki 添加代码库入口。用于把另一个本地项目、�
 2. 读取同包内 `references/commands.md`。
 3. 将 `$llm-wiki-add-code` 后面的用户文本作为代码路径和 `llm-wiki add-code` 参数。
 4. 代码证据放在 `raw-code/<codebase_id>/`，不要混入 `raw/`。
-5. 覆盖已有代码库或复制密钥/构建产物前必须停下确认。
-6. 最后输出 `建议下一步`。
+5. 构建或刷新 `wiki/code/codebases`、`wiki/code/capabilities`、接口映射、graphify 记录和必要的 `wiki/code/traceability`。
+6. 覆盖已有代码库或复制密钥/构建产物前必须停下确认。
+7. 最后输出 `建议下一步`。
