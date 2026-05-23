@@ -39,7 +39,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `raw/`
 - `BUSINESS_CONTEXT.md`
 
-若仓库**只提交了构建后的 `wiki/`**，而 `raw/` / `raw-code/` 由单独流程同步：先读 `staging/health/latest.json` 的 `evidence_gaps` / `recommended_actions`。当工具报 `missing_raw_evidence` 或 `missing_raw_code_evidence` 时，**主动提示用户**拉取原始证据后再执行 `update` / `build-code` / `code-trace`，不要假装可以完整重建。只读 `query` / `doctor` 仍可按 `references/commands.md` 的 Evidence preflight 规则进行。
+若仓库**只提交了构建后的 `wiki/`**，而 `raw/` / `raw-code/` 由单独流程同步：先读 `staging/health/latest.json` 的 `evidence_gaps` / `recommended_actions`。当工具报 `missing_raw_evidence` 或 `missing_raw_code_evidence` 时，**主动提示用户**拉取原始证据后再执行 `update`；新代码库接入才使用 `add-code`，不要假装可以完整重建。只读 `query` / `doctor` 仍可按 `references/commands.md` 的 Evidence preflight 规则进行。
 
 如果项目根目录存在 `raw-code/`：
 
@@ -122,22 +122,15 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 - `llm-wiki fast`：新项目一口气完成标准首轮，从输入检查到 health / graph 收口；适合用户明确希望一次性跑完。
 - `llm-wiki init`：0-1 初始化，可分阶段汇报。
-- `llm-wiki resume`：读取状态文件，从未完成阶段续跑。
-- `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，指出健康度、缺口、优化建议和下一步命令。
-- `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新；结束前自动运行 health/graph/必要 anchor 检查，检查通过后提示是否进入 ship。
+- `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，集合原 audit 能力，指出健康度、质量问题、缺口、优化建议和下一步命令。
+- `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新；也负责续跑、source/concept/entity 精修、代码 wiki 和 traceability 收口；结束前自动运行 health/graph/必要 anchor 检查。
 - `llm-wiki update-skill`：显式更新已安装的 llm-wiki skill bundle 本体；不要混入普通 KB 内容更新，除非用户明确要求。
 - `llm-wiki add-wiki`：把另一个文档/wiki 目录或 wiki URL 接入当前项目，作为新的 `raw/` 需求/业务证据来源；wiki URL 应尝试推导 RSS/feed，无法推导时要求用户手动提供，否则该来源 RSS 留空且不具备后续自动更新能力。
-- `llm-wiki add-code`：把另一个项目代码库接入当前项目，作为新的 `raw-code/<codebase_id>/` 代码证据来源。
-- `llm-wiki refine`：source / concepts / entities / layered pages 精修。
-- `llm-wiki gplus`：综合层二次校准、查询验收、质量审查。
-- `llm-wiki build-code`：构建或刷新 `wiki/code/codebases` 和 `wiki/code/capabilities`。兼容旧别名：`llm-wiki code`。
-- `llm-wiki code-trace`：构建或更新 `wiki/code/traceability` 需求到代码追踪矩阵。兼容旧别名：`llm-wiki trace`。
+- `llm-wiki add-code`：把另一个项目代码库接入当前项目，作为新的 `raw-code/<codebase_id>/` 代码证据来源，并构建代码 wiki、capability 和 traceability。
 - `llm-wiki query`：按意图分流回答业务或代码问题；业务知识默认不展开大量代码实现证据。
 - `llm-wiki query-plus`：同时拉通业务/需求证据和代码实现证据，输出更详尽的联合答案。
 - `llm-wiki review-requirement`：对新 PRD、Cwiki 页面或需求文档做证据型需求评审，纳入 raw 原文、图片、zip 原型、前端评审和代码能力证据。
-- `llm-wiki audit`：findings-first 质量审查。
 - `llm-wiki image`：高价值图片证据补充。
-- `llm-wiki ship`：health / graph / 可选 anchor check 后提交发布。
 
 ### 1. 阶段模型
 
@@ -188,7 +181,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 文本层完成后可以进入阶段 H，但只处理高价值图片证据。图片 note 必须结合图片在 `raw/**/index.md` 中的前后文，不做裸图 OCR。低价值页面走查、重复 UI 截图、装饰图默认跳过。
 
-**重要：文本优先不等于静默跳过图片。** 当项目的 `raw/` 中存在图片资产、截图、图表或附件图片时，`init` / `fast` / `gplus` / `refine` / `doctor` 在收尾或诊断里必须明确说明：
+**重要：文本优先不等于静默跳过图片。** 当项目的 `raw/` 中存在图片资产、截图、图表或附件图片时，`init` / `fast` / `update` / `doctor` 在收尾或诊断里必须明确说明：
 
 - 是否发现图片资产，以及大致数量或范围。
 - 是否已有 `staging/image-notes/` 或 `staging/refinement-status.md` 中的 `image_evidence_status`。
@@ -289,10 +282,10 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 - 基于当前项目状态，而不是泛泛建议。
 - 给出 1-3 个优先级排序的下一步动作。
-- 如果适合继续执行，直接推荐对应二级命令，例如 `llm-wiki update`、`llm-wiki code-trace`、`llm-wiki doctor`、`llm-wiki ship`。
-- 如果同一轮变更同时留下 source 精修和代码追踪缺口，优先推荐继续 `llm-wiki update` 一次性收口；只有 traceability-only 时才单独推荐 `llm-wiki code-trace`。
-- 对 `llm-wiki update` 来说，低风险 pending/stale/source/code-trace/health/graph 收口应在当前命令里继续完成；不要把“再跑一次 update”当成默认建议，除非有明确 blocker 或用户要求只做诊断/确定性阶段。
-- 对 `llm-wiki update` 来说，最终建议必须根据检查结果分流：检查失败时建议修复或继续 update；检查通过且无阻塞时，提醒用户可以选择 `llm-wiki ship` 做发布/提交/推送前收口，但不要自动 ship。
+- 如果适合继续执行，直接推荐对应二级命令，例如 `llm-wiki update`、`llm-wiki doctor`、`llm-wiki image`。
+- 如果同一轮变更留下 source 精修、代码 wiki 或代码追踪缺口，优先推荐继续 `llm-wiki update` 一次性收口；新代码库接入才推荐 `llm-wiki add-code`。
+- 对 `llm-wiki update` 来说，低风险 pending/stale/source/traceability/health/graph 收口应在当前命令里继续完成；不要把“再跑一次 update”当成默认建议，除非有明确 blocker 或用户要求只做诊断/确定性阶段。
+- 对 `llm-wiki update` 来说，最终建议必须根据检查结果分流：检查失败时建议修复或继续 update；检查通过且无阻塞时，说明当前 KB 已可使用，并提示未来触发 update 的条件。
 - 如果当前状态已经健康，说明“可以暂停”的条件和后续触发 `update` 的时机。
 - 如果文本、health、graph 都已通过，但 `raw/` 存在图片资产且没有 image notes / image evidence 完成标记，说明“文本层可暂停；如需补强核心页面证据，下一步运行 `llm-wiki image` 做高价值图片筛选与多模态精修”。
 
@@ -432,17 +425,15 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 `用 $llm-wiki doctor 诊断整个 LLM Wiki 站点状态，告诉我哪里健康、哪里缺口最大、下一步建议怎么做。`
 
-`用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围；如果项目已配置 raw 或接入了 raw-code codebase，就先默认刷新它们，再只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph；检查通过后提醒我是否要继续 llm-wiki ship。`
+`用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围；如果项目已配置 raw 或接入了 raw-code codebase，就先默认刷新它们，再只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。`
 
 `用 $llm-wiki add-wiki 添加这个文档目录或 wiki URL 到当前项目。保持 raw 不可变，建立来源记录；如果是 wiki URL，尝试推导 RSS，失败则要求我手动提供 RSS。`
 
 `用 $llm-wiki add-code 添加这个代码项目到当前项目。把它作为 raw-code 下独立 codebase，构建代码 wiki 和必要的能力链接。`
 
-`用 $llm-wiki 继续维护这个项目。先读 BUSINESS_CONTEXT.md 和当前状态，从未完成阶段续跑，不要重建已完成内容。`
+`用 $llm-wiki update 继续维护这个项目。先读 BUSINESS_CONTEXT.md 和当前状态，从未完成阶段续跑，不要重建已完成内容。`
 
-`用 $llm-wiki build-code 构建需求+代码联合 wiki。raw 是需求证据，raw-code 是代码证据，按现有协议并发推进并输出验收结果。`
-
-`用 $llm-wiki code-trace 构建需求到代码追踪矩阵，说明需求点、前端、后端、Service、表、消息和证据强度。`
+`用 $llm-wiki update 刷新需求+代码联合 wiki 和需求到代码追踪矩阵，说明需求点、前端、后端、Service、表、消息和证据强度。`
 
 `用 $llm-wiki 查询这个问题。先读 BUSINESS_CONTEXT.md，说明查询类型、检索路径、结论、支撑页面和未决点。`
 
@@ -458,7 +449,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 ### 质量审查
 
-`Use $llm-wiki to audit this wiki project. Check entry usability, semantic consistency, retrieval usefulness, layered-page quality, and concept/entity conflicts. Put findings first with file paths and a final usability verdict.`
+`Use $llm-wiki doctor to review this wiki project. Check entry usability, semantic consistency, retrieval usefulness, layered-page quality, and concept/entity conflicts. Put findings first with file paths and a final usability verdict.`
 
 ### 需求 + 代码联合 wiki
 

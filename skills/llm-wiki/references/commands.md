@@ -8,22 +8,15 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | --- | --- | --- |
 | `llm-wiki fast` | New project, user wants the standard path completed in one run | Full first-pass wiki, refinement, validation, status |
 | `llm-wiki init` | New project, user wants phased initialization | Skeleton, deterministic build, first-pass plan |
-| `llm-wiki resume` | Existing project has partial work | Resume from latest status / checkpoint |
-| `llm-wiki doctor` | User wants a site-wide status, diagnosis, and recommendations | Health portrait and prioritized next steps |
-| `llm-wiki update` | `raw/`, `BUSINESS_CONTEXT.md`, `raw-code/`, wiki, configured RSS/upstream wiki sources, or source code changed; default-refresh configured upstream raw inputs and connected raw-code git worktrees first | Impact-scoped wiki update, validation, and ship-readiness prompt |
+| `llm-wiki doctor` | User wants site status, diagnosis, quality review, or prioritized recommendations | Findings plus health portrait and next steps |
+| `llm-wiki update` | Existing KB needs resume, refinement, traceability refresh, source/code updates, or validation after changes | Impact-scoped update, validation, and maintenance report |
 | `llm-wiki update-skill` | User explicitly asks to update the llm-wiki skill bundle itself, not the current KB content | Pull/reinstall the installed skill bundle, then optionally refresh project tooling |
 | `llm-wiki add-wiki` | Add another document/wiki directory or wiki URL as business or requirement evidence | Imported raw evidence, source provenance, RSS/update status, and affected wiki updates |
-| `llm-wiki add-code` | Add another project codebase as implementation evidence | New raw-code codebase and code wiki updates |
-| `llm-wiki refine` | Improve source, concepts, entities, or layered pages | AI-native text refinement |
-| `llm-wiki gplus` | Text layer exists and needs query readiness | Query acceptance, quality audit, health, graph |
-| `llm-wiki build-code` | Build or refresh code wiki. `llm-wiki code` is a backward-compatible alias | codebases, capabilities, mappings |
-| `llm-wiki code-trace` | Need audit-grade requirement-to-code tracking. `llm-wiki trace` is a backward-compatible alias | traceability matrix |
+| `llm-wiki add-code` | Add or refresh implementation evidence, code wiki, capabilities, and traceability | raw-code codebase plus code wiki and mappings |
 | `llm-wiki query` | Answer a business or implementation question; business-only questions should not include detailed code evidence by default | Evidence-grounded answer with intent-based evidence scope |
 | `llm-wiki query-plus` | Answer with business/requirement evidence and code implementation evidence together | Detailed business+code evidence analysis |
 | `llm-wiki review-requirement` | Review a new PRD, Cwiki page, Markdown requirement, or prototype package against wiki, raw, image, zip, frontend, and code evidence | Findings-first requirement review and Cwiki comment draft |
-| `llm-wiki audit` | Review wiki quality | Findings-first report |
 | `llm-wiki image` | Add high-value image evidence after text completion | image notes and linked facts |
-| `llm-wiki ship` | Publish or submit wiki work | validation, commit, push |
 
 ## Evidence preflight (partial clone / git without raw)
 
@@ -36,7 +29,7 @@ Many teams **commit the built `wiki/`** but **do not commit** `raw/` or `raw-cod
 
 **Behavior**
 
-| Situation | `query` / `doctor` / `audit` | `update` / `fast` / `build_wiki` | `scan_code` / `graphify` / `build_traceability` (when code evidence expected) |
+| Situation | `query` / `doctor` | `update` / `fast` / `build_wiki` | `scan_code` / `graphify` / `build_traceability` (when code evidence expected) |
 | --- | --- | --- | --- |
 | Built wiki present, `raw/` missing or empty while expectation holds | Continue; cite `staging/health/latest.json` `evidence_gaps` and `recommended_actions` | **Blocked** (`update_wiki` / `build_wiki` exit 2 with message) | If code expectation holds but `raw-code/` missing → **Blocked** |
 | No source pages yet, empty `raw/` | N/A | Allowed (greenfield) | Skipped if no `raw-code/` and no code expectation |
@@ -76,7 +69,7 @@ Run order:
 5. Complete first-pass source summary and AI-native refinement.
 6. Build layered pages, concepts, entities, truth, conflicts, evidence, proposals, reference, operations.
 7. If `raw-code/` exists, refine codebase indexes, capability pages, and traceability evidence strengths.
-8. If implementation audit is in scope, create traceability pages for highest-value capabilities.
+8. If implementation review is in scope, create traceability pages for highest-value capabilities.
 9. Run G+ readiness checks when feasible: query acceptance and quality audit.
 10. Inventory raw image assets and image-note status. Do not batch-analyze images by default, but if images exist and no image evidence pass is complete, record phase H as pending and recommend `llm-wiki image`.
 11. Run health, graph, and anchor check.
@@ -87,7 +80,7 @@ Default behavior:
 - Proceed automatically through low-risk steps.
 - Use subagents for large independent batches when available.
 - Do not process low-value images.
-- Do not submit or push unless the user asked for shipping or remote is already explicit.
+- Do not submit or push unless the user explicitly asks for git publishing and the remote is clear.
 
 Stop only when:
 
@@ -109,7 +102,7 @@ Final report:
 
 ## `llm-wiki update`
 
-Purpose: respond to changes without rebuilding the whole project.
+Purpose: respond to changes, resume incomplete work, refine affected pages, and refresh code evidence without rebuilding the whole project.
 
 If the user asks to update the **llm-wiki skill itself** rather than KB content, route to `llm-wiki update-skill` semantics below. Do not mix global skill installation changes into an ordinary KB update unless the user explicitly asked for it.
 
@@ -119,6 +112,8 @@ Common triggers:
 - Updated `BUSINESS_CONTEXT.md`.
 - New or edited `raw-code/*` files.
 - Code wiki pages became stale.
+- Prior build/refinement/traceability work was interrupted and should resume from status.
+- Source, concept, entity, layered page, capability, or traceability pages need targeted refinement.
 - A user manually edited wiki pages and wants dependent pages refreshed.
 - Health, graph, or traceability anchor checks started failing.
 
@@ -188,12 +183,12 @@ Default update order:
 11. Rebuild graph after AI-native edits when wikilinks changed.
 12. Run optional traceability anchor check when traceability pages changed.
 13. Update `staging/refinement-status.md`.
-14. Treat validation as part of update completion, not as a separate ship-only step:
+14. Treat validation as part of update completion:
    - run health before final reporting when `tools/health.py` exists or the project has an equivalent health check
    - rebuild graph before final reporting when `tools/build_graph.py` exists or wikilinks changed
    - run `tools/anchor_check.py` when traceability pages or code anchors changed
    - if validation fails and the fix is low-risk and in scope, fix it before final reporting
-   - if validation fails and cannot be fixed safely, report the blocker and do not recommend ship
+   - if validation fails and cannot be fixed safely, report the blocker and recommend the smallest safe continuation
 
 Project command convention:
 
@@ -208,7 +203,7 @@ Do not:
 - Rewrite `raw/`.
 - Rewrite unrelated refined pages.
 - Upgrade `partial`, `inferred`, `external`, or `missing` evidence to `strong` without direct proof.
-- End by asking the user to run `llm-wiki update` again for low-risk pending/stale/source/code-trace work that can be completed now.
+- End by asking the user to run `llm-wiki update` again for low-risk pending/stale/source/traceability work that can be completed now.
 
 Final report:
 
@@ -221,17 +216,16 @@ Final report:
 - pages updated
 - pages intentionally left untouched
 - validation results
-- ship readiness: ready / not ready / blocked, with the reason
+- readiness: healthy / usable-with-gaps / blocked, with the reason
 - remaining stale or missing evidence
 
 Recommendation rule:
 
 - Do not recommend `llm-wiki update` as the next step when the current `llm-wiki update` can safely finish the remaining source refinement, capability, traceability, health, or graph work. Finish it in the current command.
-- If affected source pages remain stale and affected code traceability also needs refresh but a hard blocker prevents completion, report the blocker and checkpoint, then recommend one combined continuation: `llm-wiki update` to resume the integrated source refinement plus code-trace refresh.
-- Recommend `llm-wiki code-trace` separately only when the source wiki is already current and the remaining work is traceability-only.
-- Recommend source-only refinement separately only when no affected code evidence or traceability pages are in scope.
-- When validation passes and there are no blockers, end `建议下一步` by asking whether the user wants to run `llm-wiki ship` for publish/commit/push readiness. Do not run ship automatically unless the user explicitly asked to ship.
-- When validation fails, do not suggest ship; recommend the smallest safe continuation or fix instead.
+- If affected source pages remain stale and affected code traceability also needs refresh but a hard blocker prevents completion, report the blocker and checkpoint, then recommend one combined continuation: `llm-wiki update` to resume the integrated source refinement plus traceability refresh.
+- Traceability-only and source-only refinements still stay under `llm-wiki update`; do not route to separate commands.
+- When validation passes and there are no blockers, say the KB is ready to use or ready for the owner's normal git/release process.
+- When validation fails, recommend the smallest safe continuation or fix.
 
 ## `llm-wiki update-skill`
 
@@ -356,7 +350,7 @@ Final report:
 
 ## `llm-wiki doctor`
 
-Purpose: read-only diagnosis of the whole LLM Wiki site. Use it when the user asks “现在状态如何”, “还缺什么”, “下一步干什么”, “这个 wiki 健康吗”, or wants a project-level operating recommendation.
+Purpose: read-only diagnosis and quality review of the whole LLM Wiki site. Use it when the user asks “现在状态如何”, “还缺什么”, “下一步干什么”, “这个 wiki 健康吗”, “帮我审查一下这个 wiki”, or wants a project-level operating recommendation.
 
 Read:
 
@@ -379,6 +373,8 @@ If any file is missing, report it as a signal. Do not create or modify files.
 Optional read-only checks:
 
 - Count `raw/*/index.md` and `wiki/sources/*.md`.
+- Review entry usability, semantic consistency, source coverage, evidence strength, traceability quality, stale pages, health, and graph quality.
+- Surface P0/P1/P2 findings directly in `主要问题`; do not require a separate `audit` command.
 - Count image assets under `raw/**/assets/` and image notes under `staging/image-notes/`.
 - When image assets exist without a completed image evidence pass, list prioritized image refinement candidate pages, using signals such as flow diagrams, state screenshots, money/account/risk/permission terms, launch tables, test conclusions, data tables, tracking, and pages already central to overview/concepts/query acceptance.
 - Count `wiki/code/codebases/*`, `wiki/code/capabilities/*.md`, and `wiki/code/traceability/*.md`.
@@ -427,13 +423,13 @@ Verdict levels:
 Recommendation rules:
 
 - If required inputs or entry docs are missing, recommend `llm-wiki init` or `llm-wiki update`.
-- If source coverage or refinement is incomplete, recommend `llm-wiki refine`.
-- If G+ artifacts are missing, recommend `llm-wiki gplus`.
+- If source coverage or refinement is incomplete, recommend `llm-wiki update`.
+- If query acceptance or quality audit artifacts are missing, recommend `llm-wiki update` to refresh them.
 - If text/G+ is healthy but `raw/` contains image assets and no image evidence pass is recorded, recommend `llm-wiki image` for selective high-value multimodal refinement. Treat this as a non-blocking evidence gap unless core pages depend on diagrams, table screenshots, state screenshots, money/account/risk/permission flows, launch tables, or test conclusions.
 - When recommending `llm-wiki image`, include the top candidate pages from health output or a read-only scan, not only the total image count.
-- If code wiki exists but traceability is thin, recommend `llm-wiki code-trace`.
+- If code wiki exists but traceability is thin, recommend `llm-wiki update` for existing code evidence or `llm-wiki add-code` when a new codebase must be connected first.
 - If files changed recently or stale markers exist, recommend `llm-wiki update`.
-- If everything is healthy and remote publishing is desired, recommend `llm-wiki ship`.
+- If everything is healthy, say it is reasonable to pause and note what future change should trigger `llm-wiki update`.
 
 ## `llm-wiki review-requirement`
 
@@ -583,50 +579,6 @@ Final report:
 - include a Cwiki-safe comment draft when a source Cwiki URL exists
 - end with `建议下一步`
 
-## `llm-wiki code-trace`
-
-Purpose: build or update audit-grade requirement-to-code matrices.
-
-Backward-compatible alias: `llm-wiki trace`.
-
-Output:
-
-```text
-wiki/code/traceability/
-  index.md
-  <capability>.md
-```
-
-Matrix columns:
-
-```text
-需求点 | 需求来源 | 前端页面/组件 | 前端 URI | Controller/Dubbo | Service/Method | 配置 | 表/字段 | 消息/任务 | 证据强度 | 缺口
-```
-
-Evidence strength:
-
-- `strong`: requirement and implementation evidence align through exact URI, Controller/Dubbo, Service, table, or message evidence.
-- `partial`: module or service family is located, but method, field, branch, message body, or runtime condition is incomplete.
-- `inferred`: based on naming, neighboring evidence, or graph relation only.
-- `external`: key behavior belongs to an external system not present under current `raw-code/`.
-- `missing`: requirement evidence exists, implementation evidence has not been found.
-
-Required sections:
-
-- `## 覆盖范围`
-- `## 追踪矩阵`
-- `## 关键代码锚点`
-- `## 外部系统边界`
-- `## 缺失证据与下一步`
-
-Rules:
-
-- Start from business capability and requirement points, not from file names.
-- Link back to source pages and capability pages.
-- Use file paths and line numbers for high-value code anchors when verified.
-- Keep `external` and `missing` explicit; they are useful findings, not failures.
-- Run health and graph after adding wikilinks.
-
 ## Other Commands
 
 ### `llm-wiki init`
@@ -635,33 +587,9 @@ Use the same early stages as `fast`, but stop after the initialized baseline and
 
 When the user supplies a **Confluence/Cwiki URL** (`pageId=`) as the evidence source: install the bundled template (includes **`tools/confluence_sync/`**), run **`uv sync`**, then run **`uv run python tools/confluence_sync/export_obsidian_wiki.py`** with `--project-dir` so pages land under **`raw/<pageId>-<slug>/`**. Sync metadata defaults to **`staging/wiki-export/`**, not inside `raw/`. See `references/bootstrapping.md` section「从 wiki URL 拉取 raw」.
 
-### `llm-wiki resume`
-
-Read status and checkpoints first. Continue from the last incomplete phase. Do not restart completed phases.
-
 ### `llm-wiki doctor`
 
-Read-only project status diagnosis. Never edit files. End with prioritized next commands.
-
-### `llm-wiki refine`
-
-Limit work to the requested scope: source pages, concepts, entities, layered pages, or conflicts. Preserve evidence trails.
-When text refinement completes, check whether `raw/` contains image assets and whether `staging/image-notes/` or `image_evidence_status=complete` exists. If images remain unprocessed, the final `建议下一步` must explicitly mention phase H / `llm-wiki image` for high-value multimodal evidence.
-
-### `llm-wiki gplus`
-
-Produce query acceptance and quality audit. Fix low-risk structural issues automatically. Do not decide business conflicts without evidence.
-At the end of G+, record whether image evidence is not applicable, pending, complete, or skipped by user. If pending, recommend `llm-wiki image` instead of presenting G+ as the whole-project finish line.
-
-### `llm-wiki build-code`
-
-Build codebase indexes, endpoint maps, capability pages, graphify records, and evidence gap reports.
-
-Backward-compatible alias: `llm-wiki code`.
-
-### `llm-wiki code-trace`
-
-Build requirement-to-code traceability matrices. Backward-compatible alias: `llm-wiki trace`.
+Read-only project status diagnosis and quality review. Never edit files. End with prioritized next commands.
 
 ### `llm-wiki add-wiki`
 
@@ -669,7 +597,7 @@ Add another document/wiki directory into the project evidence layer. Preserve pr
 
 ### `llm-wiki add-code`
 
-Add another project codebase as `raw-code/<codebase_id>/`. Build codebase pages, capability links, optional graphify output, and traceability when relevant.
+Add another project codebase as `raw-code/<codebase_id>/`. Build codebase pages, endpoint maps, capability links, optional graphify output, and traceability when relevant.
 
 ### `llm-wiki query`
 
@@ -700,17 +628,9 @@ Read `references/query-logic.md` before answering.
 
 Review a target PRD or Cwiki page against raw/wiki/code evidence. Include mandatory image multimodal analysis, zip prototype inspection, frontend PRD review via `FE_REQ_REVIEW_SKILL.md`, findings-first issues, acceptance checklist, metric guards, unresolved questions, and a Cwiki-safe comment draft when applicable.
 
-### `llm-wiki audit`
-
-Findings first. Check entry usability, semantic consistency, source coverage, evidence strength, traceability, health, graph, and stale pages.
-
 ### `llm-wiki image`
 
 Only after text completion or explicit user request. Follow `image-evidence.md`.
 Start by inventorying candidate pages and images, then process only high-value evidence by default.
 For whole-project, multi-page, or large image scopes, use subagents by default when available. Split by source page or related page bundles, keep each worker's write scope under a unique `staging/image-notes/<source-page-id>/` directory, and let the main agent own final wiki integration, health/graph, and `staging/refinement-status.md`.
 Update `staging/refinement-status.md` with `image_evidence_status` and a concise checkpoint.
-
-### `llm-wiki ship`
-
-Run validation first. Ensure `raw/` is not staged or tracked. Commit and push only when remote is explicit.

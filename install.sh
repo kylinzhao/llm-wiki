@@ -9,6 +9,14 @@ CLIENT="auto"
 DEST_OVERRIDE=""
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_DIR="$ROOT_DIR/skills"
+DEPRECATED_SKILLS=(
+  "llm-wiki-audit"
+  "llm-wiki-build-code"
+  "llm-wiki-code-trace"
+  "llm-wiki-refine"
+  "llm-wiki-resume"
+  "llm-wiki-ship"
+)
 
 usage() {
   cat <<'EOF' >&2
@@ -211,7 +219,21 @@ check_conflicts_for_dest() {
 
 run_dry_for_dest() {
   local dest_dir="$1"
+  local deprecated
+  local target
   echo "dry-run: destination $dest_dir"
+  for deprecated in "${DEPRECATED_SKILLS[@]}"; do
+    target="$dest_dir/$deprecated"
+    if [[ -e "$target" ]]; then
+      if [[ "$FORCE" -eq 1 ]]; then
+        echo "dry-run: would remove deprecated $deprecated"
+      elif [[ "$BACKUP" -eq 1 ]]; then
+        echo "dry-run: would back up deprecated $deprecated"
+      else
+        echo "dry-run: would leave deprecated $deprecated (use --backup or --force to prune)"
+      fi
+    fi
+  done
   for skill_dir in "$SRC_DIR"/*; do
     [[ -d "$skill_dir" ]] || continue
     name="$(basename "$skill_dir")"
@@ -230,9 +252,31 @@ run_dry_for_dest() {
   done
 }
 
+prune_deprecated_for_dest() {
+  local dest_dir="$1"
+  local deprecated
+  local target
+  local backup_target
+
+  for deprecated in "${DEPRECATED_SKILLS[@]}"; do
+    target="$dest_dir/$deprecated"
+    [[ -e "$target" ]] || continue
+    if [[ "$FORCE" -eq 1 ]]; then
+      rm -rf "$target"
+      echo "removed deprecated $deprecated"
+    elif [[ "$BACKUP" -eq 1 ]]; then
+      backup_target="$(backup_target_for "$deprecated" "$dest_dir")"
+      mkdir -p "$(dirname "$backup_target")"
+      mv "$target" "$backup_target"
+      echo "backed up deprecated $deprecated to $backup_target"
+    fi
+  done
+}
+
 install_for_dest() {
   local dest_dir="$1"
   mkdir -p "$dest_dir"
+  prune_deprecated_for_dest "$dest_dir"
 
   for skill_dir in "$SRC_DIR"/*; do
     [[ -d "$skill_dir" ]] || continue

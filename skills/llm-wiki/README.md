@@ -24,10 +24,10 @@
 
 - `用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，一次性跑完标准首轮。`
 - `用 $llm-wiki doctor 看看整个站点健康度、缺口和下一步建议。`
-- `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面；如果项目已配置 RSS/feed 或接入了 raw-code codebase，就先默认刷新它们；结束前自动检查收口，通过后提示是否 ship。`
+- `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面；如果项目已配置 RSS/feed 或接入了 raw-code codebase，就先默认刷新它们；结束前自动检查收口。`
 - `用 $llm-wiki update-skill 更新本机安装的 llm-wiki skill bundle。`
 - `用 $llm-wiki review-requirement 帮我 review 这个 Cwiki 需求，并输出评论稿。`
-- `用 $llm-wiki trace 补某个业务能力的需求到代码追踪矩阵。`
+- `用 $llm-wiki update 补某个业务能力的需求到代码追踪矩阵。`
 
 ### 可发现的二级 skill
 
@@ -37,20 +37,14 @@
 | --- | --- | --- |
 | `$llm-wiki-fast` | `llm-wiki fast` | 新项目标准首轮，一口气完成构建、精修、验证和收口。 |
 | `$llm-wiki-init` | `llm-wiki init` | 新项目分阶段初始化。 |
-| `$llm-wiki-resume` | `llm-wiki resume` | 从 `staging/refinement-status.md`、health、graph 或 checkpoint 续跑。 |
-| `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断项目健康度、缺口和下一步。 |
-| `$llm-wiki-update` | `llm-wiki update` | 输入、wiki 或源码变化后的影响范围更新；会自动维护 `AGENTS.md` 查询路由规则；已配置 RSS/feed 或 raw-code codebase 时默认先刷新对应证据，结束前自动检查，通过后提示是否 ship。 |
+| `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断项目健康度、质量问题、缺口和下一步；集合原 audit 能力。 |
+| `$llm-wiki-update` | `llm-wiki update` | 输入、wiki 或源码变化后的影响范围更新；也负责续跑、精修、代码 wiki、traceability 和收口检查；会自动维护 `AGENTS.md` 查询路由规则。 |
 | `$llm-wiki-update-skill` | `llm-wiki update-skill` | 显式更新本机安装的 llm-wiki skill bundle；不更新当前 KB 内容。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 接入新的文档/wiki 来源到 `raw/`。 |
-| `$llm-wiki-add-code` | `llm-wiki add-code` | 接入新的源码库到 `raw-code/`。 |
-| `$llm-wiki-refine` | `llm-wiki refine` | 精修 source、concept、entity、layered page 或冲突页。 |
-| `$llm-wiki-build-code` | `llm-wiki build-code` | 构建或刷新 `wiki/code/`。 |
-| `$llm-wiki-code-trace` | `llm-wiki code-trace` | 构建需求到代码追踪矩阵。 |
+| `$llm-wiki-add-code` | `llm-wiki add-code` | 接入新的源码库到 `raw-code/`，并构建代码 wiki、能力页和必要 traceability。 |
 | `$llm-wiki-query` | `llm-wiki query` | 按意图回答业务或实现问题；业务知识默认不展开大量代码证据。 |
 | `$llm-wiki-query-plus` | `llm-wiki query-plus` | 同时回答业务/需求口径与代码实现证据，适合需要更详尽联动分析的问题。 |
-| `$llm-wiki-audit` | `llm-wiki audit` | findings-first 审查 wiki 质量。 |
 | `$llm-wiki-image` | `llm-wiki image` | 补充高价值图片证据。 |
-| `$llm-wiki-ship` | `llm-wiki ship` | 发布前验证、graph/health 收口和可选提交。 |
 | `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧调用；实际转向 `$requirement-review`。 |
 
 这些 wrapper 只负责路由。完整规则仍以 `SKILL.md` 和 [commands.md](./references/commands.md) 为准。
@@ -407,7 +401,7 @@ uv run python tools/graphify_code.py --all
 
 - 先用文本 wiki 回答
 - 不默认启动图片分析
-- 但会盘点 `raw/` 图片资产；如果文本层/G+ 已完成而图片证据未处理，会在 `doctor`、`refine`、`gplus` 或初始化收尾里明确提示阶段 H
+- 但会盘点 `raw/` 图片资产；如果文本层或查询验收已完成而图片证据未处理，会在 `doctor`、`update` 或初始化收尾里明确提示阶段 H
 
 文本层完成后，可以进入阶段 H：选择性高价值图片证据补充。图片识别必须结合 `raw/**/index.md` 中图片前后文，输出到 `staging/image-notes/`，低价值页面走查和重复 UI 截图默认跳过。详见 [image-evidence.md](./references/image-evidence.md)。
 
@@ -428,7 +422,7 @@ uv run python tools/graphify_code.py --all
 ```
 
 ```text
-用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围；如果项目已配置 raw 或接入了 raw-code codebase，就先默认刷新它们，再只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph；检查通过后提醒我是否要继续 llm-wiki ship。
+用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围；如果项目已配置 raw 或接入了 raw-code codebase，就先默认刷新它们，再只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。
 ```
 
 ```text
@@ -462,7 +456,7 @@ Use $llm-wiki against this project. Read BUSINESS_CONTEXT.md first, state the qu
 ### 质量审查
 
 ```text
-Use $llm-wiki to audit this wiki project. Check entry usability, semantic consistency, retrieval usefulness, layered-page quality, and concept/entity conflicts. Put findings first with file paths and a final usability verdict.
+Use $llm-wiki doctor to review this wiki project. Check entry usability, semantic consistency, retrieval usefulness, layered-page quality, and concept/entity conflicts. Put findings first with file paths and a final usability verdict.
 ```
 
 ### 需求 + 代码联合 wiki
