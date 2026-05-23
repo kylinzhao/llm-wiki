@@ -429,6 +429,72 @@ def is_refreshable_seed_source_page(path: Path) -> bool:
     return "Deterministic seed page." in text
 
 
+def source_refinement_state(path: Path) -> str:
+    if not path.is_file():
+        return "missing"
+    text = path.read_text(encoding="utf-8", errors="replace")
+    metadata = source_page_metadata(path)
+    state = metadata.get("ai_refinement_state") if isinstance(metadata, dict) else None
+    if isinstance(state, str) and state.strip():
+        return state.strip()
+    if "Pending AI-native summary" in text or "Deterministic seed page." in text:
+        return "pending"
+    return "applied"
+
+
+def build_refinement_plan(
+    project: Path,
+    sources: list[dict[str, object]],
+    stale_sources: list[dict[str, object]],
+    orphan_source_pages: list[str],
+) -> dict[str, object]:
+    stale_pages = {str(item.get("page") or "") for item in stale_sources}
+    required_source_pages: list[dict[str, object]] = []
+    allowed_write_paths: list[str] = []
+    for source in sources:
+        wiki_path = f"wiki/sources/{source['slug']}.md"
+        page = project / wiki_path
+        state = source_refinement_state(page)
+        is_stale = wiki_path in stale_pages
+        if state in {"pending", "stale", "missing"} or is_stale:
+            reason = "stale_raw_page" if is_stale else "new_raw_page"
+            required_source_pages.append(
+                {
+                    "raw_path": source["raw_path"],
+                    "wiki_path": wiki_path,
+                    "reason": reason,
+                    "required": True,
+                    "current_state": "stale" if is_stale else state,
+                }
+            )
+            allowed_write_paths.append(wiki_path)
+
+    candidate_dependents = [
+        {"path": "wiki/overview.md", "reason": "layered_summary_candidate"},
+        {"path": "wiki/concepts/index.md", "reason": "linked_concept_candidate"},
+        {"path": "wiki/entities/index.md", "reason": "entity_name_candidate"},
+    ]
+    if orphan_source_pages:
+        candidate_dependents.append({"path": "wiki/sources/index.md", "reason": "source_index_candidate"})
+    for item in candidate_dependents:
+        if (project / item["path"]).exists():
+            allowed_write_paths.append(item["path"])
+
+    allowed_write_paths.append("staging/refinement-status.md")
+    semantic_update_required = bool(required_source_pages)
+    trigger = "raw_changed" if semantic_update_required else "none"
+    return {
+        "version": 1,
+        "semantic_update_required": semantic_update_required,
+        "trigger": trigger,
+        "required_source_pages": required_source_pages,
+        "candidate_dependents": candidate_dependents if semantic_update_required else [],
+        "allowed_write_paths": sorted(dict.fromkeys(allowed_write_paths)),
+        "forbidden_write_paths": ["raw/**", "raw-code/**"],
+        "verification": ["tools/check_refinement.py", "tools/health.py --json", "tools/build_graph.py"],
+    }
+
+
 def update_status(
     project: Path,
     sources: list[dict[str, object]],
@@ -463,6 +529,8 @@ def update_status(
         )
         + "\n",
     )
+    plan = build_refinement_plan(project, sources, stale_sources, orphan_source_pages)
+    write(project / "staging" / "refinement-plan.json", json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
 
 
 def main_for_project(project: Path) -> int:
@@ -490,7 +558,7 @@ def main_for_project(project: Path) -> int:
         if (
             not created
             and not hash_matches(existing_sha, str(source["sha256"]))
-            and not (existing_sha is None and is_operational_metadata_source(source))
+            and not is_operational_metadata_source(source)
         ):
             stale_sources.append(
                 {

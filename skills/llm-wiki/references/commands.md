@@ -152,6 +152,7 @@ Default update order:
    - when RSS sync is enabled in the project, prefer an update command path that includes the raw refresh automatically, for example by auto-running `tools/rss_sync.py` inside `tools/update_wiki.py` or by passing `--raw-sync-command`
    - when `raw-code/` codebases are connected as git worktrees, prefer an update command path that includes the code refresh automatically, for example by auto-running `git pull --ff-only` per clean codebase or a manifest-defined override inside `tools/update_wiki.py`
 4. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
+   - Read `staging/refinement-plan.json` and `references/refinement-contract.md`; use them as the write-scope and acceptance contract for semantic refinement.
 5. Refresh affected pages:
    - changed `raw/` pages update matching source pages, layered pages, concepts, entities, query readiness, health, and graph
    - changed `raw-code/` files update affected codebase pages, endpoint maps, capability pages, traceability rows, and graphify status when needed
@@ -175,6 +176,7 @@ Default update order:
 11. Run optional traceability anchor check when traceability pages changed.
 12. Update `staging/refinement-status.md`.
 13. Treat validation as part of update completion, not as a separate ship-only step:
+   - run `tools/check_refinement.py` before health when `staging/refinement-plan.json` says semantic refinement is required
    - run health before final reporting when `tools/health.py` exists or the project has an equivalent health check
    - rebuild graph before final reporting when `tools/build_graph.py` exists or wikilinks changed
    - run `tools/anchor_check.py` when traceability pages or code anchors changed

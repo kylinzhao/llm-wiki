@@ -107,6 +107,48 @@ Operational sync metadata.
             drift = build_wiki.read_json(tmp_path / "staging" / "source-drift.json")
             self.assertEqual(drift["stale_sources"], [])
 
+    def test_operational_rss_metadata_hash_changes_do_not_mark_stale(self):
+        import tempfile
+
+        build_wiki = load_build_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            raw_page = tmp_path / "raw" / "rss" / "605842244" / "605842244_latest.json"
+            raw_page.parent.mkdir(parents=True)
+            raw_page.write_text('{"items": 1}\n', encoding="utf-8")
+
+            source_dir = tmp_path / "wiki" / "sources"
+            source_dir.mkdir(parents=True)
+            source_page = source_dir / "rss-605842244-605842244_latest.md"
+            source_page.write_text(
+                """# 605842244 latest
+
+## Source Metadata
+```json
+{
+  "page_kind": "source",
+  "schema_version": "source-v2",
+  "source_slug": "rss-605842244-605842244_latest",
+  "raw_rel": "raw/rss/605842244/605842244_latest.json",
+  "raw_hash": "oldhash1234567890",
+  "ai_refinement_state": "applied"
+}
+```
+
+## Summary
+
+Operational RSS metadata.
+""",
+                encoding="utf-8",
+            )
+
+            build_wiki.main_for_project(tmp_path)
+
+            drift = build_wiki.read_json(tmp_path / "staging" / "source-drift.json")
+            plan = build_wiki.read_json(tmp_path / "staging" / "refinement-plan.json")
+            self.assertEqual(drift["stale_sources"], [])
+            self.assertFalse(plan["semantic_update_required"])
+
 
 if __name__ == "__main__":
     unittest.main()
