@@ -25,6 +25,7 @@
 - `用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，一次性跑完标准首轮。`
 - `用 $llm-wiki doctor 看看整个站点健康度、缺口和下一步建议。`
 - `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面；如果项目已配置 RSS/feed 或接入了 raw-code codebase，就先默认刷新它们；结束前自动检查收口，通过后提示是否 ship。`
+- `用 $llm-wiki update-skill 更新本机安装的 llm-wiki skill bundle。`
 - `用 $llm-wiki review-requirement 帮我 review 这个 Cwiki 需求，并输出评论稿。`
 - `用 $llm-wiki trace 补某个业务能力的需求到代码追踪矩阵。`
 
@@ -38,7 +39,7 @@
 | `$llm-wiki-init` | `llm-wiki init` | 新项目分阶段初始化。 |
 | `$llm-wiki-resume` | `llm-wiki resume` | 从 `staging/refinement-status.md`、health、graph 或 checkpoint 续跑。 |
 | `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断项目健康度、缺口和下一步。 |
-| `$llm-wiki-update` | `llm-wiki update` | 输入、wiki 或源码变化后的影响范围更新；已配置 RSS/feed 或 raw-code codebase 时默认先刷新对应证据，结束前自动检查，通过后提示是否 ship。 |
+| `$llm-wiki-update` | `llm-wiki update` | 输入、wiki 或源码变化后的影响范围更新；会自动维护 `AGENTS.md` 查询路由规则；已配置 RSS/feed 或 raw-code codebase 时默认先刷新对应证据，结束前自动检查，通过后提示是否 ship。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 接入新的文档/wiki 来源到 `raw/`。 |
 | `$llm-wiki-add-code` | `llm-wiki add-code` | 接入新的源码库到 `raw-code/`。 |
 | `$llm-wiki-refine` | `llm-wiki refine` | 精修 source、concept、entity、layered page 或冲突页。 |
@@ -313,13 +314,25 @@ uv run python tools/build_graph.py
 uv run python tools/anchor_check.py
 ```
 
-已构建的老 KB 如果只需要补齐 agent 查询路由规则，不要使用 `--force` 覆盖模板文件；在 KB 根目录运行：
+已构建的老 KB 只要通过新版 `$llm-wiki update` 进入维护流程，agent 应先刷新 engine-owned 项目工具并合并 agent 查询路由规则；此后每次新版 `tools/update_wiki.py` 都会自动检查。若只想补 `AGENTS.md`，不要使用 `--force` 覆盖模板文件；在 KB 根目录运行：
 
 ```text
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD" --agent-rules-only
 ```
 
 该命令会把当前模板中的 `## Query Routing` 合并进 `AGENTS.md`，保留原有规则，且重复执行不会重复插入。
+
+更新本机安装的 skill bundle 时，使用显式 skill 维护命令，避免和普通 KB 内容更新混在一起：
+
+```text
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --client auto --backup
+```
+
+如果当前安装目录是复制出来的、脚本无法推断源码 checkout，则传入 bundle 仓库路径：
+
+```text
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --source /path/to/llm-wiki-skill --client auto --backup
+```
 
 这些步骤分别负责：
 

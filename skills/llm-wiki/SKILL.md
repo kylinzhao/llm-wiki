@@ -125,6 +125,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `llm-wiki resume`：读取状态文件，从未完成阶段续跑。
 - `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，指出健康度、缺口、优化建议和下一步命令。
 - `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新；结束前自动运行 health/graph/必要 anchor 检查，检查通过后提示是否进入 ship。
+- `llm-wiki update-skill`：显式更新已安装的 llm-wiki skill bundle 本体；不要混入普通 KB 内容更新，除非用户明确要求。
 - `llm-wiki add-wiki`：把另一个文档/wiki 目录或 wiki URL 接入当前项目，作为新的 `raw/` 需求/业务证据来源；wiki URL 应尝试推导 RSS/feed，无法推导时要求用户手动提供，否则该来源 RSS 留空且不具备后续自动更新能力。
 - `llm-wiki add-code`：把另一个项目代码库接入当前项目，作为新的 `raw-code/<codebase_id>/` 代码证据来源。
 - `llm-wiki refine`：source / concepts / entities / layered pages 精修。

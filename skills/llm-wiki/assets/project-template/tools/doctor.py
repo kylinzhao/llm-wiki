@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from agent_rules import inspect_agent_rules
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -80,6 +82,7 @@ def finding(severity: str, title: str, detail: str, *, blocking: bool = False) -
 
 def build_report(project: Path) -> dict[str, Any]:
     health = run_health(project)
+    agent_rules = inspect_agent_rules(project)
     findings: list[dict[str, Any]] = []
 
     if health.get("ok") is not True:
@@ -149,6 +152,16 @@ def build_report(project: Path) -> dict[str, Any]:
             )
         )
 
+    if not agent_rules.get("ok"):
+        findings.append(
+            finding(
+                "P1",
+                "agent_query_routing_missing",
+                "AGENTS.md is missing the LLM Wiki Query Routing rules. Run llm-wiki update to repair it automatically.",
+                blocking=False,
+            )
+        )
+
     p0_count = sum(1 for item in findings if item.get("severity") == "P0" or item.get("blocking") is True)
     summary = (
         "No blocking LLM Wiki issues found."
@@ -169,6 +182,7 @@ def build_report(project: Path) -> dict[str, Any]:
             "wiki_pages": health.get("wiki_pages"),
             "source_pages": health.get("source_pages"),
         },
+        "agent_rules": agent_rules,
     }
 
 

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Sequence
 
 import yaml
+from agent_rules import refresh_agent_rules
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
 
@@ -306,9 +307,17 @@ def main() -> int:
         action="store_true",
         help="Skip both manifest-configured and default raw-code auto-update commands.",
     )
+    parser.add_argument(
+        "--no-agent-rules-refresh",
+        action="store_true",
+        help="Skip automatic AGENTS.md query-routing rule maintenance.",
+    )
     args = parser.parse_args()
 
     project = Path(args.project).resolve()
+    if not args.no_agent_rules_refresh:
+        print(f"agent_rules={refresh_agent_rules(project)}")
+
     err = raw_evidence_preflight_failed(project)
     if err:
         print(err, file=sys.stderr)
