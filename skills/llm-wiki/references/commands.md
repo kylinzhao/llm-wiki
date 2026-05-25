@@ -70,7 +70,7 @@ Run order:
 6. Build layered pages, concepts, entities, truth, conflicts, evidence, proposals, reference, operations.
 7. If `raw-code/` exists, refine codebase indexes, capability pages, and traceability evidence strengths.
 8. If implementation review is in scope, create traceability pages for highest-value capabilities.
-9. Run G+ readiness checks when feasible: query acceptance and quality audit.
+9. Run G+ readiness checks when feasible: query acceptance and quality audit. For 0-1 builds this is part of the default path, not an optional follow-up: complete concepts/entities/truth/conflicts/evidence/proposals/reference/operations calibration unless a hard blocker appears or the user explicitly asks to stop after the baseline.
 10. Inventory raw image assets and image-note status. Do not batch-analyze images by default, but if images exist and no image evidence pass is complete, record phase H as pending and recommend `llm-wiki image`.
 11. Run health, graph, and anchor check.
 12. Update `staging/refinement-status.md`.
@@ -116,6 +116,7 @@ Common triggers:
 - Source, concept, entity, layered page, capability, or traceability pages need targeted refinement.
 - A user manually edited wiki pages and wants dependent pages refreshed.
 - Health, graph, or traceability anchor checks started failing.
+- G+ semantic underfit even when health is green: concepts/entities are too coarse for the source scale, source-to-concept coverage is low, manual concept/entity placeholders remain, G+ layers are index-only/low-density, or query acceptance / quality audit artifacts are stale.
 
 Read:
 
@@ -134,6 +135,7 @@ Impact analysis:
 - If `raw-code/` changed: update affected codebase pages, endpoint maps, capability pages, traceability rows, graphify status if needed.
 - If `wiki/code/traceability/` changed: verify evidence strength, source anchors, code anchors, and linked capability pages.
 - If docs changed only: update retrieval/build guidance and run link checks.
+- If G+ semantic underfit is reported by `tools/update_wiki.py` or `tools/doctor.py`: do not rebuild `raw/` solely for that reason; run a Codex-native G+ semantic expansion pass over existing source pages.
 
 Default update order:
 
@@ -164,11 +166,13 @@ Default update order:
    - when `raw-code/` codebases are connected as git worktrees, prefer an update command path that includes the code refresh automatically, for example by auto-running `git pull --ff-only` per clean codebase or a manifest-defined override inside `tools/update_wiki.py`
 5. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
    - Read `staging/refinement-plan.json` and `references/refinement-contract.md`; use them as the write-scope and acceptance contract for semantic refinement.
+   - Read `staging/update/latest.json` `gplus_quality`; if `status=needs_attention`, treat it as an update trigger even when `semantic_update_required=false`.
 6. Refresh affected pages:
    - changed `raw/` pages update matching source pages, layered pages, concepts, entities, query readiness, health, and graph
    - changed `raw-code/` files update affected codebase pages, endpoint maps, capability pages, traceability rows, and graphify status when needed
    - changed `BUSINESS_CONTEXT.md` updates canonical aliases, concepts, entities, conflicts, truth, and retrieval guidance
    - if health or the update report shows remaining `pending` or `stale` source pages, resolve them in the same command when they are in scope or the backlog is small enough to finish safely
+   - G+ semantic underfit updates concepts/entities, source Business Links, truth/conflicts/evidence/proposals/operations/reference, query acceptance, and G+ quality audit without rewriting unrelated source summaries
 7. When the same update affects both requirement/source evidence and implementation/code evidence, treat source refinement and code traceability refresh as one integrated update pass:
    - refine stale affected source pages first
    - immediately update affected `wiki/code/capabilities/` and `wiki/code/traceability/` rows against the refined requirement evidence
@@ -179,6 +183,7 @@ Default update order:
    - affected concept/entity/layer page refresh
    - affected codebase and capability page refresh
    - affected code traceability rows
+   - G+ semantic expansion when deterministic diagnostics report underfit and the needed facts are already present in source pages
    - broken wikilink fixes
    - health and graph rebuild
 9. Preserve manual edits and refined prose unless directly stale.
@@ -220,6 +225,7 @@ Final report:
 - pages updated
 - pages intentionally left untouched
 - validation results
+- G+ semantic quality status: ok / needs_attention, including concept count, concept coverage, manual placeholders, and any P1/P2 underfit findings
 - readiness: healthy / usable-with-gaps / blocked, with the reason
 - remaining stale or missing evidence
 
@@ -228,8 +234,9 @@ Recommendation rule:
 - Do not recommend `llm-wiki update` as the next step when the current `llm-wiki update` can safely finish the remaining source refinement, capability, traceability, health, or graph work. Finish it in the current command.
 - If affected source pages remain stale and affected code traceability also needs refresh but a hard blocker prevents completion, report the blocker and checkpoint, then recommend one combined continuation: `llm-wiki update` to resume the integrated source refinement plus traceability refresh.
 - Traceability-only and source-only refinements still stay under `llm-wiki update`; do not route to separate commands.
+- When validation fails, recommend the smallest safe continuation or fix, phrased as a command the user can run (`llm-wiki update`, `llm-wiki doctor`, or `llm-wiki image`) rather than a script chain.
 - When validation passes and there are no blockers, say the KB is ready to use or ready for the owner's normal git/release process.
-- When validation fails, recommend the smallest safe continuation or fix.
+- Do not call a KB fully ready when `gplus_quality.status=needs_attention`; describe it as structurally healthy but semantically underfit, and either complete the G+ expansion in the current update or report the smallest blocker that prevents it.
 
 ## `llm-wiki update-skill`
 
@@ -379,6 +386,7 @@ Optional read-only checks:
 
 - Count `raw/*/index.md` and `wiki/sources/*.md`.
 - Review entry usability, semantic consistency, source coverage, evidence strength, traceability quality, stale pages, health, and graph quality.
+- Check G+ semantic thickness with the same heuristic used by update: source count vs non-index concept/entity pages, source-to-concept/entity coverage, manual concept/entity placeholders, index-only or low-density G+ layers, stale query acceptance / quality audit counts.
 - Surface P0/P1/P2 findings directly in `主要问题`; do not require a separate `audit` command.
 - Count image assets under `raw/**/assets/` and image notes under `staging/image-notes/`.
 - When image assets exist without a completed image evidence pass, list prioritized image refinement candidate pages, using signals such as flow diagrams, state screenshots, money/account/risk/permission terms, launch tables, test conclusions, data tables, tracking, and pages already central to overview/concepts/query acceptance.
@@ -430,6 +438,7 @@ Recommendation rules:
 - If required inputs or entry docs are missing, recommend `llm-wiki init` or `llm-wiki update`.
 - If source coverage or refinement is incomplete, recommend `llm-wiki update`.
 - If query acceptance or quality audit artifacts are missing, recommend `llm-wiki update` to refresh them.
+- If G+ semantic underfit is P1/P2, recommend `llm-wiki update` for Codex-native G+ semantic expansion. This is separate from health: a wiki can be structurally healthy and still need G+ expansion.
 - If text/G+ is healthy but `raw/` contains image assets and no image evidence pass is recorded, recommend `llm-wiki image` for selective high-value multimodal refinement. Treat this as a non-blocking evidence gap unless core pages depend on diagrams, table screenshots, state screenshots, money/account/risk/permission flows, launch tables, or test conclusions.
 - When recommending `llm-wiki image`, include the top candidate pages from health output or a read-only scan, not only the total image count.
 - If code wiki exists but traceability is thin, recommend `llm-wiki update` for existing code evidence or `llm-wiki add-code` when a new codebase must be connected first.

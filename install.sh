@@ -7,6 +7,7 @@ FORCE=0
 BACKUP=0
 CLIENT="auto"
 DEST_OVERRIDE=""
+BACKUP_DIR_OVERRIDE=""
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_DIR="$ROOT_DIR/skills"
 DEPRECATED_SKILLS=(
@@ -23,6 +24,7 @@ usage() {
 Usage: install.sh [--copy|--link] [--dry-run] [--force|--backup]
                   [--client auto|codex|claude|cursor|all]
                   [--dest <skills_dir>]
+                  [--backup-dir <dir>]
 
 Defaults:
   --client auto
@@ -32,6 +34,9 @@ Client default destinations:
   codex  -> ${CODEX_HOME:-$HOME/.codex}/skills
   claude -> ${CLAUDE_HOME:-$HOME/.claude}/skills
   cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
+
+Backup default destination (when --backup):
+  ${LLM_WIKI_SKILL_BACKUP_DIR:-$HOME/.llm-wiki-skill-backups}
 EOF
 }
 
@@ -141,6 +146,11 @@ while (($#)); do
       [[ $# -gt 0 ]] || { echo "Missing value for --dest" >&2; exit 2; }
       DEST_OVERRIDE="$1"
       ;;
+    --backup-dir)
+      shift
+      [[ $# -gt 0 ]] || { echo "Missing value for --backup-dir" >&2; exit 2; }
+      BACKUP_DIR_OVERRIDE="$1"
+      ;;
     -h|--help)
       usage
       exit 0
@@ -183,18 +193,29 @@ install_skill() {
 
 backup_target_for() {
   local name="$1"
-  local dest_dir="$2"
+  local backup_dir="$2"
   local timestamp
   local candidate
   local counter=2
 
   timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  candidate="$dest_dir/.backups/$name-$timestamp"
+  candidate="$backup_dir/$name-$timestamp"
   while [[ -e "$candidate" ]]; do
-    candidate="$dest_dir/.backups/$name-$timestamp-$counter"
+    candidate="$backup_dir/$name-$timestamp-$counter"
     counter=$((counter + 1))
   done
   echo "$candidate"
+}
+
+backup_dir_for_dest() {
+  local dest_dir="$1"
+  if [[ -n "$BACKUP_DIR_OVERRIDE" ]]; then
+    printf '%s\n' "$BACKUP_DIR_OVERRIDE"
+  elif [[ -n "${LLM_WIKI_SKILL_BACKUP_DIR:-}" ]]; then
+    printf '%s\n' "$LLM_WIKI_SKILL_BACKUP_DIR"
+  else
+    printf '%s\n' "$HOME/.llm-wiki-skill-backups"
+  fi
 }
 
 ACTION_VERB="copy"
@@ -254,10 +275,12 @@ run_dry_for_dest() {
 
 prune_deprecated_for_dest() {
   local dest_dir="$1"
+  local backup_dir
   local deprecated
   local target
   local backup_target
 
+  backup_dir="$(backup_dir_for_dest "$dest_dir")"
   for deprecated in "${DEPRECATED_SKILLS[@]}"; do
     target="$dest_dir/$deprecated"
     [[ -e "$target" ]] || continue
@@ -265,7 +288,7 @@ prune_deprecated_for_dest() {
       rm -rf "$target"
       echo "removed deprecated $deprecated"
     elif [[ "$BACKUP" -eq 1 ]]; then
-      backup_target="$(backup_target_for "$deprecated" "$dest_dir")"
+      backup_target="$(backup_target_for "$deprecated" "$backup_dir")"
       mkdir -p "$(dirname "$backup_target")"
       mv "$target" "$backup_target"
       echo "backed up deprecated $deprecated to $backup_target"
@@ -275,7 +298,9 @@ prune_deprecated_for_dest() {
 
 install_for_dest() {
   local dest_dir="$1"
+  local backup_dir
   mkdir -p "$dest_dir"
+  backup_dir="$(backup_dir_for_dest "$dest_dir")"
   prune_deprecated_for_dest "$dest_dir"
 
   for skill_dir in "$SRC_DIR"/*; do
@@ -288,7 +313,7 @@ install_for_dest() {
         install_skill "$skill_dir" "$name" "$dest_dir"
         echo "replaced $name"
       elif [[ "$BACKUP" -eq 1 ]]; then
-        backup_target="$(backup_target_for "$name" "$dest_dir")"
+        backup_target="$(backup_target_for "$name" "$backup_dir")"
         mkdir -p "$(dirname "$backup_target")"
         mv "$target" "$backup_target"
         echo "backed up $name to $backup_target"

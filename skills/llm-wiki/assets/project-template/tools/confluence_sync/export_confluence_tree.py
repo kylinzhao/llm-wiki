@@ -8,6 +8,7 @@ import json
 import os
 import random
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -66,19 +67,72 @@ class WikiAuthenticationError(RuntimeError):
     pass
 
 
+AUTH_ENV_FILE = Path(os.environ.get("LLM_WIKI_AUTH_ENV_FILE", "~/.llm-wiki/guazi-sso.env")).expanduser()
+SSO_ENV_KEYS = (
+    "GUAZI_SSO_USER_NAME",
+    "GUAZI_SSO_PASSWORD",
+    "GUAZI_SSO_APPLY_PHONE",
+)
+SSO_SKILL_CANDIDATES = (
+    str(Path(__file__).with_name("guazi-sso-login")),
+    "~/.codex/skills/guazi-sso-login",
+    "~/.claude/skills/guazi-sso-login",
+    "~/.cursor/skills/guazi-sso-login",
+)
+
+
+def load_auth_env_file(path: Path = AUTH_ENV_FILE) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key in SSO_ENV_KEYS:
+            try:
+                parsed = shlex.split(value, posix=True)
+                values[key] = parsed[0] if parsed else ""
+            except ValueError:
+                values[key] = value.strip().strip("'\"")
+    return {key: value for key, value in values.items() if value}
+
+
+def discover_sso_skill_root() -> str:
+    for candidate in SSO_SKILL_CANDIDATES:
+        root = Path(candidate).expanduser()
+        if (root / "run.sh").is_file():
+            return str(root)
+    return ""
+
+
 def cookie_refresh_help(reason: str) -> str:
     return "\n".join(
         [
             reason,
             "",
-            "Wiki authentication needs a fresh Cookie header.",
-            "1. Open https://cwiki.guazi.com in your browser and make sure you are logged in.",
-            "2. Open DevTools, go to Network, then refresh any cwiki page.",
-            "3. Select a cwiki request and copy the full Request Headers -> Cookie value.",
-            "4. Run export_obsidian_wiki.py from an interactive terminal and paste the Cookie when prompted,",
-            "   or set COOKIE_HEADER='...' in the environment for non-interactive automation.",
+            "Wiki authentication needs a valid local login state.",
+            "Recommended path: provide Guazi username, password, and phone so the bundled login helper can cache a local Cwiki login state.",
+            "The llm-wiki skill does not upload credentials or write them into the KB project; persistent SSO values live only on this computer in ~/.llm-wiki/guazi-sso.env.",
+            "guazi-sso-login exchanges those credentials for a local Cookie/login cache and reuses it until it expires.",
             "",
-            "Do not commit or paste this cookie into project files.",
+            "Terminal setup: copy the whole block into your terminal and run it as-is. Do not replace or edit the English variable names; enter your real Guazi username, password, and phone only when the terminal asks.",
+            "  read -r -p \"请输入瓜子用户名: \" GUAZI_SSO_USER_NAME",
+            "  read -r -s -p \"请输入瓜子密码（输入时不会显示）: \" GUAZI_SSO_PASSWORD; echo",
+            "  read -r -p \"请输入手机号: \" GUAZI_SSO_APPLY_PHONE",
+            "  mkdir -p ~/.llm-wiki && chmod 700 ~/.llm-wiki",
+            "  umask 077",
+            "  cat > ~/.llm-wiki/guazi-sso.env <<EOF",
+            "GUAZI_SSO_USER_NAME=$GUAZI_SSO_USER_NAME",
+            "GUAZI_SSO_PASSWORD=$GUAZI_SSO_PASSWORD",
+            "GUAZI_SSO_APPLY_PHONE=$GUAZI_SSO_APPLY_PHONE",
+            "EOF",
+            "",
+            "Agent-window fallback: provide Guazi username, password, and phone; the agent will write them to ~/.llm-wiki/guazi-sso.env for local reuse.",
+            "COOKIE_HEADER is still supported as a one-off emergency credential, but it is not the recommended path.",
+            "Do not commit credentials or paste them into project files.",
         ]
     )
 
@@ -96,11 +150,15 @@ def run_guazi_sso_skill(
     command = ["bash", str(run_sh), subcommand]
     if extra_args:
         command.extend(extra_args)
+    env = os.environ.copy()
+    for key, value in load_auth_env_file().items():
+        env.setdefault(key, value)
     result = subprocess.run(
         command,
         text=True,
         capture_output=True,
         check=False,
+        env=env,
     )
     if result.returncode != 0:
         stderr = (result.stderr or "").strip()
@@ -125,10 +183,10 @@ def load_json(path: Path, default: Any) -> Any:
 def sso_env_setup_help() -> str:
     return "\n".join(
         [
-            "To enable non-interactive auto-login, set SSO credentials in environment variables:",
-            "  export GUAZI_SSO_USER_NAME='<userName>'",
-            "  export GUAZI_SSO_PASSWORD='<password>'",
-            "  export GUAZI_SSO_APPLY_PHONE='<applyPhone>'",
+            "To enable auto-login, register SSO credentials in ~/.llm-wiki/guazi-sso.env or export them in the current environment:",
+            "  GUAZI_SSO_USER_NAME='<userName>'",
+            "  GUAZI_SSO_PASSWORD='<password>'",
+            "  GUAZI_SSO_APPLY_PHONE='<applyPhone>'",
             "Optional for Jira CHDSSO auto-refresh:",
             "  export GUAZI_CHDSSO_TEST_PHONE='<phone>'",
             "  export GUAZI_CHDSSO_TEST_CODE='<code>'",
@@ -505,7 +563,8 @@ def resolve_cookie_header(
     cookie = cookie_header.strip()
     if cookie:
         return cookie
-    if sso_skill_root.strip():
+    sso_skill_root = sso_skill_root.strip() or discover_sso_skill_root()
+    if sso_skill_root:
         try:
             return run_guazi_sso_skill(
                 sso_skill_root,
@@ -530,7 +589,7 @@ def resolve_jira_chdsso(
     token = jira_chdsso.strip()
     if token:
         return token
-    if sso_skill_root.strip():
+    if auto_jira_chdsso_from_sso and sso_skill_root.strip():
         try:
             return run_guazi_sso_skill(
                 sso_skill_root,

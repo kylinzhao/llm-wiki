@@ -37,6 +37,13 @@ class RefinementPlanTest(unittest.TestCase):
             self.assertIn("wiki/sources/product-index.md", plan["allowed_write_paths"])
             self.assertIn("raw/**", plan["forbidden_write_paths"])
             self.assertIn("tools/check_refinement.py", plan["verification"])
+            self.assertEqual(plan["user_next_command"], "llm-wiki update")
+            self.assertNotIn("uv run python", plan["user_next_action"])
+            self.assertIn("AI-native", plan["user_next_action"])
+
+            status_text = (project / "staging" / "refinement-status.md").read_text(encoding="utf-8")
+            self.assertIn('"next_command": "llm-wiki update"', status_text)
+            self.assertNotIn("Run AI-native source refinement next, then health and graph.", status_text)
 
     def test_check_refinement_fails_pending_source_and_passes_completed_record(self):
         build_wiki = load_tool("build_wiki")

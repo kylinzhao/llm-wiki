@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_rules import inspect_agent_rules
+from gplus_quality import inspect_gplus_quality
 
 
 def utc_now() -> str:
@@ -83,6 +84,7 @@ def finding(severity: str, title: str, detail: str, *, blocking: bool = False) -
 def build_report(project: Path) -> dict[str, Any]:
     health = run_health(project)
     agent_rules = inspect_agent_rules(project)
+    gplus_quality = inspect_gplus_quality(project, health if isinstance(health, dict) else {})
     findings: list[dict[str, Any]] = []
 
     if health.get("ok") is not True:
@@ -162,6 +164,8 @@ def build_report(project: Path) -> dict[str, Any]:
             )
         )
 
+    findings.extend(gplus_quality["findings"])
+
     p0_count = sum(1 for item in findings if item.get("severity") == "P0" or item.get("blocking") is True)
     summary = (
         "No blocking LLM Wiki issues found."
@@ -182,6 +186,7 @@ def build_report(project: Path) -> dict[str, Any]:
             "wiki_pages": health.get("wiki_pages"),
             "source_pages": health.get("source_pages"),
         },
+        "gplus_quality": gplus_quality,
         "agent_rules": agent_rules,
     }
 

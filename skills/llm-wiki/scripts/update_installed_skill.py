@@ -70,6 +70,13 @@ def main() -> int:
     parser.add_argument("--mode", default="--copy", choices=["--copy", "--link"], help="Install mode.")
     parser.add_argument("--backup", action="store_true", help="Back up existing installed skills before updating.")
     parser.add_argument("--force", action="store_true", help="Overwrite existing installed skills without backup.")
+    parser.add_argument(
+        "--backup-dir",
+        help=(
+            "Backup destination directory passed to install.sh --backup-dir. "
+            "Defaults to $LLM_WIKI_SKILL_BACKUP_DIR or ~/.llm-wiki-skill-backups."
+        ),
+    )
     parser.add_argument("--no-pull", action="store_true", help="Do not git pull the source checkout before installing.")
     args = parser.parse_args()
 
@@ -87,6 +94,8 @@ def main() -> int:
         install_command.append("--backup")
     if args.force:
         install_command.append("--force")
+    if args.backup_dir:
+        install_command.extend(["--backup-dir", args.backup_dir])
     if not args.backup and not args.force:
         install_command.append("--backup")
 

@@ -294,11 +294,11 @@ def main() -> int:
     recommended_actions: list[str] = []
     if raw_gap_message:
         recommended_actions.append(
-            "Restore raw/ (git submodule, sparse checkout, LFS, or internal sync), then run `uv run python tools/update_wiki.py`."
+            "Restore raw/ (git submodule, sparse checkout, LFS, or internal sync), then run `llm-wiki update`."
         )
     if raw_code_gap_message:
         recommended_actions.append(
-            "Restore raw-code/<codebase_id>/, then run `uv run python tools/update_wiki.py` or at least scan_code + build_traceability."
+            "Restore raw-code/<codebase_id>/, then run `llm-wiki update`."
         )
     if image_evidence_gaps:
         recommended_actions.append(

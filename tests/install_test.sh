@@ -37,19 +37,19 @@ assert_contains() {
 run_install() {
   local home="$1"
   shift
-  CODEX_HOME="$home" "$ROOT_DIR/install.sh" --client codex "$@"
+  HOME="$home" CODEX_HOME="$home" "$ROOT_DIR/install.sh" --client codex "$@"
 }
 
 run_install_claude() {
   local home="$1"
   shift
-  CLAUDE_HOME="$home" "$ROOT_DIR/install.sh" --client claude "$@"
+  HOME="$home" CLAUDE_HOME="$home" "$ROOT_DIR/install.sh" --client claude "$@"
 }
 
 run_install_cursor() {
   local home="$1"
   shift
-  CURSOR_HOME="$home" "$ROOT_DIR/install.sh" --client cursor "$@"
+  HOME="$home" CURSOR_HOME="$home" "$ROOT_DIR/install.sh" --client cursor "$@"
 }
 
 test_default_refuses_existing_skill() {
@@ -88,7 +88,7 @@ test_backup_preserves_existing_skill() {
   assert_file "$home/skills/llm-wiki/SKILL.md"
   assert_no_path "$home/skills/llm-wiki/local.txt"
   local backups
-  backups=("$home"/skills/.backups/llm-wiki-*)
+  backups=("$home"/.llm-wiki-skill-backups/llm-wiki-*)
   [[ -d "${backups[0]}" ]] || fail "expected backup directory"
   assert_file "${backups[0]}/local.txt"
   assert_contains "backed up llm-wiki" "$TMP_DIR/backup.out"

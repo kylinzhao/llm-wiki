@@ -18,6 +18,8 @@ ENGINE_PREFIXES = (
 )
 
 QUERY_ROUTING_HEADING = "## Query Routing"
+CWIKI_AUTH_HEADING = "## Cwiki Authentication"
+LEGACY_CWIKI_HEADINGS = ("## Cwiki 原始文档同步",)
 
 
 def copy_tree(src: Path, dst: Path, force: bool, engine_only: bool = False) -> tuple[list[str], list[str]]:
@@ -37,7 +39,7 @@ def copy_tree(src: Path, dst: Path, force: bool, engine_only: bool = False) -> t
             continue
 
         target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists() and not force:
+        if target.exists() and not (force or engine_only):
             skipped.append(str(rel))
             continue
 
@@ -47,14 +49,14 @@ def copy_tree(src: Path, dst: Path, force: bool, engine_only: bool = False) -> t
     return copied, skipped
 
 
-def extract_template_query_routing() -> str:
+def extract_template_section(heading: str) -> str:
     template_agents = TEMPLATE_ROOT / "AGENTS.md"
     text = template_agents.read_text(encoding="utf-8")
-    start = text.find(QUERY_ROUTING_HEADING)
+    start = text.find(heading)
     if start == -1:
-        raise SystemExit(f"Missing {QUERY_ROUTING_HEADING!r} in {template_agents}")
+        raise SystemExit(f"Missing {heading!r} in {template_agents}")
 
-    next_heading = text.find("\n## ", start + len(QUERY_ROUTING_HEADING))
+    next_heading = text.find("\n## ", start + len(heading))
     if next_heading == -1:
         section = text[start:].strip()
     else:
@@ -62,26 +64,60 @@ def extract_template_query_routing() -> str:
     return section + "\n"
 
 
-def refresh_agent_rules(project: Path) -> str:
-    agents = project / "AGENTS.md"
-    query_routing = extract_template_query_routing()
+def extract_template_query_routing() -> str:
+    return extract_template_section(QUERY_ROUTING_HEADING)
 
-    if not agents.is_file():
-        agents.write_text("# LLM Wiki Project Rules\n\n" + query_routing, encoding="utf-8")
-        return "created"
 
-    text = agents.read_text(encoding="utf-8")
-    if QUERY_ROUTING_HEADING in text:
-        return "already_present"
+def extract_template_cwiki_auth() -> str:
+    return extract_template_section(CWIKI_AUTH_HEADING)
 
+
+def replace_section(text: str, heading: str, replacement: str) -> tuple[str, bool]:
+    start = text.find(heading)
+    if start == -1:
+        return text, False
+    next_heading = text.find("\n## ", start + len(heading))
+    end = len(text) if next_heading == -1 else next_heading
+    return text[:start].rstrip() + "\n\n" + replacement.rstrip() + "\n\n" + text[end:].lstrip(), True
+
+
+def insert_after_first_heading(text: str, section: str) -> str:
     if text.startswith("# "):
         first_break = text.find("\n")
         insert_at = first_break + 1 if first_break != -1 else len(text)
-        refreshed = text[:insert_at].rstrip() + "\n\n" + query_routing + "\n" + text[insert_at:].lstrip()
-    else:
-        refreshed = "# LLM Wiki Project Rules\n\n" + query_routing + "\n" + text.lstrip()
+        return text[:insert_at].rstrip() + "\n\n" + section + "\n" + text[insert_at:].lstrip()
+    return "# LLM Wiki Project Rules\n\n" + section + "\n" + text.lstrip()
 
-    agents.write_text(refreshed.rstrip() + "\n", encoding="utf-8")
+
+def refresh_agent_rules(project: Path) -> str:
+    agents = project / "AGENTS.md"
+    query_routing = extract_template_query_routing()
+    cwiki_auth = extract_template_cwiki_auth()
+
+    if not agents.is_file():
+        agents.write_text("# LLM Wiki Project Rules\n\n" + query_routing + "\n" + cwiki_auth, encoding="utf-8")
+        return "created"
+
+    text = agents.read_text(encoding="utf-8")
+    original = text
+
+    if QUERY_ROUTING_HEADING not in text:
+        text = insert_after_first_heading(text, query_routing)
+
+    replaced = False
+    text, replaced = replace_section(text, CWIKI_AUTH_HEADING, cwiki_auth)
+    if not replaced:
+        for legacy_heading in LEGACY_CWIKI_HEADINGS:
+            text, replaced = replace_section(text, legacy_heading, cwiki_auth)
+            if replaced:
+                break
+    if not replaced:
+        text = insert_after_first_heading(text, cwiki_auth)
+
+    if text == original:
+        return "already_present"
+
+    agents.write_text(text.rstrip() + "\n", encoding="utf-8")
     return "updated"
 
 
@@ -196,13 +232,9 @@ def main() -> int:
     if agent_rules_status:
         print(f"agent_rules={agent_rules_status}")
     print("next_commands:")
-    print("  uv run python tools/update_wiki.py")
-    print("  # optional when raw-code/ exists and graphify is installed:")
-    print("  uv run python tools/update_wiki.py --graphify")
-    print("  # or run graphify alone:")
-    print("  uv run python tools/graphify_code.py --all")
-    print("  uv run python tools/health.py --json")
-    print("  uv run python tools/build_graph.py")
+    print("  llm-wiki update")
+    print("  # optional after the text layer is healthy and high-value image evidence exists:")
+    print("  llm-wiki image")
     return 0
 
 

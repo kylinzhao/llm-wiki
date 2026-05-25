@@ -10,5 +10,5 @@ description: LLM Wiki 一口气初始化入口。用于从 raw/ 和 BUSINESS_CON
 1. 读取 **llm-wiki** skill 包根目录下的 `SKILL.md`（路径由当前环境的 skill 安装位置解析，勿写死本机绝对路径）。
 2. 读取同包内 `references/commands.md`。
 3. 将 `$llm-wiki-fast` 后面的用户文本作为 `llm-wiki fast` 参数。
-4. 端到端执行 `llm-wiki fast` 工作流。
+4. 端到端执行 `llm-wiki fast` 工作流；0-1 默认必须包含阶段 G+（concepts/entities/truth/conflicts/evidence/proposals/reference/operations 二次校准、query acceptance、G+ quality audit），除非 hard blocker 或用户显式要求跳过。
 5. 最后输出 `建议下一步`。

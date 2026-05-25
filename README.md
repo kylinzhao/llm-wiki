@@ -95,7 +95,7 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/update_installed_sk
 
 如果 skill 是通过 `--link` 从本仓库安装的，也可以省略 `--source`，脚本会尝试从当前 skill 路径推断 bundle checkout 并执行 `git pull --ff-only` 后重新安装。
 
-安装脚本会清理已下线的 llm-wiki wrapper；使用 `--backup` 时旧目录会移动到目标 skills 目录的 `.backups/` 下。
+安装脚本会清理已下线的 llm-wiki wrapper；使用 `--backup` 时旧目录默认会移动到 `~/.llm-wiki-skill-backups/`（可通过 `--backup-dir` 或 `LLM_WIKI_SKILL_BACKUP_DIR` 覆盖），避免被 skills 扫描器误识别为可用 skill。
 
 安装完成后，在**空的 wiki 项目目录**中初始化脚手架（会创建 `raw/` 与工具脚本；随后请补全 `BUSINESS_CONTEXT.md` 与 `raw/` 证据）：
 
@@ -132,6 +132,7 @@ python3 "${CURSOR_HOME:-$HOME/.cursor}/skills/llm-wiki/scripts/install_project_t
 - 先预览：`./install.sh --copy --dry-run`
 - 保留旧版本并安装：`./install.sh --copy --backup`
 - 明确丢弃旧版本并覆盖：`./install.sh --copy --force`
+- 自定义备份目录：`./install.sh --copy --backup --backup-dir "$HOME/.skill-backups"`
 
 默认安装目录是：
 
@@ -149,7 +150,7 @@ cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
 
 - `用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，一次性跑完标准首轮。`
 - `用 $llm-wiki doctor 看看整个站点健康度、缺口和下一步建议。`
-- `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面，并自动检查收口。`
+- `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面，并完成收口。`
 - `用 $llm-wiki review-requirement 帮我 review 这个 Cwiki 需求，并输出评论稿。`
 - `用 $llm-wiki trace 补某个业务能力的需求到代码追踪矩阵。`
 

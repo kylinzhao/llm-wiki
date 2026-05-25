@@ -4,15 +4,34 @@ from __future__ import annotations
 import argparse
 import getpass
 import os
+import shlex
 import subprocess
 import sys
 import webbrowser
 from pathlib import Path
+from typing import Sequence
 from urllib.parse import parse_qs, urlparse
 
 
 EXPORTER_SCRIPT = Path(__file__).with_name("export_confluence_tree.py")
 DEFAULT_RSS_MAX_RESULTS = 200
+AUTH_ENV_FILE = Path(os.environ.get("LLM_WIKI_AUTH_ENV_FILE", "~/.llm-wiki/guazi-sso.env")).expanduser()
+SSO_ENV_KEYS = (
+    "GUAZI_SSO_SKILL_ROOT",
+    "GUAZI_SSO_USER_NAME",
+    "GUAZI_SSO_PASSWORD",
+    "GUAZI_SSO_APPLY_PHONE",
+)
+AUTH_ENV_KEYS = SSO_ENV_KEYS + ("JIRA_TOKEN",)
+SSO_SKILL_CANDIDATES = (
+    str(Path(__file__).with_name("guazi-sso-login")),
+    "~/.codex/skills/guazi-sso-login",
+    "~/.codex/skills/guazi-sso",
+    "~/.claude/skills/guazi-sso-login",
+    "~/.claude/skills/guazi-sso",
+    "~/.cursor/skills/guazi-sso-login",
+    "~/.cursor/skills/guazi-sso",
+)
 
 
 def extract_page_id(page_url: str) -> str:
@@ -23,7 +42,7 @@ def extract_page_id(page_url: str) -> str:
     return str(page_id)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Export a Confluence/wiki page to Obsidian-friendly Markdown."
     )
@@ -174,7 +193,7 @@ def parse_args() -> argparse.Namespace:
             "(YYYY-MM-DD or ISO-8601 datetime)."
         ),
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def resolve_depth(args: argparse.Namespace) -> int:
@@ -217,6 +236,39 @@ def print_cookie_instructions() -> None:
     )
 
 
+def print_auth_instructions() -> None:
+    print(
+        "\nCwiki sync needs authentication.\n"
+        "\n"
+        "Security boundary:\n"
+        "- The llm-wiki skill does not upload your username, password, phone, Jira token, Cookie, or token.\n"
+        "- It does not write secrets into the KB project. When you choose persistent SSO, values are written only to your computer.\n"
+        "- The local env file is ~/.llm-wiki/guazi-sso.env with user-only permissions, and is loaded by future llm-wiki updates.\n"
+        "- guazi-sso-login exchanges the SSO credentials for a Cookie/login cache locally and reuses it until it expires.\n"
+        "- Secrets are not written to raw/, wiki/, upstream/, staging reports, command arguments, or git files by this skill.\n"
+        "- If you type secrets in the agent chat window, they may enter the current agent session context or local session history depending on the engine.\n"
+        "\n"
+        "Fastest path: 直接在这里回复瓜子用户名、密码、手机号、Jira 令牌。The agent will write them only to ~/.llm-wiki/guazi-sso.env on this computer, then continue update.\n"
+        "\n"
+        "Terminal alternative: copy this whole block into your terminal and run it as-is. Do not replace or edit the English variable names; enter your real Guazi username, password, phone, and Jira token only when the terminal asks.\n"
+        "  read -r -p \"请输入瓜子用户名: \" GUAZI_SSO_USER_NAME\n"
+        "  read -r -s -p \"请输入瓜子密码（输入时不会显示）: \" GUAZI_SSO_PASSWORD; echo\n"
+        "  read -r -p \"请输入手机号: \" GUAZI_SSO_APPLY_PHONE\n"
+        "  read -r -s -p \"请输入 Jira 令牌（输入时不会显示，没有可直接回车）: \" JIRA_TOKEN; echo\n"
+        "  mkdir -p ~/.llm-wiki && chmod 700 ~/.llm-wiki\n"
+        "  umask 077\n"
+        "  cat > ~/.llm-wiki/guazi-sso.env <<EOF\n"
+        "GUAZI_SSO_USER_NAME=$GUAZI_SSO_USER_NAME\n"
+        "GUAZI_SSO_PASSWORD=$GUAZI_SSO_PASSWORD\n"
+        "GUAZI_SSO_APPLY_PHONE=$GUAZI_SSO_APPLY_PHONE\n"
+        "JIRA_TOKEN=$JIRA_TOKEN\n"
+        "EOF\n"
+        "\n"
+        "The Cwiki login helper is bundled with llm-wiki. Jira issue reading prefers JIRA_TOKEN; CHDSSO is only a fallback. A full COOKIE_HEADER is only a one-off fallback, not the recommended path.\n",
+        file=sys.stderr,
+    )
+
+
 def maybe_prompt_for_cookie(args: argparse.Namespace) -> str:
     cookie = str(getattr(args, "cookie", "") or "").strip()
     if cookie:
@@ -231,6 +283,124 @@ def maybe_prompt_for_cookie(args: argparse.Namespace) -> str:
         webbrowser.open("https://cwiki.guazi.com")
     print_cookie_instructions()
     return getpass.getpass("Paste cwiki Cookie header: ").strip()
+
+
+def shell_quote_env_value(value: str) -> str:
+    return shlex.quote(value)
+
+
+def load_auth_env_file(path: Path = AUTH_ENV_FILE) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key in AUTH_ENV_KEYS:
+            try:
+                parsed = shlex.split(value, posix=True)
+                values[key] = parsed[0] if parsed else ""
+            except ValueError:
+                values[key] = value.strip().strip("'\"")
+    return {key: value for key, value in values.items() if value}
+
+
+def discover_sso_skill_root(env: dict[str, str] | None = None) -> str:
+    env = env or os.environ
+    for value in [env.get("GUAZI_SSO_SKILL_ROOT", ""), load_auth_env_file().get("GUAZI_SSO_SKILL_ROOT", "")]:
+        if value and (Path(value).expanduser() / "run.sh").is_file():
+            return str(Path(value).expanduser())
+    for candidate in SSO_SKILL_CANDIDATES:
+        root = Path(candidate).expanduser()
+        if (root / "run.sh").is_file():
+            return str(root)
+    return ""
+
+
+def write_auth_env_file(path: Path, values: dict[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.chmod(0o700)
+    except OSError:
+        pass
+    lines = [
+        "# Local llm-wiki SSO credentials. Do not commit.",
+        "# Used by tools/confluence_sync/export_obsidian_wiki.py.",
+    ]
+    for key in AUTH_ENV_KEYS:
+        value = values.get(key, "")
+        if value:
+            lines.append(f"{key}={shell_quote_env_value(value)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+
+def apply_auth_env_defaults(args: argparse.Namespace, env: dict[str, str]) -> None:
+    if not str(getattr(args, "sso_skill_root", "") or "").strip() and env.get("GUAZI_SSO_SKILL_ROOT"):
+        args.sso_skill_root = env["GUAZI_SSO_SKILL_ROOT"]
+    if not str(getattr(args, "sso_skill_root", "") or "").strip():
+        discovered = discover_sso_skill_root(env)
+        if discovered:
+            args.sso_skill_root = discovered
+            env["GUAZI_SSO_SKILL_ROOT"] = discovered
+    if all(env.get(key) for key in SSO_ENV_KEYS):
+        args.auto_cookie_from_sso = True
+    if not str(getattr(args, "jira_token", "") or "").strip() and env.get("JIRA_TOKEN"):
+        args.jira_token = env["JIRA_TOKEN"]
+
+
+def maybe_prompt_for_auth(args: argparse.Namespace) -> dict[str, str]:
+    if str(getattr(args, "cookie", "") or "").strip():
+        return {}
+    if not command_needs_cookie(args):
+        return {}
+    if getattr(args, "no_cookie_prompt", False):
+        return {}
+    interactive = sys.stdin.isatty() and sys.stderr.isatty()
+    if not getattr(args, "prompt_cookie", False) and not interactive:
+        print_auth_instructions()
+        return {}
+    if getattr(args, "open_login", False):
+        webbrowser.open("https://cwiki.guazi.com")
+    print_auth_instructions()
+    mode = input("Choose auth mode [sso/cookie] (default: sso): ").strip().lower() or "sso"
+    if mode == "cookie":
+        cookie = getpass.getpass("Paste full COOKIE_HEADER: ").strip()
+        if cookie:
+            return {"COOKIE_HEADER": cookie}
+        return {}
+    sso_skill_root = str(getattr(args, "sso_skill_root", "") or "").strip() or discover_sso_skill_root()
+    if not sso_skill_root:
+        print(
+            "没有找到内置 guazi-sso-login 登录工具。这是 llm-wiki 安装不完整，请先更新 llm-wiki skill 或同步项目 tools。",
+            file=sys.stderr,
+        )
+        return {}
+    user_name = input("请输入瓜子用户名: ").strip()
+    password = getpass.getpass("请输入瓜子密码（输入时不会显示）: ").strip()
+    apply_phone = input("请输入手机号: ").strip()
+    jira_token = getpass.getpass("请输入 Jira 令牌（输入时不会显示，没有可直接回车）: ").strip()
+    if not user_name or not password or not apply_phone:
+        return {}
+    args.sso_skill_root = sso_skill_root
+    args.auto_cookie_from_sso = True
+    if jira_token:
+        args.jira_token = jira_token
+    values = {
+        "GUAZI_SSO_SKILL_ROOT": sso_skill_root,
+        "GUAZI_SSO_USER_NAME": user_name,
+        "GUAZI_SSO_PASSWORD": password,
+        "GUAZI_SSO_APPLY_PHONE": apply_phone,
+        "JIRA_TOKEN": jira_token,
+    }
+    write_auth_env_file(AUTH_ENV_FILE, values)
+    return values
 
 
 def resolve_output_dir(args: argparse.Namespace) -> Path:
@@ -289,7 +459,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
     if getattr(args, "updated_since", "").strip():
         command.extend(["--updated-since", args.updated_since.strip()])
     if args.jira_token.strip():
-        command.extend(["--jira-token", args.jira_token.strip()])
+        # Passed through the child environment instead of argv so tokens do not appear in process lists.
+        pass
     if getattr(args, "jira_cookie", "").strip():
         command.extend(["--jira-cookie", args.jira_cookie.strip()])
     if getattr(args, "jira_chdsso", "").strip():
@@ -305,11 +476,13 @@ def main() -> int:
     args = parse_args()
     if not EXPORTER_SCRIPT.exists():
         raise SystemExit(f"Exporter script not found: {EXPORTER_SCRIPT}")
-    command = build_command(args)
     env = os.environ.copy()
-    cookie = maybe_prompt_for_cookie(args)
-    if cookie:
-        env["COOKIE_HEADER"] = cookie
+    env.update(load_auth_env_file())
+    apply_auth_env_defaults(args, env)
+    env.update(maybe_prompt_for_auth(args))
+    if str(getattr(args, "jira_token", "") or "").strip():
+        env["JIRA_TOKEN"] = args.jira_token.strip()
+    command = build_command(args)
     raise SystemExit(subprocess.call(command, env=env))
 
 

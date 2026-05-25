@@ -157,11 +157,12 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 3. 运行确定性构建
 4. 对全量语料完成首轮大模型 summary 与 AI-native 精修
 5. 如果存在 `raw-code/`，构建代码 wiki 与需求-代码跨层链接
-6. 运行健康检查
-7. 最后构建 graph
+6. 默认进入阶段 G+：二次校准 concepts/entities/truth/conflicts/evidence/proposals/reference/operations，生成或刷新 query acceptance 与 G+ quality audit
+7. 运行健康检查
+8. 最后构建 graph
 
 这里的“首轮大模型 summary 与 AI-native 精修”是 0-1 初始化的必要环节，不应只停留在骨架、索引和占位页。
-可以按 `sources -> layered pages -> concepts/entities` 分层推进，但默认应在同一轮里一口气完成，而不是把全量精修留到后续再补。
+可以按 `sources -> layered pages -> concepts/entities -> G+ 综合层` 分层推进，但默认应在同一轮里一口气完成，而不是把全量精修或 G+ 加厚留到后续再补。只有 hard blocker 或用户显式要求“只建骨架/跳过 G+”时，0-1 才能停在 G+ 之前，并且最终报告必须把 G+ 标为 pending。
 
 ### 3. 已有项目优先读 BUSINESS_CONTEXT
 
@@ -282,10 +283,10 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 - 基于当前项目状态，而不是泛泛建议。
 - 给出 1-3 个优先级排序的下一步动作。
-- 如果适合继续执行，直接推荐对应二级命令，例如 `llm-wiki update`、`llm-wiki doctor`、`llm-wiki image`。
+- 如果适合继续执行，直接推荐对应二级命令，例如 `llm-wiki update`、`llm-wiki doctor`、`llm-wiki image`；不要要求用户手动运行 `tools/check_refinement.py`、`tools/health.py`、`tools/build_graph.py` 等内部脚本链。
 - 如果同一轮变更留下 source 精修、代码 wiki 或代码追踪缺口，优先推荐继续 `llm-wiki update` 一次性收口；新代码库接入才推荐 `llm-wiki add-code`。
 - 对 `llm-wiki update` 来说，低风险 pending/stale/source/traceability/health/graph 收口应在当前命令里继续完成；不要把“再跑一次 update”当成默认建议，除非有明确 blocker 或用户要求只做诊断/确定性阶段。
-- 对 `llm-wiki update` 来说，最终建议必须根据检查结果分流：检查失败时建议修复或继续 update；检查通过且无阻塞时，说明当前 KB 已可使用，并提示未来触发 update 的条件。
+- 对 `llm-wiki update` 来说，最终建议必须根据检查结果分流：检查失败时建议修复或继续 `llm-wiki update`；检查通过且无阻塞时，说明当前 KB 已可使用，并提示未来触发 update 的条件。
 - 如果当前状态已经健康，说明“可以暂停”的条件和后续触发 `update` 的时机。
 - 如果文本、health、graph 都已通过，但 `raw/` 存在图片资产且没有 image notes / image evidence 完成标记，说明“文本层可暂停；如需补强核心页面证据，下一步运行 `llm-wiki image` 做高价值图片筛选与多模态精修”。
 
@@ -377,6 +378,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 6. 风险与缺口
 7. 优先级建议和下一步命令
 8. 图片证据层：`raw/` 图片资产数量、`staging/image-notes/` 状态、是否应进入阶段 H、优先候选页面
+9. G+ semantic thickness：source 数与非 index concepts/entities 数、source-to-concept/entity 覆盖率、manual concept/entity placeholder、truth/evidence/proposals/operations/reference 是否 index-only 或低密度；这些问题按 P1/P2 报告，不因 health pass 而忽略
 
 ### G+ 任务
 
@@ -388,6 +390,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 4. `docs/gplus-quality-audit.md` 状态
 5. health / broken wikilinks / graph 状态
 6. 图片证据层是否仍待阶段 H；若待处理，给出 `llm-wiki image` 作为建议下一步
+7. 如果 `tools/update_wiki.py` 或 `tools/doctor.py` 报 `gplus_quality.status=needs_attention`，必须说明是 P1/P2 语义层欠拟合还是可接受的窄域薄层；P1/P2 时优先在本轮 update 完成 G+ semantic expansion
 
 ### 代码 wiki 任务
 

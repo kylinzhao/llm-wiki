@@ -40,12 +40,32 @@ COOKIE_HEADER='从浏览器 DevTools 复制的完整 Cookie' \
 - **按更新时间硬过滤**：可加 `--updated-since`，仅落盘该时间点及之后更新的页面，例如 `--updated-since 2026-01-01` 或 `--updated-since 2026-01-01T00:00:00+08:00`。该条件会持久化为 `upstream/wiki-sources.json` 中对应 source 的 `filters.updated_since`。
 - **增量更新**：首次导出后可在项目根执行  
   `COOKIE_HEADER='...' uv run python tools/confluence_sync/export_obsidian_wiki.py --update --project-dir "$PWD"`。
-- **SSO 自动取登录态（可选）**：若已安装 `guazi-sso-login` skill，可在不手填 `COOKIE_HEADER` 时自动获取 cwiki Cookie：  
-  `uv run python tools/confluence_sync/export_obsidian_wiki.py --url "<cwiki-url>" --project-dir "$PWD" --sso-skill-root "<guazi-sso-login 目录>" --auto-cookie-from-sso`。
+- **缺少 Cookie 时的交互认证**：`llm-wiki update` 触发 Cwiki 同步时，若没有可用登录态，推荐使用 llm-wiki engine 内置的 `guazi-sso-login` 登录组件，而不是手填 `COOKIE_HEADER`。用户需要提供瓜子用户名、密码、手机号；如果需要解析 Jira issue，还应提供 Jira 令牌并写入同一个本机 env 文件。内置登录组件会在本机换取 Cookie/login cache，并复用到过期失效；Jira 读取优先使用 `JIRA_TOKEN`，CHDSSO 只作为没有 Jira token 时的 fallback。提示必须明确：llm-wiki skill 不会上报用户名、密码、手机号、Jira token、Cookie 或 token，也不会写入 KB 项目的 raw/wiki/staging/git；持久化只写到用户电脑本地的 `~/.llm-wiki/guazi-sso.env`，权限应为 `0600`，供后续本机 update 自动加载。如果用户直接在 agent 窗口输入，内容可能进入当前 agent 会话上下文或本地会话记录，具体取决于 engine。终端备选方式必须告诉用户：复制整段到终端直接运行，不要替换或编辑脚本里的英文变量名；运行后按中文提示输入真实瓜子用户名、密码、手机号和 Jira 令牌；执行完后回到 agent，让 agent 继续执行 update：
+
+  ```bash
+  read -r -p "请输入瓜子用户名: " GUAZI_SSO_USER_NAME
+  read -r -s -p "请输入瓜子密码（输入时不会显示）: " GUAZI_SSO_PASSWORD; echo
+  read -r -p "请输入手机号: " GUAZI_SSO_APPLY_PHONE
+  read -r -s -p "请输入 Jira 令牌（输入时不会显示，没有可直接回车）: " JIRA_TOKEN; echo
+  mkdir -p ~/.llm-wiki && chmod 700 ~/.llm-wiki
+  umask 077
+  cat > ~/.llm-wiki/guazi-sso.env <<EOF
+  GUAZI_SSO_USER_NAME=$GUAZI_SSO_USER_NAME
+  GUAZI_SSO_PASSWORD=$GUAZI_SSO_PASSWORD
+  GUAZI_SSO_APPLY_PHONE=$GUAZI_SSO_APPLY_PHONE
+  JIRA_TOKEN=$JIRA_TOKEN
+  EOF
+  ```
+
+  首选应急：用户也可以直接在 agent 窗口提供瓜子用户名、密码、手机号和 Jira 令牌，由 agent 写入本机 `~/.llm-wiki/guazi-sso.env` 后继续 update。完整 `COOKIE_HEADER` 只作为更低优先级的一次性 fallback，不是推荐方式。
+- **鉴权失败不可自动跳过**：Cwiki 鉴权失败时必须中断 update。不要用 `--no-auto-raw-sync` 绕过后继续 deterministic pipeline，除非用户明确要求“跳过上游同步，只基于当前 raw 更新”。一旦用户明确跳过，结果中必须标记 `confluence_sync` / `auto_raw_sync` 为 skipped，避免旧失败报告误导。
+
+- **SSO 自动取登录态**：模板已内置 `guazi-sso-login` 登录组件。只要 `~/.llm-wiki/guazi-sso.env` 中有瓜子用户名、密码和手机号，`uv run python tools/confluence_sync/export_obsidian_wiki.py --url "<cwiki-url>" --project-dir "$PWD" --auto-cookie-from-sso` 会自动获取并复用 cwiki Cookie；如果同文件有 `JIRA_TOKEN`，Jira issue 解析会优先使用该 token。
 - **环境变量优先自动刷新（推荐）**：把 SSO 凭据放到环境变量后，脚本会在 Cookie/token 缺失或校验失效时自动登录并刷新，不需要手工复制 Cookie。最小配置：
   - `GUAZI_SSO_USER_NAME`
   - `GUAZI_SSO_PASSWORD`
   - `GUAZI_SSO_APPLY_PHONE`
+- **CI/非交互执行**：如果不允许任何交互，给导出器加 `--no-cookie-prompt`，并提前提供 `COOKIE_HEADER` 或完整 `GUAZI_SSO_*` 环境变量。
 - **cjira 补充解析（可选）**：如需从 Jira issue 提取关联 wiki 链接，可继续加：  
   `--auto-jira-chdsso-from-sso --jira-chdsso-env test`（或显式传 `--jira-token/--jira-cookie/--jira-chdsso`）。
 

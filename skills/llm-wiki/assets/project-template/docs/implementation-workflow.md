@@ -31,28 +31,16 @@ If `raw-code/<codebase_id>/` contains clean git worktrees, the same update comma
 - `wiki/code/capabilities/`
 - `wiki/code/traceability/`
 
-6. Run validation:
-
-```bash
-uv run python tools/health.py --json
-uv run python tools/build_graph.py
-uv run python tools/anchor_check.py
-```
+6. Finish with `llm-wiki update` style validation and closure: health, graph, and anchor checks are part of the same command, not separate user-facing steps.
 
 ## Code Wiki
 
 For code evidence:
 
-```bash
-uv run python tools/scan_code.py
-uv run python tools/graphify_code.py --all
-uv run python tools/build_traceability.py
-```
+The engine may still use deterministic code scanning and graphification internally, but users should continue to think in terms of `llm-wiki update` rather than manual script chains.
 
 `scan_code.py` provides deterministic facts. `graphify_code.py` provides graph structure. Codex must still write the business capability interpretation.
 
 To force a one-off code refresh across all codebases before rebuilding code wiki:
 
-```bash
-uv run python tools/update_wiki.py --code-sync-command git pull --ff-only
-```
+Use `llm-wiki update` for the normal end-to-end pass; only the engine should decide when it needs to invoke a specific sync command under the hood.

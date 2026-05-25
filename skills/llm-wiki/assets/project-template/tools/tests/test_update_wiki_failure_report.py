@@ -46,6 +46,25 @@ class UpdateFailureReportTest(unittest.TestCase):
             self.assertEqual(latest["details"]["stale_sources"], 241)
             self.assertIn("health", (report_dir / "latest.md").read_text(encoding="utf-8"))
 
+    def test_success_report_replaces_previous_failure_report(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            report_dir = project / "staging" / "update"
+            report_dir.mkdir(parents=True)
+            (report_dir / "latest.json").write_text('{"status":"failed","failed_step":"confluence_sync"}\n', encoding="utf-8")
+            (report_dir / "latest.md").write_text("# old failed report\n", encoding="utf-8")
+
+            update_wiki.write_success_report(project, skipped_steps=["raw_sync"])
+
+            latest = json.loads((report_dir / "latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(latest["status"], "ok")
+            self.assertNotIn("failed_step", latest)
+            self.assertEqual(latest["skipped_steps"], ["raw_sync"])
+            self.assertIn("Status: `ok`", (report_dir / "latest.md").read_text(encoding="utf-8"))
+
     def test_rss_sync_enabled_defaults_on_and_respects_false_manifest_flag(self):
         import tempfile
 
@@ -247,6 +266,43 @@ class UpdateFailureReportTest(unittest.TestCase):
 
             self.assertIn("--updated-since", commands[0])
             self.assertIn("2026-01-01", commands[0])
+
+    def test_confluence_sync_allows_interactive_auth_by_default(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            exporter = project / "tools" / "confluence_sync" / "export_obsidian_wiki.py"
+            exporter.parent.mkdir(parents=True)
+            exporter.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            (project / "upstream").mkdir(parents=True)
+            (project / "upstream" / "wiki-sources.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "sources": [
+                            {
+                                "type": "confluence",
+                                "enabled": True,
+                                "source_id": "cwiki-1",
+                                "relationship": {"role": "primary"},
+                                "page_id": "1",
+                                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=1",
+                                "depth": 2,
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            commands = update_wiki.confluence_sync_commands(project)
+
+            self.assertNotIn("--no-cookie-prompt", commands[0])
+            self.assertIn("--auto-cookie-from-sso", commands[0])
 
 
 if __name__ == "__main__":

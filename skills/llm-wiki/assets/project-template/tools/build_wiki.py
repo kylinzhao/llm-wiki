@@ -492,6 +492,13 @@ def build_refinement_plan(
         "allowed_write_paths": sorted(dict.fromkeys(allowed_write_paths)),
         "forbidden_write_paths": ["raw/**", "raw-code/**"],
         "verification": ["tools/check_refinement.py", "tools/health.py --json", "tools/build_graph.py"],
+        "user_next_command": "llm-wiki update" if semantic_update_required else "",
+        "user_next_action": (
+            "Continue `llm-wiki update` to complete source-grounded AI-native refinement, "
+            "record refinement status, then close with health and graph checks."
+            if semantic_update_required
+            else ""
+        ),
     }
 
 
@@ -511,8 +518,9 @@ def update_status(
         "codebases": codebases,
         "stale_source_count": len(stale_sources),
         "orphan_source_page_count": len(orphan_source_pages),
-        "checkpoint": "Run AI-native source refinement next, then health and graph.",
-        "next_action": "Complete first-pass summaries and layered refinement with Codex.",
+        "checkpoint": "Deterministic seed is complete; semantic refinement remains part of llm-wiki update.",
+        "next_command": "llm-wiki update",
+        "next_action": "Continue llm-wiki update for source-grounded AI-native refinement and validation closure.",
     }
     write(project / "staging" / "refinement-status.md", "# Refinement Status\n\n```json\n" + json.dumps(status, ensure_ascii=False, indent=2) + "\n```\n")
     write(project / "staging" / "source-manifest.json", json.dumps({"generated_at": utc_now(), "sources": sources}, ensure_ascii=False, indent=2) + "\n")

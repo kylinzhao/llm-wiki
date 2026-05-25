@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 import yaml
 from agent_rules import refresh_agent_rules
+from gplus_quality import inspect_gplus_quality
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
 
@@ -94,6 +95,60 @@ def write_failure_report(project: Path, failed_step: str, returncode: int, detai
         lines.append(f"- {key}: `{value}`")
     if not details:
         lines.append("- No structured details were available.")
+    (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_success_report(project: Path, skipped_steps: list[str] | None = None) -> None:
+    report_dir = project / "staging" / "update"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    health = read_json_if_present(project / "staging" / "health" / "latest.json")
+    gplus_quality = inspect_gplus_quality(project, health if isinstance(health, dict) else {})
+    payload = {
+        "version": 1,
+        "status": "ok",
+        "generated_at": utc_now(),
+        "skipped_steps": skipped_steps or [],
+        "gplus_quality": gplus_quality,
+    }
+    (report_dir / "latest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    lines = [
+        "# LLM Wiki Update Report",
+        "",
+        "- Status: `ok`",
+        f"- Generated at: `{payload['generated_at']}`",
+        "",
+        "## Skipped Steps",
+        "",
+    ]
+    if skipped_steps:
+        for step in skipped_steps:
+            lines.append(f"- `{step}`")
+    else:
+        lines.append("- None")
+    lines.extend(
+        [
+            "",
+            "## G+ Semantic Quality",
+            "",
+            f"- Status: `{gplus_quality['status']}`",
+            f"- Source pages: `{gplus_quality['metrics']['source_pages']}`",
+            f"- Non-index concept pages: `{gplus_quality['metrics']['non_index_concept_pages']}`",
+            f"- Concept coverage: `{gplus_quality['metrics']['concept_coverage']}`",
+            f"- Manual concept/entity link placeholders: `{gplus_quality['metrics']['manual_link_placeholders']}`",
+            "",
+        ]
+    )
+    if gplus_quality["findings"]:
+        for item in gplus_quality["findings"]:
+            lines.append(f"- `{item['severity']}` `{item['title']}`: {item['detail']}")
+        lines.extend(
+            [
+                "",
+                "Next action: run the Codex-native G+ semantic expansion pass in `llm-wiki update`; do not rebuild `raw/` solely for these findings.",
+            ]
+        )
+    else:
+        lines.append("- No G+ semantic underfit finding from deterministic heuristics.")
     (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -463,13 +518,13 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
             str(metadata_dir),
             "--levels",
             str(int(source.get("depth", 0) or 0)),
-            "--no-cookie-prompt",
         ]
         url = str(source.get("url") or "").strip()
         if not url:
             continue
         command.extend(["--url", url])
         sso_skill_root = os.environ.get("GUAZI_SSO_SKILL_ROOT", "").strip()
+        command.append("--auto-cookie-from-sso")
         if sso_skill_root:
             command.extend(["--sso-skill-root", sso_skill_root])
         updated_since = source_updated_since(source)
@@ -488,10 +543,10 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
             str(project),
             "--metadata-dir",
             metadata_dir,
-            "--no-cookie-prompt",
             "--update",
         ]
         sso_skill_root = os.environ.get("GUAZI_SSO_SKILL_ROOT", "").strip()
+        command.append("--auto-cookie-from-sso")
         if sso_skill_root:
             command.extend(["--sso-skill-root", sso_skill_root])
         updated_since_values = {
@@ -700,6 +755,12 @@ def main() -> int:
     raw_sync_command = args.raw_sync_command.strip()
     no_auto_raw_sync = args.no_auto_raw_sync or os.environ.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
     no_auto_code_sync = args.no_auto_code_sync or os.environ.get("LLM_WIKI_NO_AUTO_CODE_SYNC") == "1"
+    skipped_steps: list[str] = []
+    if no_auto_raw_sync:
+        skipped_steps.append("auto_raw_sync")
+        skipped_steps.append("confluence_sync")
+    if no_auto_code_sync:
+        skipped_steps.append("auto_code_sync")
 
     if not raw_sync_command and not no_auto_raw_sync:
         raw_sync_command = auto_raw_sync_command(project) or ""
@@ -750,6 +811,8 @@ def main() -> int:
             write_failure_report(project, script.stem, code, details)
             if script.name != "health.py":
                 break
+    if exit_code == 0:
+        write_success_report(project, skipped_steps=skipped_steps)
     return exit_code
 
 
