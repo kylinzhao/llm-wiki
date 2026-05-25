@@ -128,14 +128,18 @@ COOKIE_HEADER='从浏览器 DevTools 复制的完整 Cookie' \
 
 ## 5. 关键判断
 
-### 如果只有 raw，没有 BUSINESS_CONTEXT
+### 如果只有 raw，没有有效 BUSINESS_CONTEXT
 
-可以启动，但要明确告诉用户：
+不能启动 0-1 构建。`BUSINESS_CONTEXT.md` 是硬性前置，不是可选增强。先让用户补齐：
 
-- 后续更容易出现实体歧义
-- 建议尽快补业务说明文档
+- 项目与业务边界
+- 关键实体与术语归一
+- 规则、约束、状态机和异常口径
+- 证据来源与冲突优先级
 
-### 如果 raw 和 BUSINESS_CONTEXT 都有
+模板自带的 `BUSINESS_CONTEXT.md` 只是不完整占位；如果仍包含 TODO 或模板提示，也应视为未满足前置条件。
+
+### 如果 raw 和有效 BUSINESS_CONTEXT 都有
 
 就应该把 `BUSINESS_CONTEXT.md` 作为生成基线，而不是等生成出错后再补。
 

@@ -21,6 +21,7 @@ from wiki_preflight import (
 
 REQUIRED_PATHS = [
     "raw",
+    "BUSINESS_CONTEXT.md",
     "wiki/index.md",
     "wiki/overview.md",
     "docs/retrieval-playbook.md",
@@ -55,6 +56,13 @@ IMAGE_VALUE_KEYWORDS = {
     "push": 4,
     "AB": 3,
     "实验": 4,
+}
+BUSINESS_CONTEXT_PLACEHOLDER_MARKERS = {
+    "请在首次构建前补全本文件",
+    "项目名称：TODO",
+    "目标用户/角色：TODO",
+    "核心业务目标：TODO",
+    "实体 A：TODO",
 }
 
 
@@ -224,15 +232,47 @@ def code_intelligence_status(project: Path) -> dict[str, object]:
     return {"detected_codebases": detected, "fallback_only_codebases": fallback_only}
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--project", default=".", help="Project root. Defaults to current directory.")
-    parser.add_argument("--json", action="store_true", help="Print JSON report only.")
-    args = parser.parse_args()
+def business_context_status(project: Path) -> dict[str, object]:
+    path = project / "BUSINESS_CONTEXT.md"
+    if not path.is_file():
+        return {
+            "has_business_context": False,
+            "has_valid_business_context": False,
+            "business_context_status": "missing",
+            "business_context_message": "BUSINESS_CONTEXT.md is required before llm-wiki init/fast/update.",
+        }
+    text = path.read_text(encoding="utf-8", errors="replace").strip()
+    if not text:
+        return {
+            "has_business_context": True,
+            "has_valid_business_context": False,
+            "business_context_status": "empty",
+            "business_context_message": "BUSINESS_CONTEXT.md exists but is empty; fill the business baseline before building.",
+        }
+    if any(marker in text for marker in BUSINESS_CONTEXT_PLACEHOLDER_MARKERS):
+        return {
+            "has_business_context": True,
+            "has_valid_business_context": False,
+            "business_context_status": "template_placeholder",
+            "business_context_message": (
+                "BUSINESS_CONTEXT.md still contains the template placeholder; replace TODOs with the "
+                "project business boundary, canonical entities, rules, and evidence priority before building."
+            ),
+        }
+    return {
+        "has_business_context": True,
+        "has_valid_business_context": True,
+        "business_context_status": "ok",
+        "business_context_message": "",
+    }
 
-    project = Path(args.project).resolve()
+
+def build_report(project: Path) -> dict[str, object]:
+    project = project.resolve()
     missing = [rel for rel in REQUIRED_PATHS if not (project / rel).exists()]
-    has_business_context = (project / "BUSINESS_CONTEXT.md").is_file()
+    business_context = business_context_status(project)
+    if not business_context["has_valid_business_context"] and "BUSINESS_CONTEXT.md" not in missing:
+        missing.append("BUSINESS_CONTEXT.md")
     pages = markdown_pages(project)
     source_pages = sorted((project / "wiki" / "sources").glob("*.md")) if (project / "wiki" / "sources").is_dir() else []
     drift_path = project / "staging" / "source-drift.json"
@@ -304,6 +344,11 @@ def main() -> int:
         recommended_actions.append(
             "Run `llm-wiki image` for selective high-value image evidence after confirming the text layer is complete; do not batch-analyze low-value screenshots by default."
         )
+    if not business_context["has_valid_business_context"]:
+        recommended_actions.insert(
+            0,
+            "Complete BUSINESS_CONTEXT.md with the project business baseline, canonical entities, rules, and evidence priority before running `llm-wiki init`, `llm-wiki fast`, or `llm-wiki update`.",
+        )
 
     code_intelligence = code_intelligence_status(project)
     wiki_built = (project / "wiki" / "index.md").is_file()
@@ -317,7 +362,10 @@ def main() -> int:
         "project": str(project),
         "ok": ok,
         "status": "pass" if ok else "fail",
-        "has_business_context": has_business_context,
+        "has_business_context": business_context["has_business_context"],
+        "has_valid_business_context": business_context["has_valid_business_context"],
+        "business_context_status": business_context["business_context_status"],
+        "business_context_message": business_context["business_context_message"],
         "missing_required_paths": missing,
         "wiki_pages": len(pages),
         "source_pages": len(source_pages),
@@ -343,6 +391,17 @@ def main() -> int:
         "recommended_actions": recommended_actions,
         "query_may_work_without_full_evidence": query_may_work_without_full_evidence,
     }
+    return report
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--project", default=".", help="Project root. Defaults to current directory.")
+    parser.add_argument("--json", action="store_true", help="Print JSON report only.")
+    args = parser.parse_args()
+
+    project = Path(args.project).resolve()
+    report = build_report(project)
 
     out = project / "staging" / "health" / "latest.json"
     out.parent.mkdir(parents=True, exist_ok=True)

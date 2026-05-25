@@ -84,7 +84,8 @@ Default behavior:
 
 Stop only when:
 
-- `raw/` or `BUSINESS_CONTEXT.md` is missing.
+- `raw/` is missing.
+- `BUSINESS_CONTEXT.md` is missing, empty, or still contains the bundled TODO placeholder.
 - canonical entity rules need business confirmation.
 - generated output would overwrite existing manual or refined wiki content.
 - secrets or sensitive configs would be exposed.

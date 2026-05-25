@@ -280,7 +280,7 @@ def create_docs(project: Path) -> None:
         project / "docs" / "retrieval-playbook.md",
         """# Retrieval Playbook
 
-1. Read `BUSINESS_CONTEXT.md` first when present.
+1. Read `BUSINESS_CONTEXT.md` first. It is required before init/fast/update and must not be the bundled TODO placeholder.
 2. Identify the query type.
 3. Check `wiki/overview.md`, then the relevant layered pages.
 4. Expand through `wiki/concepts/` and `wiki/entities/`.

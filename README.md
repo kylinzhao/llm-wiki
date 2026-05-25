@@ -242,7 +242,7 @@ cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
 从一个全新项目开始，推荐顺序是：
 
 1. 准备 `raw/`
-2. 准备 `BUSINESS_CONTEXT.md`
+2. 准备有效的 `BUSINESS_CONTEXT.md`。这是硬性前置；模板 TODO 占位文件不算有效输入。
 3. 初始化 `wiki/graph/staging/docs/tools`
 4. 运行确定性构建
 5. 对全量语料完成首轮大模型 summary 和 AI-native 文本精修

@@ -39,6 +39,8 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `raw/`
 - `BUSINESS_CONTEXT.md`
 
+`BUSINESS_CONTEXT.md` 是 0-1 构建、`fast`、`init` 和 `update` 的硬性前置。模板自带的 TODO 占位文件不算有效业务上下文；如果缺失、为空或仍是占位内容，必须先提醒用户补齐业务边界、规范实体、规则约束和证据优先级，再继续构建。
+
 若仓库**只提交了构建后的 `wiki/`**，而 `raw/` / `raw-code/` 由单独流程同步：先读 `staging/health/latest.json` 的 `evidence_gaps` / `recommended_actions`。当工具报 `missing_raw_evidence` 或 `missing_raw_code_evidence` 时，**主动提示用户**拉取原始证据后再执行 `update`；新代码库接入才使用 `add-code`，不要假装可以完整重建。只读 `query` / `doctor` 仍可按 `references/commands.md` 的 Evidence preflight 规则进行。
 
 如果项目根目录存在 `raw-code/`：

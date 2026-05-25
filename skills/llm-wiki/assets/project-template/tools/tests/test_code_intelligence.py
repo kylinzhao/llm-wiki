@@ -148,6 +148,13 @@ class ScanAndHealthIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / "raw").mkdir()
+            (project / "BUSINESS_CONTEXT.md").write_text(
+                "# BUSINESS_CONTEXT\n\n"
+                "项目与业务边界：代码能力测试项目。\n\n"
+                "关键实体：测试 codebase。\n\n"
+                "规则与约束：健康检查需识别上游代码智能状态。\n",
+                encoding="utf-8",
+            )
             (project / "wiki").mkdir(parents=True)
             (project / "wiki" / "index.md").write_text("# index\n", encoding="utf-8")
             (project / "wiki" / "overview.md").write_text("# overview\n", encoding="utf-8")
