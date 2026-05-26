@@ -25,7 +25,7 @@ def run_git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedPro
 
 
 def slugify_codebase_id(name: str) -> str:
-    text = "".join(ch.lower() if ch.isalnum() else "-" for ch in name.strip())
+    text = "".join(ch.lower() if ch.isalnum() or ch == "_" else "-" for ch in name.strip())
     while "--" in text:
         text = text.replace("--", "-")
     return text.strip("-") or "codebase"

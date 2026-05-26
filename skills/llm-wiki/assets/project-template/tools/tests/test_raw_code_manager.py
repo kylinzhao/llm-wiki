@@ -112,6 +112,11 @@ class ManagedRawCodeTests(unittest.TestCase):
             self.assertIn("default_branch: main", content)
             self.assertIn("managed: true", content)
 
+    def test_derive_codebase_id_preserves_existing_underscore_names(self):
+        manager = load_raw_code_manager()
+
+        self.assertEqual(manager.derive_codebase_id("https://git.example.com/team/sell_car_miniprogram.git"), "sell_car_miniprogram")
+
 
 if __name__ == "__main__":
     unittest.main()
