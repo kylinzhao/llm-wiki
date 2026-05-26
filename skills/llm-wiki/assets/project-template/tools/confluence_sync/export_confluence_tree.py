@@ -118,19 +118,9 @@ def cookie_refresh_help(reason: str) -> str:
             "The llm-wiki skill does not upload credentials or write them into the KB project; persistent SSO values live only on this computer in ~/.llm-wiki/guazi-sso.env.",
             "guazi-sso-login exchanges those credentials for a local Cookie/login cache and reuses it until it expires.",
             "",
-            "Terminal setup: copy the whole block into your terminal and run it as-is. Do not replace or edit the English variable names; enter your real Guazi username, password, and phone only when the terminal asks.",
-            "  read -r -p \"请输入瓜子用户名: \" GUAZI_SSO_USER_NAME",
-            "  read -r -s -p \"请输入瓜子密码（输入时不会显示）: \" GUAZI_SSO_PASSWORD; echo",
-            "  read -r -p \"请输入手机号: \" GUAZI_SSO_APPLY_PHONE",
-            "  mkdir -p ~/.llm-wiki && chmod 700 ~/.llm-wiki",
-            "  umask 077",
-            "  cat > ~/.llm-wiki/guazi-sso.env <<EOF",
-            "GUAZI_SSO_USER_NAME=$GUAZI_SSO_USER_NAME",
-            "GUAZI_SSO_PASSWORD=$GUAZI_SSO_PASSWORD",
-            "GUAZI_SSO_APPLY_PHONE=$GUAZI_SSO_APPLY_PHONE",
-            "EOF",
+            "Terminal setup: run `bash tools/confluence_sync/init_auth_env.sh` from the KB project root, then retry the sync.",
+            "If the project template is not installed yet, run `bash ${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/init_auth_env.sh`.",
             "",
-            "Agent-window fallback: provide Guazi username, password, and phone; the agent will write them to ~/.llm-wiki/guazi-sso.env for local reuse.",
             "COOKIE_HEADER is still supported as a one-off emergency credential, but it is not the recommended path.",
             "Do not commit credentials or paste them into project files.",
         ]
@@ -183,10 +173,7 @@ def load_json(path: Path, default: Any) -> Any:
 def sso_env_setup_help() -> str:
     return "\n".join(
         [
-            "To enable auto-login, register SSO credentials in ~/.llm-wiki/guazi-sso.env or export them in the current environment:",
-            "  GUAZI_SSO_USER_NAME='<userName>'",
-            "  GUAZI_SSO_PASSWORD='<password>'",
-            "  GUAZI_SSO_APPLY_PHONE='<applyPhone>'",
+            "To enable auto-login, run `bash tools/confluence_sync/init_auth_env.sh` or export SSO credentials in the current environment:",
             "Optional for Jira CHDSSO auto-refresh:",
             "  export GUAZI_CHDSSO_TEST_PHONE='<phone>'",
             "  export GUAZI_CHDSSO_TEST_CODE='<code>'",

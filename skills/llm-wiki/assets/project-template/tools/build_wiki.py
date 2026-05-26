@@ -139,32 +139,32 @@ def read_json(path: Path) -> object:
 def source_page(source: dict[str, object]) -> str:
     return f"""# {source['title']}
 
-> Deterministic seed page. Codex must replace pending sections with source-grounded summary and AI-native refinement.
+> 确定性种子页。Codex 需要基于原始证据补全摘要、关键事实和 AI 原生精修内容。
 
-## Source
+## 来源
 
-- Raw path: `{source['raw_path']}`
+- 原始路径: `{source['raw_path']}`
 - SHA-256: `{source['sha256']}`
-- Size: `{source['size_bytes']}` bytes
-- Modified: `{source['mtime']}`
+- 大小: `{source['size_bytes']}` bytes
+- 修改时间: `{source['mtime']}`
 
-## Summary
+## 摘要
 
-Pending AI-native summary.
+待完成 AI 原生摘要。
 
-## Key Facts
+## 关键事实
 
-- Pending extraction from source evidence.
+- 待从来源证据中提取。
 
-## Business Links
+## 业务链接
 
-- Concepts: pending
-- Entities: pending
-- Related layered pages: pending
+- 概念: 待补充
+- 实体: 待补充
+- 相关分层页面: 待补充
 
-## Evidence Notes
+## 证据说明
 
-Use this page as a source evidence node. Do not copy sensitive values from raw materials.
+本页作为来源证据节点使用。不要把原始材料中的敏感值复制到 wiki 正文。
 """
 
 
@@ -172,33 +172,33 @@ def index_page(sources: list[dict[str, object]], codebases: list[str]) -> str:
     source_lines = "\n".join(
         f"- [[sources/{source['slug']}|{source['title']}]]"
         for source in sources
-    ) or "- No source pages discovered yet."
+    ) or "- 尚未发现来源页面。"
     code_lines = "\n".join(
         f"- [[code/codebases/{codebase}/index|{codebase}]]"
         for codebase in codebases
-    ) or "- No raw-code codebases discovered."
+    ) or "- 尚未发现 raw-code 代码库。"
     return f"""# LLM Wiki
 
-Generated: {utc_now()}
+生成时间: {utc_now()}
 
-## Entry Points
+## 入口
 
-- [[overview|Overview]]
-- [[concepts/index|Concepts]]
-- [[entities/index|Entities]]
-- [[truth/index|Truth]]
-- [[conflicts/index|Conflicts]]
-- [[evidence/index|Evidence]]
-- [[proposals/index|Proposals]]
-- [[reference/index|Reference]]
-- [[operations/index|Operations]]
-- [[code/index|Code Wiki]]
+- [[overview|总览]]
+- [[concepts/index|概念]]
+- [[entities/index|实体]]
+- [[truth/index|事实]]
+- [[conflicts/index|冲突]]
+- [[evidence/index|证据]]
+- [[proposals/index|方案]]
+- [[reference/index|参考]]
+- [[operations/index|运营]]
+- [[code/index|代码 Wiki]]
 
-## Sources
+## 来源
 
 {source_lines}
 
-## Codebases
+## 代码库
 
 {code_lines}
 """
@@ -211,52 +211,52 @@ def simple_page(title: str, body: str) -> str:
 def create_layer_pages(project: Path) -> None:
     pages = {
         "wiki/overview.md": (
-            "Overview",
-            "Pending synthesis from `BUSINESS_CONTEXT.md`, `wiki/sources/`, and optional `wiki/code/` evidence.",
+            "总览",
+            "待基于 `BUSINESS_CONTEXT.md`、`wiki/sources/` 和可选的 `wiki/code/` 证据完成综合梳理。",
         ),
         "wiki/concepts/index.md": (
-            "Concepts",
-            "Canonical business concepts go here after AI-native refinement.",
+            "概念",
+            "AI 原生精修后，在这里沉淀规范业务概念。",
         ),
         "wiki/entities/index.md": (
-            "Entities",
-            "Canonical entities, aliases, and conflicts go here.",
+            "实体",
+            "在这里沉淀规范实体、别名和冲突口径。",
         ),
         "wiki/truth/index.md": (
-            "Truth",
-            "Stable cross-source truths go here.",
+            "事实",
+            "在这里沉淀跨来源稳定事实。",
         ),
         "wiki/conflicts/index.md": (
-            "Conflicts",
-            "Conflicting requirements, terminology, and unresolved business calls go here.",
+            "冲突",
+            "在这里记录冲突需求、冲突术语和待确认业务口径。",
         ),
         "wiki/evidence/index.md": (
-            "Evidence",
-            "High-value evidence indexes go here.",
+            "证据",
+            "在这里建立高价值证据索引。",
         ),
         "wiki/proposals/index.md": (
-            "Proposals",
-            "Product, process, or implementation proposals go here.",
+            "方案",
+            "在这里沉淀产品、流程或实现方案建议。",
         ),
         "wiki/reference/index.md": (
-            "Reference",
-            "Stable reference material, glossaries, and external boundaries go here.",
+            "参考",
+            "在这里沉淀稳定参考资料、术语表和外部边界。",
         ),
         "wiki/operations/index.md": (
-            "Operations",
-            "SOPs, operating procedures, runbooks, and support flows go here.",
+            "运营",
+            "在这里沉淀 SOP、操作流程、运行手册和支持流程。",
         ),
         "wiki/code/index.md": (
-            "Code Wiki",
-            "Codebase facts, capability pages, and traceability matrices live under this directory.",
+            "代码 Wiki",
+            "这里承载代码库事实、能力页和需求到代码追踪矩阵。",
         ),
         "wiki/code/capabilities/index.md": (
-            "Code Capabilities",
-            "Cross-layer business capability implementation pages go here.",
+            "代码能力",
+            "在这里沉淀跨层业务能力实现页。",
         ),
         "wiki/code/traceability/index.md": (
-            "Traceability",
-            "Requirement-to-code traceability matrices go here.",
+            "追踪矩阵",
+            "在这里沉淀需求到代码的可审计追踪矩阵。",
         ),
     }
     for rel, (title, body) in pages.items():
@@ -269,8 +269,8 @@ def create_codebase_pages(project: Path, codebases: list[str]) -> None:
         write_if_missing(
             path,
             simple_page(
-                f"Codebase: {codebase}",
-                "Pending code scan. Record stack, entry points, module boundaries, APIs, services, jobs, data access, and evidence gaps.",
+                f"代码库: {codebase}",
+                "待完成代码扫描。在这里记录技术栈、入口、模块边界、API、服务、任务、数据访问和证据缺口。",
             ),
         )
 
@@ -278,22 +278,22 @@ def create_codebase_pages(project: Path, codebases: list[str]) -> None:
 def create_docs(project: Path) -> None:
     write_if_missing(
         project / "docs" / "retrieval-playbook.md",
-        """# Retrieval Playbook
+        """# 检索手册
 
-1. Read `BUSINESS_CONTEXT.md` first. It is required before init/fast/update and must not be the bundled TODO placeholder.
-2. Identify the query type.
-3. Check `wiki/overview.md`, then the relevant layered pages.
-4. Expand through `wiki/concepts/` and `wiki/entities/`.
-5. Use `wiki/sources/` for requirement evidence.
-6. Use `wiki/code/` only for code implementation evidence.
-7. Separate requirement proof, code proof, inference, and missing evidence.
+1. 先读取 `BUSINESS_CONTEXT.md`。它是 init/fast/update 的硬性前置，不能是模板 TODO 占位。
+2. 判断问题类型。
+3. 先查 `wiki/overview.md`，再查相关分层页面。
+4. 通过 `wiki/concepts/` 和 `wiki/entities/` 扩展检索。
+5. 使用 `wiki/sources/` 作为需求证据。
+6. 只有回答代码实现证据时才使用 `wiki/code/`。
+7. 明确区分需求证据、代码证据、推断和缺失证据。
 """,
     )
     write_if_missing(
         project / "docs" / "build-and-maintenance.md",
-        """# Build And Maintenance
+        """# 构建与维护
 
-Standard deterministic commands:
+标准确定性命令：
 
 ```bash
 uv run python tools/build_wiki.py
@@ -304,43 +304,43 @@ uv run python tools/build_graph.py
 uv run python tools/anchor_check.py
 ```
 
-Use Codex-native work for summaries, entity normalization, source refinement, capability judgment, and traceability reasoning.
-Local scripts only scan, seed, validate, and build graph files.
+摘要、实体归一、来源精修、能力判断和追踪推理由 Codex 原生完成。
+本地脚本只负责扫描、生成种子页、校验和构建图谱文件。
 """,
     )
     write_if_missing(
         project / "docs" / "tooling-dependencies.md",
-        """# Tooling Dependencies
+        """# 工具依赖
 
-Required:
+必需：
 
 - Python 3.10+
 - `uv`
 
-Optional:
+可选：
 
-- `graphify` for code graph extraction when `raw-code/` exists.
+- 当存在 `raw-code/` 时，可使用 `graphify` 提取代码图谱。
 
-The bundled Python scripts use the standard library only and do not call local model SDKs.
+随模板提供的 Python 脚本只做确定性处理，不调用本地模型 SDK。
 """,
     )
     write_if_missing(
         project / "docs" / "implementation-workflow.md",
-        """# Implementation Workflow
+        """# 实施流程
 
-Run:
+执行：
 
 ```bash
 uv run python tools/update_wiki.py
 ```
 
-If `raw-code/` exists and graphify is available:
+如果存在 `raw-code/` 且 graphify 可用：
 
 ```bash
 uv run python tools/update_wiki.py --graphify
 ```
 
-After deterministic seeding, use Codex to complete source summaries, layered pages, concepts, entities, capabilities, and traceability evidence strength.
+确定性种子页生成后，使用 Codex 完成来源摘要、分层页面、概念、实体、能力页和追踪证据强度判断。
 """,
     )
 
@@ -426,7 +426,7 @@ def is_refreshable_seed_source_page(path: Path) -> bool:
     if not path.is_file():
         return False
     text = path.read_text(encoding="utf-8", errors="replace")
-    return "Deterministic seed page." in text
+    return "Deterministic seed page." in text or "确定性种子页。" in text
 
 
 def source_refinement_state(path: Path) -> str:
@@ -437,7 +437,12 @@ def source_refinement_state(path: Path) -> str:
     state = metadata.get("ai_refinement_state") if isinstance(metadata, dict) else None
     if isinstance(state, str) and state.strip():
         return state.strip()
-    if "Pending AI-native summary" in text or "Deterministic seed page." in text:
+    if (
+        "Pending AI-native summary" in text
+        or "Deterministic seed page." in text
+        or "待完成 AI 原生摘要" in text
+        or "确定性种子页。" in text
+    ):
         return "pending"
     return "applied"
 

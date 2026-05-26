@@ -42,21 +42,10 @@ uv run python tools/update_wiki.py --graphify
 
 ## Cwiki Authentication
 
-When Cwiki upstream sync needs authentication, prefer the bundled `guazi-sso-login` flow over manually pasting `COOKIE_HEADER`. The user provides Guazi username, password, phone, and preferably a Jira token. The local SSO flow exchanges the Guazi credentials for a local Cwiki Cookie/login cache and reuses it until it expires. Jira issue reading should use `JIRA_TOKEN`; CHDSSO is only a fallback when no Jira token is available. Fastest path: ask the user to provide the values in the agent window; write them to the local env file and continue update. Terminal alternative: ask the user to copy the full block below into a terminal and run it as-is. Tell the user clearly: do not replace or edit the English variable names in the script; after running it, enter the real Guazi username, password, phone, and Jira token when the terminal prompts for them, then return to the agent.
+When Cwiki upstream sync needs authentication, prefer the bundled `guazi-sso-login` flow over manually pasting `COOKIE_HEADER`. Ask the user to run the built-in setup script in a terminal, then return to the agent and continue update:
 
 ```bash
-read -r -p "请输入瓜子用户名: " GUAZI_SSO_USER_NAME
-read -r -s -p "请输入瓜子密码（输入时不会显示）: " GUAZI_SSO_PASSWORD; echo
-read -r -p "请输入手机号: " GUAZI_SSO_APPLY_PHONE
-read -r -s -p "请输入 Jira 令牌（输入时不会显示，没有可直接回车）: " JIRA_TOKEN; echo
-mkdir -p ~/.llm-wiki && chmod 700 ~/.llm-wiki
-umask 077
-cat > ~/.llm-wiki/guazi-sso.env <<EOF
-GUAZI_SSO_USER_NAME=$GUAZI_SSO_USER_NAME
-GUAZI_SSO_PASSWORD=$GUAZI_SSO_PASSWORD
-GUAZI_SSO_APPLY_PHONE=$GUAZI_SSO_APPLY_PHONE
-JIRA_TOKEN=$JIRA_TOKEN
-EOF
+bash tools/confluence_sync/init_auth_env.sh
 ```
 
-The llm-wiki skill does not upload usernames, passwords, phone numbers, Jira tokens, Cookies, or tokens, and does not write them into the KB project. Persistent auth values are stored only on the user's computer in `~/.llm-wiki/guazi-sso.env` and loaded by future local updates. If secrets are typed into an agent chat window, they may enter the current agent session context or local session history depending on the engine. If the user chooses chat input, ask for username, password, phone, and optional Jira token only; do not ask for internal skill paths. A full `COOKIE_HEADER` is only a lower-priority one-off fallback.
+The script prompts for Guazi username, password, phone, and optional Jira token, writes them only to `~/.llm-wiki/guazi-sso.env` with user-only permissions, and does not write secrets into the KB project. The local SSO flow exchanges the credentials for a local Cwiki Cookie/login cache and reuses it until it expires. Jira issue reading should use `JIRA_TOKEN`; CHDSSO is only a fallback when no Jira token is available. If secrets are typed into an agent chat window, they may enter the current agent session context or local session history depending on the engine. A full `COOKIE_HEADER` is only a lower-priority one-off fallback.

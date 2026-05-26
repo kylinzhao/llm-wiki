@@ -60,9 +60,9 @@ class RefinementPlanTest(unittest.TestCase):
             source_page = project / "wiki" / "sources" / "product-index.md"
             source_page.write_text(
                 source_page.read_text(encoding="utf-8")
-                .replace("Pending AI-native summary.", "The product rule is grounded in raw/product/index.md.")
-                .replace("Pending extraction from source evidence.", "Product fact: A source fact.")
-                .replace("Deterministic seed page.", "AI refined page."),
+                .replace("待完成 AI 原生摘要。", "The product rule is grounded in raw/product/index.md.")
+                .replace("待从来源证据中提取。", "Product fact: A source fact.")
+                .replace("确定性种子页。", "AI refined page."),
                 encoding="utf-8",
             )
             (project / "staging" / "refinement-status.md").write_text(

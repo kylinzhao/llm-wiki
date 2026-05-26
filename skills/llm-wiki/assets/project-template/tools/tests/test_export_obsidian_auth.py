@@ -48,7 +48,7 @@ class ExportObsidianAuthTest(unittest.TestCase):
         self.assertEqual(args.jira_token, "jira-token-123")
         self.assertIn("does not upload your username", stderr.getvalue())
         self.assertIn("agent chat window", stderr.getvalue())
-        self.assertIn("直接在这里回复瓜子用户名、密码、手机号、Jira 令牌", stderr.getvalue())
+        self.assertIn("bash tools/confluence_sync/init_auth_env.sh", stderr.getvalue())
         self.assertNotIn("GUAZI_SSO_SKILL_ROOT", stderr.getvalue())
         self.assertNotIn("/path/to/guazi-sso-login", stderr.getvalue())
 

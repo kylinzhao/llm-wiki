@@ -18,6 +18,29 @@ def load_build_wiki():
 
 
 class SourceV2BuildWikiTest(unittest.TestCase):
+    def test_new_project_seed_pages_are_chinese_first(self):
+        import tempfile
+
+        build_wiki = load_build_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            raw_page = tmp_path / "raw" / "product" / "index.md"
+            raw_page.parent.mkdir(parents=True)
+            raw_page.write_text("# 产品说明\n\n这是原始证据。\n", encoding="utf-8")
+
+            build_wiki.main_for_project(tmp_path)
+
+            overview = (tmp_path / "wiki" / "overview.md").read_text(encoding="utf-8")
+            playbook = (tmp_path / "docs" / "retrieval-playbook.md").read_text(encoding="utf-8")
+            source = (tmp_path / "wiki" / "sources" / "product-index.md").read_text(encoding="utf-8")
+
+        self.assertIn("# 总览", overview)
+        self.assertIn("待基于", overview)
+        self.assertIn("# 检索手册", playbook)
+        self.assertIn("先读取 `BUSINESS_CONTEXT.md`", playbook)
+        self.assertIn("## 来源", source)
+        self.assertIn("待完成 AI 原生摘要", source)
+
     def test_source_v2_prefix_hash_matches_full_raw_sha_and_legacy_slug_is_not_orphan(self):
         import tempfile
 

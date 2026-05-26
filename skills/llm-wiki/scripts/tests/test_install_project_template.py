@@ -61,12 +61,33 @@ class InstallProjectTemplateTest(unittest.TestCase):
 
         self.assertEqual(status, "updated")
         self.assertIn("## Cwiki Authentication", text)
-        self.assertIn("provides Guazi username, password, phone", text)
+        self.assertIn("bash tools/confluence_sync/init_auth_env.sh", text)
         self.assertIn("JIRA_TOKEN", text)
         self.assertNotIn("directory containing run.sh", text)
+        self.assertNotIn("read -r -p", text)
         self.assertIn("## Other", text)
         self.assertNotIn("export COOKIE_HEADER='...'", text)
         self.assertNotIn("import_cwiki_raw.sh", text)
+
+    def test_project_template_installs_auth_init_script(self):
+        installer = load_installer()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            stdout = io.StringIO()
+            original_argv = sys.argv
+            try:
+                sys.argv = [str(SCRIPT), "--project", str(project)]
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(installer.main(), 0)
+            finally:
+                sys.argv = original_argv
+
+            script = project / "tools" / "confluence_sync" / "init_auth_env.sh"
+            text = script.read_text(encoding="utf-8")
+            self.assertTrue(script.is_file())
+            self.assertIn("#!/usr/bin/env bash", text)
+            self.assertIn("GUAZI_SSO_USER_NAME", text)
+            self.assertIn(".llm-wiki/guazi-sso.env", text)
 
     def test_main_recommends_llm_wiki_commands_not_internal_script_chain(self):
         installer = load_installer()
