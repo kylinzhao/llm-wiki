@@ -173,6 +173,30 @@ class CjiraRegistryPersistenceTest(unittest.TestCase):
             self.assertEqual(len(archive_payload["records"]), 1)
             self.assertEqual(archive_payload["records"][0]["doc_status"], "frozen")
 
+    def test_shipped_primary_issue_moves_page_to_archive(self):
+        registry = load_cjira_registry()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            sources = [
+                {
+                    "title": "8.动销平台_自营政策调价",
+                    "raw_path": "raw/product/index.md",
+                    "text": "| 修改内容 | cjira |\n| --- | --- |\n| 调价 | PSP-40038 |",
+                }
+            ]
+            status_by_key = {
+                "PSP-40038": {"status": "已上线", "terminal": registry.is_terminal_status("已上线")},
+            }
+
+            registry.update_registry_for_sources(project, sources, refresh_status=True, status_by_key=status_by_key)
+
+            active_payload = json.loads((project / "staging" / "cjira-registry" / "active.json").read_text(encoding="utf-8"))
+            archive_payload = json.loads((project / "staging" / "cjira-registry" / "archive.json").read_text(encoding="utf-8"))
+            self.assertEqual(active_payload["records"], [])
+            self.assertEqual(len(archive_payload["records"]), 1)
+            self.assertEqual(archive_payload["records"][0]["primary_cjira_status"], "已上线")
+            self.assertEqual(archive_payload["records"][0]["doc_status"], "frozen")
+
     def test_archive_writes_happen_before_active_pruning(self):
         registry = load_cjira_registry()
         with tempfile.TemporaryDirectory() as tmp:
@@ -256,6 +280,68 @@ class CjiraRegistryPersistenceTest(unittest.TestCase):
             self.assertNotIn("WX20240814-152731", cache_payload)
             self.assertIn("PSP-40038", cache_payload)
 
+    def test_refresh_backfills_live_status_into_existing_source_page(self):
+        registry = load_cjira_registry()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            raw_page = project / "raw" / "product" / "index.md"
+            raw_page.parent.mkdir(parents=True)
+            raw_page.write_text(
+                "---\n"
+                "title: '8.动销平台_自营政策调价'\n"
+                "page_id: '665758297'\n"
+                "---\n\n"
+                "# 8.动销平台_自营政策调价\n\n"
+                '<a href="https://cjira.guazi-corp.com/browse/PSP-40038">PSP-40038</a>\n',
+                encoding="utf-8",
+            )
+            source_page = project / "wiki" / "sources" / "product-index.md"
+            source_page.parent.mkdir(parents=True)
+            source_page.write_text(
+                """# 8.动销平台_自营政策调价
+
+## Delivery Tracking
+
+- Primary Jira: `PSP-40038`
+- Supporting Jira: `none`
+- Jira Status: ``
+- Last Checked: ``
+- Confidence: `high`
+
+## Source Metadata
+```json
+{
+  "raw_hash": "placeholder",
+  "raw_rel": "raw/product/index.md",
+  "primary_cjira": "PSP-40038",
+  "primary_cjira_status": "",
+  "last_checked_at": "",
+  "ai_refinement_state": "complete"
+}
+```
+""",
+                encoding="utf-8",
+            )
+
+            registry.update_registry_for_sources(
+                project,
+                [registry.read_source_file(raw_page, project)],
+                refresh_status=True,
+                status_by_key={
+                    "PSP-40038": {
+                        "issue_key": "PSP-40038",
+                        "status": "开发中",
+                        "terminal": False,
+                        "last_checked_at": "2026-05-26T12:34:00+00:00",
+                    }
+                },
+            )
+
+            source_text = source_page.read_text(encoding="utf-8")
+            self.assertIn("- Jira Status: `开发中`", source_text)
+            self.assertIn("- Last Checked: `2026-05-26T12:34:00+00:00`", source_text)
+            self.assertIn('"primary_cjira_status": "开发中"', source_text)
+
 
 class CjiraRegistryStatusRefreshTest(unittest.TestCase):
     def test_fetch_jira_status_calls_issue_api_and_reads_status_name(self):
@@ -284,7 +370,7 @@ class CjiraRegistryStatusRefreshTest(unittest.TestCase):
     def test_terminal_statuses_are_classified(self):
         registry = load_cjira_registry()
 
-        for status in ("Done", "Closed", "Resolved", "已完成", "已关闭", "已解决"):
+        for status in ("Done", "Closed", "Resolved", "已完成", "已关闭", "已解决", "已上线"):
             self.assertTrue(registry.is_terminal_status(status), status)
 
     def test_lookup_failure_records_stale_cache_and_keeps_record_active(self):

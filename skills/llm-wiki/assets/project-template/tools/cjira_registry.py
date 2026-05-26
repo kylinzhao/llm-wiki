@@ -35,6 +35,7 @@ DEFAULT_TERMINAL_STATUSES = {
     "closed",
     "resolved",
     "已完成",
+    "已上线",
     "已关闭",
     "已解决",
 }
@@ -256,6 +257,86 @@ def write_registry(
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def source_page_path_for(project: Path, raw_path: str) -> Path | None:
+    source_dir = project / "wiki" / "sources"
+    if not source_dir.is_dir():
+        return None
+    for path in source_dir.glob("*.md"):
+        if path.name == "index.md" or not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        match = re.search(r"## Source Metadata\s*```json\s*(\{.*?\})\s*```", text, re.S)
+        if match:
+            try:
+                payload = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                payload = {}
+            raw_rel = payload.get("raw_rel") if isinstance(payload, dict) else None
+            if isinstance(raw_rel, str) and raw_rel.strip() == raw_path:
+                return path
+        raw_match = re.search(r"(?:Raw path|原始路径):\s*`([^`]+)`", text)
+        if raw_match and raw_match.group(1).strip() == raw_path:
+            return path
+    return None
+
+
+def _replace_or_insert_section(text: str, heading: str, block: str, *, before_headings: tuple[str, ...] = ()) -> str:
+    pattern = re.compile(rf"(?ms)^## {re.escape(heading)}\n.*?(?=^## |\Z)")
+    replacement = block.rstrip() + "\n\n"
+    if pattern.search(text):
+        return pattern.sub(replacement, text, count=1)
+    for marker in before_headings:
+        needle = f"## {marker}"
+        idx = text.find(needle)
+        if idx != -1:
+            return text[:idx].rstrip() + "\n\n" + replacement + text[idx:]
+    return text.rstrip() + "\n\n" + replacement
+
+
+def sync_record_to_source_page(project: Path, record: dict[str, object]) -> None:
+    raw_path = str(record.get("page_path") or "")
+    if not raw_path:
+        return
+    page = source_page_path_for(project, raw_path)
+    if page is None or not page.is_file():
+        return
+    text = page.read_text(encoding="utf-8", errors="replace")
+    supporting = ", ".join(f"`{key}`" for key in (record.get("supporting_cjira") or [])) or "`none`"
+    delivery_block = (
+        "## Delivery Tracking\n\n"
+        f"- Primary Jira: `{str(record.get('primary_cjira') or 'none')}`\n"
+        f"- Supporting Jira: {supporting}\n"
+        f"- Jira Status: `{str(record.get('primary_cjira_status') or '')}`\n"
+        f"- Last Checked: `{str(record.get('last_checked_at') or '')}`\n"
+        f"- Confidence: `{str(record.get('confidence') or 'high')}`\n"
+    )
+    text = _replace_or_insert_section(text, "Delivery Tracking", delivery_block, before_headings=("Summary", "摘要"))
+
+    metadata_match = re.search(r"## Source Metadata\s*```json\s*(\{.*?\})\s*```", text, re.S)
+    metadata: dict[str, object] = {}
+    if metadata_match:
+        try:
+            payload = json.loads(metadata_match.group(1))
+            if isinstance(payload, dict):
+                metadata = dict(payload)
+        except json.JSONDecodeError:
+            metadata = {}
+    metadata.update(
+        {
+            "page_id": str(record.get("page_id") or metadata.get("page_id") or ""),
+            "raw_rel": raw_path,
+            "primary_cjira": str(record.get("primary_cjira") or ""),
+            "supporting_cjira": list(record.get("supporting_cjira") or []),
+            "primary_cjira_status": str(record.get("primary_cjira_status") or ""),
+            "last_checked_at": str(record.get("last_checked_at") or ""),
+            "cjira_confidence": str(record.get("confidence") or "high"),
+        }
+    )
+    metadata_block = "## Source Metadata\n```json\n" + json.dumps(metadata, ensure_ascii=False, indent=2) + "\n```\n"
+    text = _replace_or_insert_section(text, "Source Metadata", metadata_block)
+    page.write_text(text, encoding="utf-8")
+
+
 def _classify_source(source: dict[str, object], project: Path) -> dict[str, object]:
     text = str(source.get("text") or "")
     if not text:
@@ -351,8 +432,10 @@ def update_registry_for_sources(
                 next_archive = [item for item in next_archive if str(item.get("page_path") or "") != record["page_path"]]
             next_archive.append(record)
             archived_paths.add(str(record["page_path"]))
+            sync_record_to_source_page(project, record)
             continue
         next_active.append(record)
+        sync_record_to_source_page(project, record)
 
     referenced_keys = {
         str(record.get("primary_cjira") or "")

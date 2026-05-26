@@ -15,7 +15,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from cjira_registry import update_registry_for_sources
+from cjira_registry import classify_page, update_registry_for_sources
 from wiki_preflight import raw_evidence_preflight_failed
 
 TEXT_EXTENSIONS = {
@@ -137,7 +137,33 @@ def read_json(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def source_page(source: dict[str, object]) -> str:
+def source_cjira_record(source: dict[str, object], project: Path) -> dict[str, object]:
+    raw_path = str(source["raw_path"])
+    raw_file = project / raw_path
+    text = raw_file.read_text(encoding="utf-8", errors="replace") if raw_file.is_file() else ""
+    record = classify_page(str(source["title"]), raw_path, text)
+    page_id_match = re.search(r"^page_id:\s*['\"]?(.*?)['\"]?\s*$", text, re.M)
+    record["page_id"] = page_id_match.group(1).strip() if page_id_match else ""
+    return record
+
+
+def source_page(source: dict[str, object], project: Path) -> str:
+    cjira = source_cjira_record(source, project)
+    source_metadata = {
+        "page_kind": "source",
+        "schema_version": "source-v2",
+        "source_slug": source["slug"],
+        "page_id": cjira["page_id"],
+        "raw_rel": source["raw_path"],
+        "raw_hash": source["sha256"],
+        "primary_cjira": cjira["primary_cjira"],
+        "supporting_cjira": cjira["supporting_cjira"],
+        "primary_cjira_status": cjira["primary_cjira_status"],
+        "last_checked_at": cjira["last_checked_at"],
+        "cjira_confidence": cjira["confidence"],
+        "ai_refinement_state": "pending",
+    }
+    supporting = ", ".join(f"`{key}`" for key in cjira["supporting_cjira"]) or "`none`"
     return f"""# {source['title']}
 
 > 确定性种子页。Codex 需要基于原始证据补全摘要、关键事实和 AI 原生精修内容。
@@ -148,6 +174,14 @@ def source_page(source: dict[str, object]) -> str:
 - SHA-256: `{source['sha256']}`
 - 大小: `{source['size_bytes']}` bytes
 - 修改时间: `{source['mtime']}`
+
+## Delivery Tracking
+
+- Primary Jira: `{cjira['primary_cjira'] or 'none'}`
+- Supporting Jira: {supporting}
+- Jira Status: `{cjira['primary_cjira_status']}`
+- Last Checked: `{cjira['last_checked_at']}`
+- Confidence: `{cjira['confidence']}`
 
 ## 摘要
 
@@ -166,7 +200,77 @@ def source_page(source: dict[str, object]) -> str:
 ## 证据说明
 
 本页作为来源证据节点使用。不要把原始材料中的敏感值复制到 wiki 正文。
+
+## Source Metadata
+```json
+{json.dumps(source_metadata, ensure_ascii=False, indent=2)}
+```
 """
+
+
+def delivery_tracking_block(cjira: dict[str, object]) -> str:
+    supporting = ", ".join(f"`{key}`" for key in cjira["supporting_cjira"]) or "`none`"
+    return (
+        "## Delivery Tracking\n\n"
+        f"- Primary Jira: `{cjira['primary_cjira'] or 'none'}`\n"
+        f"- Supporting Jira: {supporting}\n"
+        f"- Jira Status: `{cjira['primary_cjira_status']}`\n"
+        f"- Last Checked: `{cjira['last_checked_at']}`\n"
+        f"- Confidence: `{cjira['confidence']}`\n"
+    )
+
+
+def source_metadata_payload(
+    source: dict[str, object],
+    cjira: dict[str, object],
+    existing: dict[str, object] | None = None,
+) -> dict[str, object]:
+    metadata = dict(existing or {})
+    metadata.update(
+        {
+            "page_kind": "source",
+            "schema_version": "source-v2",
+            "source_slug": source["slug"],
+            "page_id": cjira["page_id"],
+            "raw_rel": source["raw_path"],
+            "raw_hash": source["sha256"],
+            "primary_cjira": cjira["primary_cjira"],
+            "supporting_cjira": cjira["supporting_cjira"],
+            "primary_cjira_status": cjira["primary_cjira_status"],
+            "last_checked_at": cjira["last_checked_at"],
+            "cjira_confidence": cjira["confidence"],
+            "ai_refinement_state": metadata.get("ai_refinement_state", "pending"),
+        }
+    )
+    return metadata
+
+
+def source_metadata_block(metadata: dict[str, object]) -> str:
+    return "## Source Metadata\n```json\n" + json.dumps(metadata, ensure_ascii=False, indent=2) + "\n```\n"
+
+
+def replace_or_insert_section(text: str, heading: str, block: str, *, before_headings: tuple[str, ...] = ()) -> str:
+    pattern = re.compile(rf"(?ms)^## {re.escape(heading)}\n.*?(?=^## |\Z)")
+    replacement = block.rstrip() + "\n\n"
+    if pattern.search(text):
+        return pattern.sub(replacement, text, count=1)
+    for marker in before_headings:
+        needle = f"## {marker}"
+        idx = text.find(needle)
+        if idx != -1:
+            return text[:idx].rstrip() + "\n\n" + replacement + text[idx:]
+    return text.rstrip() + "\n\n" + replacement
+
+
+def backfill_source_page(path: Path, source: dict[str, object], project: Path) -> None:
+    if not path.is_file():
+        return
+    text = path.read_text(encoding="utf-8", errors="replace")
+    cjira = source_cjira_record(source, project)
+    text = replace_or_insert_section(text, "Delivery Tracking", delivery_tracking_block(cjira), before_headings=("Summary", "摘要"))
+    metadata = source_metadata_payload(source, cjira, source_page_metadata(path))
+    text = replace_or_insert_section(text, "Source Metadata", source_metadata_block(metadata))
+    path.write_text(text, encoding="utf-8")
 
 
 def index_page(sources: list[dict[str, object]], codebases: list[str]) -> str:
@@ -567,10 +671,12 @@ def main_for_project(project: Path) -> int:
         page = project / "wiki" / "sources" / f"{source['slug']}.md"
         maybe_migrate_legacy_source_page(source, page)
         existing_sha = source_page_sha(page)
-        created = write_if_missing(page, source_page(source))
+        created = write_if_missing(page, source_page(source, project))
         if not created and not hash_matches(existing_sha, str(source["sha256"])) and is_refreshable_seed_source_page(page):
-            write(page, source_page(source))
+            write(page, source_page(source, project))
             existing_sha = str(source["sha256"])
+        if page.is_file():
+            backfill_source_page(page, source, project)
         if (
             not created
             and not hash_matches(existing_sha, str(source["sha256"]))

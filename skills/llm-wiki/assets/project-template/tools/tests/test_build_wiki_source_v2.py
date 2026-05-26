@@ -200,6 +200,90 @@ Operational RSS metadata.
             self.assertEqual(active_payload["records"][0]["primary_cjira"], "PSP-40038")
             self.assertEqual(active_payload["records"][0]["doc_status"], "in_progress")
 
+    def test_build_writes_structured_cjira_fields_into_source_page(self):
+        import tempfile
+
+        build_wiki = load_build_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            raw_page = tmp_path / "raw" / "product" / "index.md"
+            raw_page.parent.mkdir(parents=True)
+            raw_page.write_text(
+                "---\n"
+                "title: '8.动销平台_自营政策调价'\n"
+                "page_id: '665758297'\n"
+                "---\n\n"
+                "# 8.动销平台_自营政策调价\n\n"
+                "## Jira\n"
+                "- PSP-40038\n"
+                "- OP-42513\n",
+                encoding="utf-8",
+            )
+
+            build_wiki.main_for_project(tmp_path)
+
+            source_text = (tmp_path / "wiki" / "sources" / "product-index.md").read_text(encoding="utf-8")
+
+            self.assertIn("## Delivery Tracking", source_text)
+            self.assertIn("- Primary Jira: `PSP-40038`", source_text)
+            self.assertIn("- Supporting Jira: `OP-42513`", source_text)
+            self.assertIn("- Jira Status: ``", source_text)
+            self.assertIn("- Last Checked: ``", source_text)
+            self.assertIn("- Confidence: `low`", source_text)
+            self.assertIn('"primary_cjira": "PSP-40038"', source_text)
+            self.assertIn('"supporting_cjira": [', source_text)
+            self.assertIn('"OP-42513"', source_text)
+            self.assertIn('"primary_cjira_status": ""', source_text)
+            self.assertIn('"cjira_confidence": "low"', source_text)
+
+    def test_build_backfills_cjira_fields_into_existing_refined_source_page(self):
+        import tempfile
+
+        build_wiki = load_build_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            raw_page = tmp_path / "raw" / "product" / "index.md"
+            raw_page.parent.mkdir(parents=True)
+            raw_page.write_text(
+                "---\n"
+                "title: '8.动销平台_自营政策调价'\n"
+                "page_id: '665758297'\n"
+                "---\n\n"
+                "# 8.动销平台_自营政策调价\n\n"
+                '<a href="https://cjira.guazi-corp.com/browse/PSP-40038">PSP-40038</a>\n',
+                encoding="utf-8",
+            )
+            source_page = tmp_path / "wiki" / "sources" / "product-index.md"
+            source_page.parent.mkdir(parents=True)
+            source_page.write_text(
+                """# 8.动销平台_自营政策调价
+
+## Source
+- Raw path: `raw/product/index.md`
+
+## Summary
+人工精修摘要。
+
+## Source Metadata
+```json
+{
+  "raw_hash": "placeholder",
+  "raw_rel": "raw/product/index.md",
+  "ai_refinement_state": "complete"
+}
+```
+""",
+                encoding="utf-8",
+            )
+
+            build_wiki.main_for_project(tmp_path)
+
+            source_text = source_page.read_text(encoding="utf-8")
+            self.assertIn("人工精修摘要。", source_text)
+            self.assertIn("## Delivery Tracking", source_text)
+            self.assertIn("- Primary Jira: `PSP-40038`", source_text)
+            self.assertIn('"primary_cjira": "PSP-40038"', source_text)
+
 
 if __name__ == "__main__":
     unittest.main()

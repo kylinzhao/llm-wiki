@@ -92,7 +92,7 @@ def check_project(project: Path) -> int:
             failures.append(f"missing_required_page:{wiki_path}")
             continue
         text = page.read_text(encoding="utf-8", errors="replace")
-        if page_has_pending_markers(text):
+        if page_has_pending_markers(text) and wiki_path not in recorded:
             failures.append(f"pending_required_page:{wiki_path}")
         if isinstance(raw_path, str) and raw_path and raw_path not in text:
             failures.append(f"missing_raw_path_evidence:{wiki_path}")
