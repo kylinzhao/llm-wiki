@@ -365,6 +365,27 @@ def source_updated_since(source: dict[str, object]) -> str:
     return str(filters.get("updated_since") or source.get("updated_since") or "").strip()
 
 
+def has_saved_confluence_progress(metadata_dir: Path, output_dir: Path, page_id: str, depth: int) -> bool:
+    """Return true when an RSS update has a crawl progress state to resume from."""
+    candidates = [
+        metadata_dir / "progress" / f"{page_id}.json",
+        output_dir / "progress" / f"{page_id}.json",
+    ]
+    for candidate in candidates:
+        payload = read_json_if_present(candidate)
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("root_page_id") or "") != str(page_id):
+            continue
+        try:
+            payload_depth = int(payload.get("depth_limit", -1))
+        except (TypeError, ValueError):
+            continue
+        if payload_depth == int(depth):
+            return True
+    return False
+
+
 def normalize_upstream_source(source: dict[str, object], *, default_relationship: str = "additional") -> dict[str, object]:
     normalized = dict(source)
     source_type = str(normalized.get("type") or "").strip()
@@ -506,7 +527,8 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         metadata_dir = project / metadata_dir_text if not Path(metadata_dir_text).is_absolute() else Path(metadata_dir_text)
         output_dir_text = str(source.get("output_dir") or "raw")
         output_dir = project / output_dir_text if not Path(output_dir_text).is_absolute() else Path(output_dir_text)
-        has_state = (metadata_dir / "export-state.json").is_file() or (output_dir / "export-state.json").is_file()
+        depth = int(source.get("depth", 0) or 0)
+        has_state = has_saved_confluence_progress(metadata_dir, output_dir, page_id, depth)
         if has_state:
             saved_state_groups.setdefault(str(metadata_dir), []).append(source)
             continue
@@ -518,7 +540,7 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
             "--metadata-dir",
             str(metadata_dir),
             "--levels",
-            str(int(source.get("depth", 0) or 0)),
+            str(depth),
         ]
         url = str(source.get("url") or "").strip()
         if not url:

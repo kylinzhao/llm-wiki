@@ -229,6 +229,22 @@ class UpdateFailureReportTest(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            progress_dir = state_dir / "progress"
+            progress_dir.mkdir(parents=True)
+            (progress_dir / "638576143.json").write_text(
+                json.dumps(
+                    {
+                        "root_page_id": "638576143",
+                        "depth_limit": 3,
+                        "pages": {},
+                        "queue": [],
+                        "enqueued": [],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
             commands = update_wiki.confluence_sync_commands(project)
             config = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
@@ -239,6 +255,42 @@ class UpdateFailureReportTest(unittest.TestCase):
             self.assertIn("--update", commands[0])
             self.assertIn("--rss-include-new", commands[0])
             self.assertIn("638576143=https://cwiki.guazi.com/spaces/createrssfeed.action?x=1", commands[0])
+
+    def test_confluence_sync_uses_normal_export_when_progress_state_is_missing(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            exporter = project / "tools" / "confluence_sync" / "export_obsidian_wiki.py"
+            exporter.parent.mkdir(parents=True)
+            exporter.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            state_dir = project / "staging" / "wiki-export"
+            state_dir.mkdir(parents=True)
+            (state_dir / "export-state.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "roots": [
+                            {
+                                "page_id": "638576143",
+                                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=638576143",
+                                "site_base": "https://cwiki.guazi.com",
+                                "depth_limit": 3,
+                                "space_key": "ztcpb",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            commands = update_wiki.confluence_sync_commands(project)
+
+            self.assertIn("--url", commands[0])
+            self.assertNotIn("--update", commands[0])
 
     def test_rss_upstream_config_migrates_from_legacy_config(self):
         import tempfile
