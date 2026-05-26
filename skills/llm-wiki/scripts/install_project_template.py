@@ -29,6 +29,8 @@ def copy_tree(src: Path, dst: Path, force: bool, engine_only: bool = False) -> t
     for path in sorted(src.rglob("*")):
         rel = path.relative_to(src)
         rel_text = rel.as_posix()
+        if "__pycache__" in rel.parts or path.suffix == ".pyc":
+            continue
         if engine_only and not any(
             rel_text == prefix.rstrip("/") or rel_text.startswith(prefix) for prefix in ENGINE_PREFIXES
         ):
