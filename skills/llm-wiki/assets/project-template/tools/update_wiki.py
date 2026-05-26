@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 import yaml
 from agent_rules import refresh_agent_rules
 from gplus_quality import inspect_gplus_quality
+from raw_code_manager import read_codebase_metadata
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
 
@@ -610,78 +611,23 @@ def iter_codebases(project: Path) -> list[Path]:
     return sorted(path for path in raw_code.iterdir() if path.is_dir())
 
 
-def normalize_code_sync_command(value: object) -> str | list[str] | None:
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    if isinstance(value, list) and value and all(isinstance(item, str) and item.strip() for item in value):
-        return [item.strip() for item in value]
-    return None
-
-
-def manifest_code_sync_specs(project: Path) -> list[dict[str, object]]:
-    manifest = load_manifest(project)
-    overrides = manifest.get("overrides")
-    if not isinstance(overrides, dict):
-        return []
-    entries = overrides.get("raw_code_update_commands")
-    if not isinstance(entries, list):
-        return []
-
-    specs: list[dict[str, object]] = []
-    for index, entry in enumerate(entries, start=1):
-        if not isinstance(entry, dict):
-            raise SystemExit(f"Invalid kb.manifest.yaml overrides.raw_code_update_commands[{index - 1}]: expected mapping.")
-        command = normalize_code_sync_command(entry.get("command"))
-        if not command:
-            raise SystemExit(
-                f"Invalid kb.manifest.yaml overrides.raw_code_update_commands[{index - 1}].command: expected non-empty string or string list."
-            )
-        codebase = entry.get("codebase")
-        cwd_value = entry.get("cwd")
-        if codebase and not isinstance(codebase, str):
-            raise SystemExit(
-                f"Invalid kb.manifest.yaml overrides.raw_code_update_commands[{index - 1}].codebase: expected string."
-            )
-        if cwd_value and not isinstance(cwd_value, str):
-            raise SystemExit(
-                f"Invalid kb.manifest.yaml overrides.raw_code_update_commands[{index - 1}].cwd: expected string."
-            )
-        if not codebase and not cwd_value:
-            raise SystemExit(
-                f"Invalid kb.manifest.yaml overrides.raw_code_update_commands[{index - 1}]: set codebase or cwd."
-            )
-
-        if cwd_value:
-            cwd = Path(cwd_value)
-            if not cwd.is_absolute():
-                cwd = project / cwd
-        else:
-            cwd = project / "raw-code" / str(codebase)
-        specs.append({"label": str(codebase or cwd.name), "cwd": cwd, "command": command})
-    return specs
-
-
-def default_code_sync_specs(project: Path) -> list[dict[str, object]]:
+def managed_code_sync_specs(project: Path) -> tuple[list[dict[str, object]], str | None]:
     specs: list[dict[str, object]] = []
     for path in iter_codebases(project):
-        if is_git_worktree(path):
-            specs.append({"label": path.name, "cwd": path, "command": ["git", "pull", "--ff-only"]})
-    return specs
+        metadata = read_codebase_metadata(path)
+        if not metadata:
+            return [], f"legacy_unmanaged_raw_code: {path} is not managed by llm-wiki add-code; migrate it before update."
+        if not is_git_worktree(path):
+            return [], f"invalid_managed_checkout: {path} has metadata but is not a valid git checkout."
+        specs.append({"label": path.name, "cwd": path, "command": ["git", "pull", "--ff-only"]})
+    return specs, None
 
 
-def cli_code_sync_specs(project: Path, command_value: object) -> list[dict[str, object]]:
-    command = normalize_code_sync_command(command_value)
-    if not command:
-        return []
-    return [{"label": path.name, "cwd": path, "command": command} for path in iter_codebases(project)]
-
-
-def run_code_sync(project: Path, cli_command: object, skip_auto: bool) -> int:
-    specs = cli_code_sync_specs(project, cli_command)
-    if not specs and not skip_auto:
-        specs = manifest_code_sync_specs(project)
-    if not specs and not skip_auto:
-        specs = default_code_sync_specs(project)
+def run_code_sync(project: Path) -> int:
+    specs, error = managed_code_sync_specs(project)
+    if error:
+        print(error, file=sys.stderr)
+        return 2
     for spec in specs:
         cwd = spec["cwd"]
         assert isinstance(cwd, Path)
@@ -737,19 +683,6 @@ def main() -> int:
         help="Also run graphify for all raw-code codebases. Missing graphify is recorded as skipped.",
     )
     parser.add_argument(
-        "--code-sync-command",
-        nargs="+",
-        help=(
-            "Optional command to run inside each raw-code/<codebase_id>/ before scan_code. "
-            "Example: --code-sync-command git pull --ff-only"
-        ),
-    )
-    parser.add_argument(
-        "--no-auto-code-sync",
-        action="store_true",
-        help="Skip both manifest-configured and default raw-code auto-update commands.",
-    )
-    parser.add_argument(
         "--no-agent-rules-refresh",
         action="store_true",
         help="Skip automatic AGENTS.md query-routing rule maintenance.",
@@ -769,13 +702,10 @@ def main() -> int:
     tools = project / "tools"
     raw_sync_command = args.raw_sync_command.strip()
     no_auto_raw_sync = args.no_auto_raw_sync or os.environ.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
-    no_auto_code_sync = args.no_auto_code_sync or os.environ.get("LLM_WIKI_NO_AUTO_CODE_SYNC") == "1"
     skipped_steps: list[str] = []
     if no_auto_raw_sync:
         skipped_steps.append("auto_raw_sync")
         skipped_steps.append("confluence_sync")
-    if no_auto_code_sync:
-        skipped_steps.append("auto_code_sync")
 
     if not raw_sync_command and not no_auto_raw_sync:
         raw_sync_command = auto_raw_sync_command(project) or ""
@@ -792,7 +722,7 @@ def main() -> int:
             write_failure_report(project, "raw_sync", code)
             return code
 
-    code = run_code_sync(project, args.code_sync_command, no_auto_code_sync)
+    code = run_code_sync(project)
     if code != 0:
         write_failure_report(project, "code_sync", code)
         return code

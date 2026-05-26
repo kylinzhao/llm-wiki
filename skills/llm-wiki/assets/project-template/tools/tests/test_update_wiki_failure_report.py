@@ -18,6 +18,37 @@ def load_update_wiki():
 
 
 class UpdateFailureReportTest(unittest.TestCase):
+    def test_run_code_sync_blocks_legacy_unmanaged_raw_code_directory(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            codebase = project / "raw-code" / "legacy-app"
+            codebase.mkdir(parents=True)
+            (codebase / "README.md").write_text("# legacy\n", encoding="utf-8")
+
+            code = update_wiki.run_code_sync(project)
+
+            self.assertEqual(code, 2)
+
+    def test_run_code_sync_blocks_metadata_without_git_checkout(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            codebase = project / "raw-code" / "broken-app"
+            codebase.mkdir(parents=True)
+            (codebase / ".llm-wiki-codebase.yaml").write_text(
+                "codebase_id: broken-app\nmanaged: true\nrepo_url: /tmp/broken.git\norigin_ref: main\ndefault_branch: main\nmanaged_path: raw-code/broken-app\ncreated_by: llm-wiki-add-code\n",
+                encoding="utf-8",
+            )
+
+            code = update_wiki.run_code_sync(project)
+
+            self.assertEqual(code, 2)
+
     def test_deterministic_steps_include_cjira_refresh_after_build(self):
         update_wiki = load_update_wiki()
         tools = TOOLS_DIR
