@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cjira_registry import classify_page, update_registry_for_sources
+from drawio_diagram import drawio_to_mermaid
 from wiki_preflight import raw_evidence_preflight_failed
 
 TEXT_EXTENSIONS = {
@@ -30,6 +31,8 @@ TEXT_EXTENSIONS = {
     ".yaml",
     ".yml",
     ".xml",
+    ".drawio",
+    ".dio",
 }
 
 REQUIRED_DIRS = [
@@ -164,6 +167,7 @@ def source_page(source: dict[str, object], project: Path) -> str:
         "ai_refinement_state": "pending",
     }
     supporting = ", ".join(f"`{key}`" for key in cjira["supporting_cjira"]) or "`none`"
+    drawio_block = drawio_source_block(project / str(source["raw_path"]))
     return f"""# {source['title']}
 
 > 确定性种子页。Codex 需要基于原始证据补全摘要、关键事实和 AI 原生精修内容。
@@ -191,6 +195,8 @@ def source_page(source: dict[str, object], project: Path) -> str:
 
 - 待从来源证据中提取。
 
+{drawio_block}
+
 ## 业务链接
 
 - 概念: 待补充
@@ -206,6 +212,32 @@ def source_page(source: dict[str, object], project: Path) -> str:
 {json.dumps(source_metadata, ensure_ascii=False, indent=2)}
 ```
 """
+
+
+def drawio_source_block(path: Path) -> str:
+    if path.suffix.lower() not in {".drawio", ".dio", ".xml"}:
+        return ""
+    if not path.is_file():
+        return ""
+    diagrams = drawio_to_mermaid(path.read_text(encoding="utf-8", errors="replace"), fallback_name=path.stem)
+    if not diagrams:
+        return ""
+    lines = ["## Draw.io Diagrams", ""]
+    for diagram in diagrams:
+        lines.extend(
+            [
+                f"### {diagram.name}",
+                "",
+                f"- Nodes: `{diagram.node_count}`",
+                f"- Edges: `{diagram.edge_count}`",
+                "",
+                "```mermaid",
+                diagram.mermaid,
+                "```",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip()
 
 
 def delivery_tracking_block(cjira: dict[str, object]) -> str:

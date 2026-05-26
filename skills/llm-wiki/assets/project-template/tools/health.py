@@ -31,6 +31,7 @@ REQUIRED_PATHS = [
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+DIAGRAM_EXTENSIONS = {".drawio", ".dio"}
 IMAGE_VALUE_KEYWORDS = {
     "流程": 5,
     "流程图": 8,
@@ -116,6 +117,17 @@ def count_raw_images(project: Path) -> int:
     )
 
 
+def count_raw_diagrams(project: Path) -> int:
+    raw = project / "raw"
+    if not raw.is_dir():
+        return 0
+    return sum(
+        1
+        for path in raw.rglob("*")
+        if path.is_file() and path.suffix.lower() in DIAGRAM_EXTENSIONS
+    )
+
+
 def count_image_notes(project: Path) -> int:
     notes = project / "staging" / "image-notes"
     if not notes.is_dir():
@@ -165,7 +177,7 @@ def image_refinement_candidates(project: Path, limit: int = 20) -> list[dict]:
         images = [
             path
             for path in page_dir.rglob("*")
-            if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+            if path.is_file() and path.suffix.lower() in (IMAGE_EXTENSIONS | DIAGRAM_EXTENSIONS)
         ]
         if not images:
             continue
@@ -339,14 +351,15 @@ def build_report(project: Path) -> dict[str, object]:
         evidence_gaps.append(raw_code_gap_message)
 
     raw_image_count = count_raw_images(project)
+    raw_diagram_count = count_raw_diagrams(project)
     image_note_count = count_image_notes(project)
     image_candidates = image_refinement_candidates(project)
     status_doc = refinement_status(project)
     image_evidence_status = str(status_doc.get("image_evidence_status", "")).strip() or "unknown"
     image_evidence_gaps: list[str] = []
-    if raw_image_count and image_note_count == 0 and image_evidence_status not in {"complete", "not_applicable", "skipped_by_user"}:
+    if (raw_image_count or raw_diagram_count) and image_note_count == 0 and image_evidence_status not in {"complete", "not_applicable", "skipped_by_user"}:
         image_evidence_gaps.append(
-            "raw/ contains image assets but no staging/image-notes/ were found; after text/G+ completion, review high-value image evidence with `llm-wiki image`."
+            "raw/ contains image or draw.io diagram assets but no staging/image-notes/ were found; after text/G+ completion, review high-value visual evidence with `llm-wiki image`."
         )
 
     if expects_raw and has_raw_dir and has_raw_files:
@@ -424,6 +437,7 @@ def build_report(project: Path) -> dict[str, object]:
         "code_evidence_mode": code_evidence_mode,
         "evidence_gaps": evidence_gaps,
         "raw_image_assets": raw_image_count,
+        "raw_drawio_assets": raw_diagram_count,
         "image_notes": image_note_count,
         "image_evidence_status": image_evidence_status,
         "image_evidence_gaps": image_evidence_gaps,
