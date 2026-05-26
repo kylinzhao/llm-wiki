@@ -87,6 +87,46 @@ class UpdateFailureReportTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(calls, ["drawio_repair.py"])
 
+    def test_prepare_raw_evidence_runs_confluence_sync_before_raw_preflight(self):
+        import tempfile
+        from unittest import mock
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw").mkdir()
+            (project / "wiki" / "sources").mkdir(parents=True)
+            (project / "wiki" / "sources" / "existing.md").write_text("# Existing\n", encoding="utf-8")
+
+            self.assertIsNotNone(update_wiki.raw_evidence_preflight_failed(project))
+
+            def sync_raw(_project):
+                (project / "raw" / "index.md").write_text("# Synced\n", encoding="utf-8")
+                return 0
+
+            with mock.patch.object(update_wiki, "run_confluence_sync", side_effect=sync_raw):
+                code, failed_step = update_wiki.prepare_raw_evidence(project, "", False)
+
+            self.assertEqual(code, 0)
+            self.assertIsNone(failed_step)
+            self.assertIsNone(update_wiki.raw_evidence_preflight_failed(project))
+
+    def test_prepare_raw_evidence_keeps_no_sync_preflight_blocker_visible(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw").mkdir()
+            (project / "wiki" / "sources").mkdir(parents=True)
+            (project / "wiki" / "sources" / "existing.md").write_text("# Existing\n", encoding="utf-8")
+
+            code, failed_step = update_wiki.prepare_raw_evidence(project, "", True)
+
+            self.assertEqual(code, 0)
+            self.assertIsNone(failed_step)
+            self.assertIn("empty_raw_evidence", update_wiki.raw_evidence_preflight_failed(project) or "")
+
     def test_failure_report_replaces_previous_success_report(self):
         import tempfile
 

@@ -656,6 +656,24 @@ def run_drawio_repair(project: Path) -> int:
     return run_python_script(script, project)
 
 
+def prepare_raw_evidence(project: Path, raw_sync_command: str, no_auto_raw_sync: bool) -> tuple[int, str | None]:
+    """Refresh raw evidence before validating raw/ is locally populated."""
+    if not raw_sync_command and not no_auto_raw_sync:
+        raw_sync_command = auto_raw_sync_command(project) or ""
+
+    if not no_auto_raw_sync:
+        code = run_confluence_sync(project)
+        if code != 0:
+            return code, "confluence_sync"
+
+    if raw_sync_command:
+        code = run_shell(raw_sync_command, project)
+        if code != 0:
+            return code, "raw_sync"
+
+    return 0, None
+
+
 def deterministic_steps(tools: Path, graphify: bool = False) -> list[tuple[Path, list[str]]]:
     steps = [
         (tools / "build_wiki.py", []),
@@ -700,12 +718,6 @@ def main() -> int:
     if not args.no_agent_rules_refresh:
         print(f"agent_rules={refresh_agent_rules(project)}")
 
-    err = raw_evidence_preflight_failed(project)
-    if err:
-        print(err, file=sys.stderr)
-        write_failure_report(project, "raw_evidence_preflight", 2, {"error": err})
-        return 2
-
     tools = project / "tools"
     raw_sync_command = args.raw_sync_command.strip()
     no_auto_raw_sync = args.no_auto_raw_sync or os.environ.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
@@ -714,20 +726,17 @@ def main() -> int:
         skipped_steps.append("auto_raw_sync")
         skipped_steps.append("confluence_sync")
 
-    if not raw_sync_command and not no_auto_raw_sync:
-        raw_sync_command = auto_raw_sync_command(project) or ""
+    code, failed_step = prepare_raw_evidence(project, raw_sync_command, no_auto_raw_sync)
+    if code != 0:
+        assert failed_step is not None
+        write_failure_report(project, failed_step, code)
+        return code
 
-    if not no_auto_raw_sync:
-        code = run_confluence_sync(project)
-        if code != 0:
-            write_failure_report(project, "confluence_sync", code)
-            return code
-
-    if raw_sync_command:
-        code = run_shell(raw_sync_command, project)
-        if code != 0:
-            write_failure_report(project, "raw_sync", code)
-            return code
+    err = raw_evidence_preflight_failed(project)
+    if err:
+        print(err, file=sys.stderr)
+        write_failure_report(project, "raw_evidence_preflight", 2, {"error": err})
+        return 2
 
     code = run_drawio_repair(project)
     if code != 0:
