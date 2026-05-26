@@ -24,6 +24,9 @@ from xml.etree import ElementTree
 import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from drawio_diagram import drawio_to_mermaid
+
 
 DEFAULT_DEPTH = 3
 DEFAULT_RSS_MAX_RESULTS = 200
@@ -191,6 +194,7 @@ class PageNode:
     url: str
     depth: int
     html: str
+    storage_html: str = ""
     author: str = ""
     last_editor: str = ""
     created_at: str = ""
@@ -691,7 +695,14 @@ def fetch_json_with_headers(
 
 
 def content_endpoint(site_base: str, page_id: str) -> str:
-    return f"{site_base}/rest/api/content/{quote(page_id)}?expand=body.view,history,version"
+    return f"{site_base}/rest/api/content/{quote(page_id)}?expand=body.view,body.storage,history,version"
+
+
+def attachments_endpoint(site_base: str, page_id: str, filename: str = "") -> str:
+    query = "limit=100"
+    if filename:
+        query += f"&filename={quote(filename)}"
+    return f"{site_base}/rest/api/content/{quote(page_id)}/child/attachment?{query}"
 
 
 def space_endpoint(site_base: str, page_id: str) -> str:
@@ -713,6 +724,7 @@ def page_from_payload(site_base: str, payload: dict, depth: int) -> PageNode:
     page_id = str(payload["id"])
     title = payload["title"]
     body = payload.get("body", {}).get("view", {}).get("value", "")
+    storage_body = payload.get("body", {}).get("storage", {}).get("value", "")
     history = payload.get("history") or {}
     version = payload.get("version") or {}
     created_by = history.get("createdBy") or {}
@@ -723,6 +735,7 @@ def page_from_payload(site_base: str, payload: dict, depth: int) -> PageNode:
         url=page_url_from_api(site_base, page_id),
         depth=depth,
         html=body,
+        storage_html=storage_body,
         author=created_by.get("displayName", ""),
         last_editor=updated_by.get("displayName", ""),
         created_at=history.get("createdDate", ""),
@@ -1009,6 +1022,58 @@ def extract_image_urls(html: str, page_url: str) -> list[str]:
             continue
         seen.add(url)
         deduped.append(url)
+    return deduped
+
+
+def tag_local_name(tag: Tag) -> str:
+    return str(tag.name or "").split(":", 1)[-1].lower()
+
+
+def tag_attr(tag: Tag, name: str) -> str:
+    for key, value in tag.attrs.items():
+        if str(key).split(":", 1)[-1].lower() == name.lower():
+            return str(value or "")
+    return ""
+
+
+def extract_drawio_attachment_names(html: str) -> list[str]:
+    soup = BeautifulSoup(html or "", "html.parser")
+    names: list[str] = []
+
+    for macro in soup.find_all(lambda tag: isinstance(tag, Tag) and tag_local_name(tag) == "structured-macro"):
+        macro_name = tag_attr(macro, "name").lower()
+        if "drawio" not in macro_name and "diagramly" not in macro_name and "mxgraph" not in macro_name:
+            continue
+        for param in macro.find_all(lambda tag: isinstance(tag, Tag) and tag_local_name(tag) == "parameter"):
+            param_name = tag_attr(param, "name").lower()
+            if param_name in {"diagramname", "diagram", "name", "filename", "attachment"}:
+                value = collapse_whitespace(param.get_text(" ", strip=True))
+                if value:
+                    names.append(value)
+        for attachment in macro.find_all(lambda tag: isinstance(tag, Tag) and tag_local_name(tag) == "attachment"):
+            value = tag_attr(attachment, "filename")
+            if value:
+                names.append(value)
+
+    for attachment in soup.find_all(lambda tag: isinstance(tag, Tag) and tag_local_name(tag) == "attachment"):
+        value = tag_attr(attachment, "filename")
+        if value.lower().endswith((".drawio", ".dio", ".xml")):
+            names.append(value)
+
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for name in names:
+        normalized = html_lib.unescape(name).strip()
+        if not normalized:
+            continue
+        candidates = [normalized]
+        if not normalized.lower().endswith((".drawio", ".dio", ".xml")):
+            candidates.append(f"{normalized}.drawio")
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            deduped.append(candidate)
     return deduped
 
 
@@ -1564,6 +1629,11 @@ def page_is_unchanged(page_path: Path, page: PageNode) -> bool:
     for asset_ref in local_asset_refs(content):
         if not (page_path.parent / asset_ref).exists():
             return False
+    if extract_drawio_attachment_names(page.storage_html or page.html):
+        if "## Draw.io Diagrams" not in content:
+            return False
+        if not list((page_path.parent / "assets").glob("*.drawio.md")):
+            return False
     return True
 
 
@@ -1639,6 +1709,132 @@ def download_page_images(
         image_links[image_url] = f"assets/{image_path.name}"
     save_asset_map(page_dir, asset_map)
     return image_links
+
+
+def attachment_download_url(site_base: str, payload: dict[str, Any]) -> str:
+    links = payload.get("_links") if isinstance(payload, dict) else {}
+    download = str((links or {}).get("download") or "").strip()
+    base = str((links or {}).get("base") or site_base).strip() or site_base
+    return urljoin(base, download) if download else ""
+
+
+def fetch_attachment_payload(session: requests.Session, site_base: str, page_id: str, filename: str) -> dict[str, Any] | None:
+    try:
+        payload = fetch_json(session, attachments_endpoint(site_base, page_id, filename))
+    except FetchError:
+        return None
+    results = payload.get("results") if isinstance(payload, dict) else []
+    if not isinstance(results, list):
+        return None
+    if not results:
+        return None
+    return results[0] if isinstance(results[0], dict) else None
+
+
+def download_drawio_attachment(
+    session: Optional[requests.Session],
+    site_base: str,
+    page: PageNode,
+    filename: str,
+    assets_dir: Path,
+) -> tuple[Path, str] | None:
+    if session is None:
+        return None
+    payload = fetch_attachment_payload(session, site_base, page.page_id, filename)
+    if payload is None:
+        return None
+    download_url = attachment_download_url(site_base, payload)
+    if not download_url:
+        return None
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    local_name = sanitize_filename(filename)
+    if not Path(local_name).suffix:
+        local_name = f"{local_name}.drawio"
+    local_path = assets_dir / local_name
+    if not local_path.exists():
+        response = send_request(
+            session,
+            download_url,
+            stream=True,
+            accept="*/*",
+            request_interval_override=getattr(session, "asset_request_interval", 0.0),
+        )
+        if response.status_code >= 400:
+            return None
+        with local_path.open("wb") as file_obj:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    file_obj.write(chunk)
+    return local_path, download_url
+
+
+def drawio_evidence_markdown(page: PageNode, page_dir: Path, session: Optional[requests.Session]) -> str:
+    names = extract_drawio_attachment_names(page.storage_html or page.html)
+    if not names or session is None:
+        return ""
+
+    site_base = f"{urlparse(page.url).scheme}://{urlparse(page.url).netloc}"
+    sections: list[str] = []
+    assets_dir = page_dir / "assets"
+    for filename in names:
+        downloaded = download_drawio_attachment(session, site_base, page, filename, assets_dir)
+        if downloaded is None:
+            continue
+        local_path, _download_url = downloaded
+        try:
+            text = local_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        diagrams = drawio_to_mermaid(text, fallback_name=Path(filename).stem)
+        if not diagrams:
+            continue
+        evidence_path = local_path.with_suffix(local_path.suffix + ".md")
+        rel_drawio = f"assets/{local_path.name}"
+        rel_evidence = f"assets/{evidence_path.name}"
+        evidence_lines = [
+            f"# Draw.io Evidence: {filename}",
+            "",
+            f"- Source attachment: `{rel_drawio}`",
+            f"- Page ID: `{page.page_id}`",
+            "",
+        ]
+        page_lines = [
+            f"### {filename}",
+            "",
+            f"- 附件: [`{rel_drawio}`]({rel_drawio})",
+            f"- 结构化证据: [`{rel_evidence}`]({rel_evidence})",
+            "",
+        ]
+        for diagram in diagrams:
+            evidence_lines.extend(
+                [
+                    f"## {diagram.name}",
+                    "",
+                    f"- Nodes: `{diagram.node_count}`",
+                    f"- Edges: `{diagram.edge_count}`",
+                    "",
+                    "```mermaid",
+                    diagram.mermaid,
+                    "```",
+                    "",
+                ]
+            )
+            page_lines.extend(
+                [
+                    f"#### {diagram.name}",
+                    "",
+                    "```mermaid",
+                    diagram.mermaid,
+                    "```",
+                    "",
+                ]
+            )
+        evidence_path.write_text("\n".join(evidence_lines).rstrip() + "\n", encoding="utf-8")
+        sections.append("\n".join(page_lines).rstrip())
+
+    if not sections:
+        return ""
+    return "\n\n".join(["## Draw.io Diagrams", *sections])
 
 
 def yaml_escape(value: str) -> str:
@@ -1725,6 +1921,9 @@ def write_export(
             page_links=page_links,
             image_links=image_links,
         )
+        drawio_markdown = drawio_evidence_markdown(page, page_dir, session)
+        if drawio_markdown:
+            markdown = markdown.rstrip() + "\n\n" + drawio_markdown
         write_page(page_path, page, markdown)
         manifest.append(
                 {
