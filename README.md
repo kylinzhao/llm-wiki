@@ -106,7 +106,7 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_tem
 uv run python tools/update_wiki.py
 ```
 
-当 `config/rss-feeds.yaml` 已配置启用的 feed URL 时，`tools/update_wiki.py` 会默认先执行 RSS 同步，再进入增量更新。只要项目已接入 `raw-code/<codebase_id>/` git 仓，同一次 update 也会默认先安全刷新这些干净 worktree，再继续 code wiki 构建；若某个 codebase 需要非默认刷新命令，可在 `kb.manifest.yaml` 里覆盖。
+当 `config/rss-feeds.yaml` 已配置启用的 feed URL 时，`tools/update_wiki.py` 会默认先执行 RSS 同步，再进入增量更新。代码证据只支持一种接入方式：用 `llm-wiki add-code` 将仓库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout。之后同一次 update 会默认先对这些受管 codebase 执行安全的 `git pull --ff-only`，再继续 code wiki 构建；如果仓库权限缺失、checkout 损坏或 worktree 不干净，update 必须明确失败而不是假装已刷新。
 
 按客户端可直接复制的初始化命令：
 
@@ -166,7 +166,7 @@ cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
 | `$llm-wiki-update` | `llm-wiki update` | `raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 页面或源码变化后的影响范围更新；也负责续跑、精修、代码 wiki、traceability 和收口检查；自动维护 `AGENTS.md` 查询路由规则。 |
 | `$llm-wiki-update-skill` | `llm-wiki update-skill` | 显式更新本机安装的 llm-wiki skill bundle、模板脚本和命令协议；不更新当前 KB 内容。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 把另一个文档库、wiki 导出、Markdown 目录、Confluence 导出、文档目录或 wiki URL 加入 `raw/` 原始证据层。 |
-| `$llm-wiki-add-code` | `llm-wiki add-code` | 把另一个本地项目、仓库或源码目录加入 `raw-code/<codebase_id>/` 代码证据层，并构建代码 wiki、能力页和必要 traceability。 |
+| `$llm-wiki-add-code` | `llm-wiki add-code` | 把另一个本地仓库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout，并构建代码 wiki、能力页和必要 traceability。缺少仓库权限时必须立即终止。 |
 | `$llm-wiki-query` | `llm-wiki query` | 按意图回答业务、产品、需求、实现或代码问题；业务知识默认不展开大量代码证据。 |
 | `$llm-wiki-query-plus` | `llm-wiki query-plus` | 同时回答业务/需求口径与代码实现证据，适合需要更详尽联动分析的问题。 |
 | `$llm-wiki-image` | `llm-wiki image` | 文本层完成后补充高价值图片、截图、图表或附件证据；默认不批量分析低价值截图。 |

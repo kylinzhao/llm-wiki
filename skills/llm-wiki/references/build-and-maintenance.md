@@ -14,7 +14,7 @@ uv run python tools/build_graph.py
 uv run python tools/anchor_check.py
 ```
 
-如果存在 `raw-code/`，标准文档构建之后还要进入代码 wiki 阶段。代码 wiki 可以先由 Codex-native 工作流完成，不要求项目一开始就有专门脚本。
+如果存在 `raw-code/`，标准文档构建之后还要进入代码 wiki 阶段。`raw-code/*` 只支持由 `llm-wiki add-code` 创建的 engine-managed git checkout；旧的复制、软链或外部路径形态属于迁移对象，不再是合法终态。
 如果需要 graphify 代码图谱增强，运行：
 
 ```text
@@ -48,6 +48,7 @@ uv run python tools/anchor_check.py
 ### `scan_code.py`
 
 - 扫描 `raw-code/*`
+- 验证每个 codebase 是否是合法的 engine-managed git checkout
 - 识别技术栈 marker、文件角色、endpoint / route 候选和符号
 - 输出 `staging/code-graph/<codebase_id>/manifest.json`
 - 输出 `staging/code-graph/<codebase_id>/endpoint-map.json`
@@ -107,6 +108,7 @@ uv run python tools/anchor_check.py
 ### 代码 wiki 阶段
 
 - 扫描 `raw-code/*`，识别每个 `codebase_id`
+- 要求每个 codebase 都是 `llm-wiki add-code` 创建的受管 git checkout
 - 读取 codebase 内部的 README、AGENTS、OpenSpec、技术设计等文本说明
 - 按技术栈抽取结构事实
 - 可选运行 graphify，生成源码图谱与结构报告

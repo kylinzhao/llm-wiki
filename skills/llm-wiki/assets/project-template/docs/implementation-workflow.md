@@ -4,7 +4,7 @@
 
 1. Put static source documents in `raw/`, or declare live wiki/RSS sources in `upstream/wiki-sources.json`.
 2. Put business context in `BUSINESS_CONTEXT.md`.
-3. Optionally put source repositories under `raw-code/<codebase_id>/`.
+3. If the project needs code evidence, add repositories only through `llm-wiki add-code` so each codebase becomes an engine-managed git checkout under `raw-code/<codebase_id>/`.
 4. Run deterministic seed:
 
 ```bash
@@ -15,7 +15,7 @@ uv run python tools/update_wiki.py
 
 If `upstream/wiki-sources.json` contains enabled Cwiki or RSS sources, this update command should first refresh `raw/` automatically. Legacy `config/rss-feeds.yaml` is only a migration input.
 
-If `raw-code/<codebase_id>/` contains clean git worktrees, the same update command should also refresh them by default before `scan_code.py` and `build_traceability.py`. If a codebase needs a non-default refresh flow, configure `kb.manifest.yaml` `overrides.raw_code_update_commands`.
+If `raw-code/<codebase_id>/` contains engine-managed clean git checkouts, the same update command should refresh them by default with `git pull --ff-only` before `scan_code.py` and `build_traceability.py`. If access is missing, the checkout is broken, or the worktree is dirty, update must stop and tell the operator to repair the managed raw-code entry first.
 
 5. Use Codex to complete AI-native refinement of:
 
@@ -41,6 +41,4 @@ The engine may still use deterministic code scanning and graphification internal
 
 `scan_code.py` provides deterministic facts. `graphify_code.py` provides graph structure. Codex must still write the business capability interpretation.
 
-To force a one-off code refresh across all codebases before rebuilding code wiki:
-
-Use `llm-wiki update` for the normal end-to-end pass; only the engine should decide when it needs to invoke a specific sync command under the hood.
+To refresh code before rebuilding code wiki, use `llm-wiki update`. The engine should refresh only managed raw-code checkouts and should not expose alternate per-codebase sync modes.

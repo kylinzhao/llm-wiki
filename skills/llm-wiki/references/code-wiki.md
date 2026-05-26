@@ -22,10 +22,11 @@ raw-code/
 ```
 
 `raw/` 是业务/需求原始证据层，默认不可变。
-`raw-code/*` 的每个一级目录是独立源码库，称为 `codebase_id`。
+`raw-code/*` 的每个一级目录是独立源码库，称为 `codebase_id`。唯一受支持的形态是 `llm-wiki add-code` 创建的 engine-managed git checkout。
 
 不要把源码复制进 `raw/`。
 不要把代码图谱输出当作需求文档。
+不要把 copy、symlink、外部路径登记或 snapshot 目录当作长期 raw-code 方案；这些形态必须迁移后才能参与标准 update。
 
 ## 3. 输出约定
 

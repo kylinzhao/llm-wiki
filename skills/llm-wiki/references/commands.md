@@ -64,7 +64,7 @@ Run order:
 1. Validate `raw/` and `BUSINESS_CONTEXT.md`.
 2. Install the bundled project template unless equivalent scripts already exist: after bundle install, use your client's skills root (for example Codex: `python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"`), or use `python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"` when the package lives elsewhere (see main `SKILL.md` "Skill 包路径").
 3. Run deterministic build with `uv run python tools/update_wiki.py`.
-   - when the standard template is installed, this command should auto-refresh enabled RSS/feed raw inputs and connected clean `raw-code/<codebase_id>/` git worktrees before rebuilding deterministic code outputs
+   - when the standard template is installed, this command should auto-refresh enabled RSS/feed raw inputs and engine-managed `raw-code/<codebase_id>/` git checkouts before rebuilding deterministic code outputs
 4. If `raw-code/` exists and code graph extraction is useful, run `uv run python tools/graphify_code.py --all`, then rerun `scan_code.py` and `build_traceability.py`.
 5. Complete first-pass source summary and AI-native refinement.
 6. Build layered pages, concepts, entities, truth, conflicts, evidence, proposals, reference, operations.
@@ -159,12 +159,12 @@ Default update order:
    - when an older repo only has `config/rss-feeds.yaml`, treat it as legacy input and let `tools/update_wiki.py` migrate it into `upstream/wiki-sources.json`
    - if upstream wiki URLs are configured but RSS/feed URLs are missing, attempt deterministic feed discovery from the wiki URL and platform metadata before syncing
    - if an RSS/feed URL cannot be inferred, tell the user exactly which wiki URL needs a manually supplied RSS URL; if the user does not provide one, leave the RSS/feed field empty and report that automatic future updates for that source cannot be completed
-   - if the project has connected `raw-code/<codebase_id>/` git worktrees, refresh them by default before code wiki rebuild; for the standard template this means auto-running a safe code sync inside `tools/update_wiki.py`
-   - default code sync should use a safe fast-forward-only strategy for git worktrees unless the project manifest explicitly overrides the command
+   - if the project has engine-managed `raw-code/<codebase_id>/` git checkouts, refresh them by default before code wiki rebuild; for the standard template this means auto-running `git pull --ff-only` inside `tools/update_wiki.py`
+   - unmanaged, copied, symlinked, or ad-hoc raw-code directories are legacy states and should block update until migrated
    - never silently overwrite dirty `raw-code/*` worktrees; block and report the specific codebase instead
 4. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
    - when upstream sync is enabled in the project, prefer an update command path that includes the raw refresh automatically, for example by auto-running Cwiki sync and `tools/rss_sync.py` inside `tools/update_wiki.py` or by passing `--raw-sync-command`
-   - when `raw-code/` codebases are connected as git worktrees, prefer an update command path that includes the code refresh automatically, for example by auto-running `git pull --ff-only` per clean codebase or a manifest-defined override inside `tools/update_wiki.py`
+   - when `raw-code/` codebases are connected through `llm-wiki add-code`, prefer an update command path that includes the code refresh automatically by auto-running `git pull --ff-only` per clean managed codebase inside `tools/update_wiki.py`
    - when the standard template is installed, `update` should refresh `staging/cjira-registry/active.json` after source scan; terminal pages move to `archive.json`
 5. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
    - Read `staging/refinement-plan.json` and `references/refinement-contract.md`; use them as the write-scope and acceptance contract for semantic refinement.
@@ -341,8 +341,9 @@ Default order:
 1. Read `BUSINESS_CONTEXT.md` and existing `wiki/code/index.md` when present.
 2. Inspect the provided code path, detect repo root, stack, entry points, docs, and whether it is a git repository.
 3. Choose a stable `codebase_id` from the repo or directory name; ask only if it collides or is misleading.
-4. Add the codebase under `raw-code/<codebase_id>/` by copying, symlinking, or recording the existing path according to project convention. Do not mix it into `raw/`.
-   - if the added codebase is a git worktree, future `llm-wiki update` runs should treat it as default-refreshable code evidence unless the project explicitly disables or overrides that behavior
+4. Add the codebase under `raw-code/<codebase_id>/` as an engine-managed git checkout or git worktree. Do not mix it into `raw/`.
+   - this is the only supported onboarding model
+   - if repository access is missing, stop immediately and tell the user to obtain permission before retrying
 5. Scan the codebase for README, AGENTS, OpenSpec, API contracts, routes, controllers, services, jobs, messages, data access, and config.
 6. Run graphify if available and useful; otherwise record why it was skipped.
 7. Create or update `wiki/code/codebases/<codebase_id>/` and affected `wiki/code/capabilities/`.
@@ -353,13 +354,13 @@ Stop for confirmation when:
 
 - The source path is missing.
 - The target `raw-code/<codebase_id>/` already exists.
-- Copying the repo would include secrets, credentials, build artifacts, or very large dependency directories.
-- The codebase is dirty and the user asked to pull or update it.
+- The current machine cannot read or clone the repository.
+- The existing managed target is dirty and cannot be safely reused.
 
 Final report:
 
 - codebase_id
-- source path and import method
+- repository source and managed checkout path
 - detected stack and entry points
 - pages created or updated
 - capability and traceability coverage
