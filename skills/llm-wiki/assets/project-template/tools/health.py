@@ -128,6 +128,41 @@ def count_raw_diagrams(project: Path) -> int:
     )
 
 
+def drawio_repair_status(project: Path) -> dict[str, object]:
+    root = project / "raw"
+    drawio_files = [
+        path
+        for path in root.rglob("*")
+        if root.is_dir()
+        and path.is_file()
+        and path.suffix.lower() in DIAGRAM_EXTENSIONS
+    ]
+    missing = [
+        path.relative_to(project).as_posix()
+        for path in drawio_files
+        if not path.with_suffix(path.suffix + ".md").is_file()
+    ]
+    report = {}
+    report_path = project / "staging" / "drawio" / "latest.json"
+    if report_path.is_file():
+        try:
+            payload = json.loads(report_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+        report = payload if isinstance(payload, dict) else {}
+    return {
+        "drawio_count": len(drawio_files),
+        "missing_evidence_count": len(missing),
+        "missing_evidence": missing[:50],
+        "last_report": {
+            "generated_at": report.get("generated_at", ""),
+            "converted_count": report.get("converted_count", 0),
+            "unparsed_count": report.get("unparsed_count", 0),
+            "changed_count": report.get("changed_count", 0),
+        },
+    }
+
+
 def count_image_notes(project: Path) -> int:
     notes = project / "staging" / "image-notes"
     if not notes.is_dir():
@@ -352,6 +387,7 @@ def build_report(project: Path) -> dict[str, object]:
 
     raw_image_count = count_raw_images(project)
     raw_diagram_count = count_raw_diagrams(project)
+    drawio_status = drawio_repair_status(project)
     image_note_count = count_image_notes(project)
     image_candidates = image_refinement_candidates(project)
     status_doc = refinement_status(project)
@@ -360,6 +396,10 @@ def build_report(project: Path) -> dict[str, object]:
     if (raw_image_count or raw_diagram_count) and image_note_count == 0 and image_evidence_status not in {"complete", "not_applicable", "skipped_by_user"}:
         image_evidence_gaps.append(
             "raw/ contains image or draw.io diagram assets but no staging/image-notes/ were found; after text/G+ completion, review high-value visual evidence with `llm-wiki image`."
+        )
+    if drawio_status["missing_evidence_count"]:
+        image_evidence_gaps.append(
+            f"raw/ contains {drawio_status['missing_evidence_count']} draw.io diagram(s) without generated .drawio.md text evidence; run `llm-wiki update` to repair draw.io evidence."
         )
 
     if expects_raw and has_raw_dir and has_raw_files:
@@ -393,6 +433,8 @@ def build_report(project: Path) -> dict[str, object]:
         recommended_actions.append(
             "Run `llm-wiki image` for selective high-value image evidence after confirming the text layer is complete; do not batch-analyze low-value screenshots by default."
         )
+    if drawio_status["missing_evidence_count"]:
+        recommended_actions.insert(0, "Run `llm-wiki update` to generate missing draw.io Mermaid text evidence before semantic refinement.")
     if not business_context["has_valid_business_context"]:
         recommended_actions.insert(
             0,
@@ -438,6 +480,7 @@ def build_report(project: Path) -> dict[str, object]:
         "evidence_gaps": evidence_gaps,
         "raw_image_assets": raw_image_count,
         "raw_drawio_assets": raw_diagram_count,
+        "drawio_repair": drawio_status,
         "image_notes": image_note_count,
         "image_evidence_status": image_evidence_status,
         "image_evidence_gaps": image_evidence_gaps,
