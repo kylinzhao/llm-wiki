@@ -49,6 +49,8 @@ class ManagedRawCodeTests(unittest.TestCase):
             self.assertIn("managed: true", metadata)
             self.assertIn("codebase_id: source-repo", metadata)
             self.assertIn("created_by: llm-wiki-add-code", metadata)
+            status = subprocess.run(["git", "status", "--porcelain"], cwd=managed, check=True, capture_output=True, text=True)
+            self.assertEqual(status.stdout.strip(), "")
 
     def test_permission_failure_does_not_create_target(self):
         manager = load_raw_code_manager()

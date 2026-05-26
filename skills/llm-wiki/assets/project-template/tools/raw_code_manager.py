@@ -72,7 +72,23 @@ def write_codebase_metadata(managed_dir: Path, payload: dict[str, str]) -> Path:
     }
     path = managed_dir / METADATA_FILENAME
     path.write_text(yaml.safe_dump(metadata, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    ensure_metadata_ignored(managed_dir)
     return path
+
+
+def ensure_metadata_ignored(managed_dir: Path) -> None:
+    git_dir_result = run_git(["rev-parse", "--git-dir"], cwd=managed_dir)
+    if git_dir_result.returncode != 0:
+        return
+    git_dir = Path(git_dir_result.stdout.strip())
+    if not git_dir.is_absolute():
+        git_dir = managed_dir / git_dir
+    exclude = git_dir / "info" / "exclude"
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    existing = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
+    if METADATA_FILENAME not in {line.strip() for line in existing.splitlines()}:
+        suffix = "" if existing.endswith("\n") or not existing else "\n"
+        exclude.write_text(existing + suffix + METADATA_FILENAME + "\n", encoding="utf-8")
 
 
 def read_codebase_metadata(managed_dir: Path) -> dict[str, object] | None:
