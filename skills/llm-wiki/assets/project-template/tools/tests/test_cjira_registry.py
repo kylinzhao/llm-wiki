@@ -97,6 +97,28 @@ OP-42513
         self.assertEqual(record["doc_status"], "idea")
         self.assertEqual(record["confidence"], "medium")
 
+    def test_image_filename_like_token_is_not_treated_as_jira(self):
+        registry = load_cjira_registry()
+        text = """
+下单方 <img alt="" src="assets/WX20240814-152731.png"/>
+"""
+
+        record = registry.classify_page("创建复检工单", "raw/product/index.md", text)
+
+        self.assertEqual(record["primary_cjira"], "")
+        self.assertEqual(record["supporting_cjira"], [])
+
+    def test_asset_encoded_fragment_is_not_treated_as_jira(self):
+        registry = load_cjira_registry()
+        text = """
+![image](assets/E8-87-AA-E8-90-A5-E9-87-87-E9-94-80-E5-B9-B3-E5-8F-B0.png)
+"""
+
+        record = registry.classify_page("2月总部买手运营调研", "raw/product/index.md", text)
+
+        self.assertEqual(record["primary_cjira"], "")
+        self.assertEqual(record["supporting_cjira"], [])
+
 
 class CjiraRegistryPersistenceTest(unittest.TestCase):
     def test_active_registry_is_written_for_idea_and_non_terminal_pages(self):
@@ -194,6 +216,45 @@ class CjiraRegistryPersistenceTest(unittest.TestCase):
             self.assertEqual(len(active_payload["records"]), 1)
             self.assertEqual(active_payload["records"][0]["doc_status"], "in_progress")
             self.assertEqual(active_payload["records"][0]["primary_cjira_status"], "Blocked")
+
+    def test_unreferenced_cache_entries_are_pruned_on_rebuild(self):
+        registry = load_cjira_registry()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            root = project / "staging" / "cjira-registry"
+            root.mkdir(parents=True)
+            (root / "active.json").write_text(
+                json.dumps({"generated_at": "2026-05-26T00:00:00+00:00", "records": []}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "archive.json").write_text(
+                json.dumps({"generated_at": "2026-05-26T00:00:00+00:00", "records": []}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "cache.json").write_text(
+                json.dumps(
+                    {
+                        "WX20240814-152731": {"issue_key": "WX20240814-152731", "fetch_failed": True},
+                        "PSP-40038": {"issue_key": "PSP-40038", "status": "In Progress", "terminal": False},
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            sources = [
+                {
+                    "title": "8.动销平台_自营政策调价",
+                    "raw_path": "raw/product/index.md",
+                    "text": "| 修改内容 | cjira |\n| --- | --- |\n| 调价 | PSP-40038 |",
+                }
+            ]
+
+            registry.update_registry_for_sources(project, sources, refresh_status=False)
+
+            cache_payload = json.loads((root / "cache.json").read_text(encoding="utf-8"))
+            self.assertNotIn("WX20240814-152731", cache_payload)
+            self.assertIn("PSP-40038", cache_payload)
 
 
 class CjiraRegistryStatusRefreshTest(unittest.TestCase):

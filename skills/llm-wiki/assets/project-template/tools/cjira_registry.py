@@ -43,10 +43,38 @@ SSO_SKILL_CANDIDATES = (
     Path(__file__).with_name("guazi-sso-login"),
     Path("~/.codex/skills/guazi-sso-login").expanduser(),
 )
+ASSET_LINE_MARKERS = ("assets/", "<img", "![", "src=")
+ASSET_FILE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg")
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _looks_like_asset_reference(line: str, issue_key: str) -> bool:
+    lowered = line.lower()
+    if not any(marker in lowered for marker in ASSET_LINE_MARKERS):
+        return False
+    if issue_key.lower() in lowered and any(suffix in lowered for suffix in ASSET_FILE_SUFFIXES):
+        return True
+    return False
+
+
+def _is_valid_plain_issue_match(text: str, match: re.Match[str], issue_key: str) -> bool:
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    line_end = text.find("\n", match.end())
+    if line_end == -1:
+        line_end = len(text)
+    line = text[line_start:line_end]
+    if _looks_like_asset_reference(line, issue_key):
+        return False
+    prev_char = text[match.start() - 1] if match.start() > 0 else ""
+    next_char = text[match.end()] if match.end() < len(text) else ""
+    if prev_char == "/" or next_char in {".", "/"}:
+        return False
+    if next_char == "-" and any(suffix in line.lower() for suffix in ASSET_FILE_SUFFIXES):
+        return False
+    return True
 
 
 def extract_issue_candidates(text: str) -> list[dict[str, object]]:
@@ -67,8 +95,12 @@ def extract_issue_candidates(text: str) -> list[dict[str, object]]:
             index = current
         return index
 
-    for match in list(CJIRA_URL_RE.finditer(text)) + list(ISSUE_KEY_RE.finditer(text)):
-        issue_key = match.group("key") if "key" in match.groupdict() else match.group(0)
+    url_matches = [(match, True) for match in CJIRA_URL_RE.finditer(text)]
+    plain_matches = [(match, False) for match in ISSUE_KEY_RE.finditer(text)]
+    for match, from_url in url_matches + plain_matches:
+        issue_key = match.group("key") if from_url else match.group(0)
+        if not from_url and not _is_valid_plain_issue_match(text, match, issue_key):
+            continue
         if issue_key in seen:
             continue
         seen.add(issue_key)
@@ -321,6 +353,17 @@ def update_registry_for_sources(
             archived_paths.add(str(record["page_path"]))
             continue
         next_active.append(record)
+
+    referenced_keys = {
+        str(record.get("primary_cjira") or "")
+        for record in [*next_active, *next_archive]
+        if str(record.get("primary_cjira") or "")
+    }
+    cache = {
+        key: value
+        for key, value in cache.items()
+        if key in referenced_keys
+    }
 
     write_registry(project, next_active, next_archive, cache)
     return {
