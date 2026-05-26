@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -171,6 +172,33 @@ Operational RSS metadata.
             plan = build_wiki.read_json(tmp_path / "staging" / "refinement-plan.json")
             self.assertEqual(drift["stale_sources"], [])
             self.assertFalse(plan["semantic_update_required"])
+
+    def test_build_writes_cjira_registry_for_source_pages(self):
+        import tempfile
+
+        build_wiki = load_build_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            raw_page = tmp_path / "raw" / "product" / "index.md"
+            raw_page.parent.mkdir(parents=True)
+            raw_page.write_text(
+                "---\n"
+                "title: '8.动销平台_自营政策调价'\n"
+                "page_id: '665758297'\n"
+                "---\n\n"
+                "# 8.动销平台_自营政策调价\n\n"
+                '<a href="https://cjira.guazi-corp.com/browse/PSP-40038">PSP-40038</a>\n',
+                encoding="utf-8",
+            )
+
+            build_wiki.main_for_project(tmp_path)
+
+            active_payload = json.loads(
+                (tmp_path / "staging" / "cjira-registry" / "active.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(len(active_payload["records"]), 1)
+            self.assertEqual(active_payload["records"][0]["primary_cjira"], "PSP-40038")
+            self.assertEqual(active_payload["records"][0]["doc_status"], "in_progress")
 
 
 if __name__ == "__main__":
