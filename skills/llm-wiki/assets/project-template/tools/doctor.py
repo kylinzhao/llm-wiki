@@ -154,6 +154,30 @@ def build_report(project: Path) -> dict[str, Any]:
             )
         )
 
+    drawio_repair = health.get("drawio_repair", {})
+    if isinstance(drawio_repair, dict) and drawio_repair.get("missing_evidence_count"):
+        findings.append(
+            finding(
+                "P1",
+                "drawio_evidence_missing",
+                (
+                    f"{drawio_repair.get('missing_evidence_count')} draw.io diagram(s) do not have generated "
+                    ".drawio.md Mermaid evidence. Run llm-wiki update to repair them before relying on visual flow evidence."
+                ),
+                blocking=False,
+            )
+        )
+    last_drawio_report = drawio_repair.get("last_report", {}) if isinstance(drawio_repair, dict) else {}
+    if isinstance(last_drawio_report, dict) and last_drawio_report.get("unparsed_count"):
+        findings.append(
+            finding(
+                "P1",
+                "drawio_unparsed",
+                f"{last_drawio_report.get('unparsed_count')} draw.io diagram(s) could not be parsed deterministically.",
+                blocking=False,
+            )
+        )
+
     if not agent_rules.get("ok"):
         findings.append(
             finding(
@@ -185,6 +209,8 @@ def build_report(project: Path) -> dict[str, Any]:
             "status": health.get("status"),
             "wiki_pages": health.get("wiki_pages"),
             "source_pages": health.get("source_pages"),
+            "raw_drawio_assets": health.get("raw_drawio_assets"),
+            "drawio_repair": health.get("drawio_repair"),
         },
         "gplus_quality": gplus_quality,
         "agent_rules": agent_rules,

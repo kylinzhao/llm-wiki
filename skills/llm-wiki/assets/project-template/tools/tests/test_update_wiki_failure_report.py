@@ -69,6 +69,24 @@ class UpdateFailureReportTest(unittest.TestCase):
             ],
         )
 
+    def test_drawio_repair_runs_before_code_sync(self):
+        import tempfile
+        from unittest import mock
+
+        update_wiki = load_update_wiki()
+        calls = []
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            script = project / "tools" / "drawio_repair.py"
+            script.parent.mkdir(parents=True)
+            script.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+
+            with mock.patch.object(update_wiki, "run_python_script", side_effect=lambda path, _project, extra=None: calls.append(path.name) or 0):
+                code = update_wiki.run_drawio_repair(project)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["drawio_repair.py"])
+
     def test_failure_report_replaces_previous_success_report(self):
         import tempfile
 

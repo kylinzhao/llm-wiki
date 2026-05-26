@@ -649,6 +649,13 @@ def run_code_sync(project: Path) -> int:
     return 0
 
 
+def run_drawio_repair(project: Path) -> int:
+    script = project / "tools" / "drawio_repair.py"
+    if not script.is_file():
+        return 0
+    return run_python_script(script, project)
+
+
 def deterministic_steps(tools: Path, graphify: bool = False) -> list[tuple[Path, list[str]]]:
     steps = [
         (tools / "build_wiki.py", []),
@@ -721,6 +728,11 @@ def main() -> int:
         if code != 0:
             write_failure_report(project, "raw_sync", code)
             return code
+
+    code = run_drawio_repair(project)
+    if code != 0:
+        write_failure_report(project, "drawio_repair", code)
+        return code
 
     code = run_code_sync(project)
     if code != 0:

@@ -158,3 +158,22 @@ class HealthBusinessContextTest(unittest.TestCase):
                     "stale_status_pages": 1,
                 },
             )
+
+    def test_health_reports_missing_drawio_evidence(self):
+        health = load_health()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            write_minimal_project(project)
+            (project / "BUSINESS_CONTEXT.md").write_text(
+                "# BUSINESS_CONTEXT\n\n- 项目名称：二手车知识库\n- 目标用户/角色：运营\n- 核心业务目标：统一需求口径。\n",
+                encoding="utf-8",
+            )
+            drawio = project / "raw" / "product" / "assets" / "flow.drawio"
+            drawio.parent.mkdir(parents=True)
+            drawio.write_text("<mxGraphModel><root /></mxGraphModel>", encoding="utf-8")
+
+            report = health.build_report(project)
+
+            self.assertEqual(report["raw_drawio_assets"], 1)
+            self.assertEqual(report["drawio_repair"]["missing_evidence_count"], 1)
+            self.assertIn("draw.io", " ".join(report["image_evidence_gaps"]))
