@@ -15,6 +15,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+from cjira_registry import update_registry_for_sources
 from wiki_preflight import raw_evidence_preflight_failed
 
 TEXT_EXTENSIONS = {
@@ -529,6 +530,8 @@ def update_status(
     }
     write(project / "staging" / "refinement-status.md", "# Refinement Status\n\n```json\n" + json.dumps(status, ensure_ascii=False, indent=2) + "\n```\n")
     write(project / "staging" / "source-manifest.json", json.dumps({"generated_at": utc_now(), "sources": sources}, ensure_ascii=False, indent=2) + "\n")
+    status["cjira_registry"] = update_registry_for_sources(project, sources, refresh_status=False)
+    write(project / "staging" / "refinement-status.md", "# Refinement Status\n\n```json\n" + json.dumps(status, ensure_ascii=False, indent=2) + "\n```\n")
     write(
         project / "staging" / "source-drift.json",
         json.dumps(

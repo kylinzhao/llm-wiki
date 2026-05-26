@@ -18,6 +18,26 @@ def load_update_wiki():
 
 
 class UpdateFailureReportTest(unittest.TestCase):
+    def test_deterministic_steps_include_cjira_refresh_after_build(self):
+        update_wiki = load_update_wiki()
+        tools = TOOLS_DIR
+
+        steps = update_wiki.deterministic_steps(tools, graphify=True)
+
+        self.assertEqual(
+            [(script.name, extra) for script, extra in steps],
+            [
+                ("build_wiki.py", []),
+                ("cjira_registry.py", ["--refresh"]),
+                ("scan_code.py", []),
+                ("graphify_code.py", ["--all"]),
+                ("build_traceability.py", []),
+                ("health.py", ["--json"]),
+                ("build_graph.py", []),
+                ("anchor_check.py", []),
+            ],
+        )
+
     def test_failure_report_replaces_previous_success_report(self):
         import tempfile
 

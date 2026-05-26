@@ -267,6 +267,42 @@ def business_context_status(project: Path) -> dict[str, object]:
     }
 
 
+def cjira_registry_status(project: Path) -> dict[str, object]:
+    root = project / "staging" / "cjira-registry"
+
+    def load_records(path: Path) -> list[dict[str, object]]:
+        if not path.is_file():
+            return []
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return []
+        records = payload.get("records") if isinstance(payload, dict) else []
+        return [item for item in records if isinstance(item, dict)]
+
+    active_records = load_records(root / "active.json")
+    archive_records = load_records(root / "archive.json")
+    try:
+        cache_payload = json.loads((root / "cache.json").read_text(encoding="utf-8")) if (root / "cache.json").is_file() else {}
+    except json.JSONDecodeError:
+        cache_payload = {}
+    if not isinstance(cache_payload, dict):
+        cache_payload = {}
+
+    all_records = [*active_records, *archive_records]
+    return {
+        "active_pages": len(active_records),
+        "archived_pages": len(archive_records),
+        "idea_pages": sum(1 for item in all_records if item.get("doc_status") == "idea"),
+        "in_progress_pages": sum(1 for item in all_records if item.get("doc_status") == "in_progress"),
+        "frozen_pages": sum(1 for item in all_records if item.get("doc_status") == "frozen"),
+        "low_confidence_pages": sum(1 for item in all_records if item.get("confidence") == "low"),
+        "stale_status_pages": sum(
+            1 for item in cache_payload.values() if isinstance(item, dict) and item.get("fetch_failed") is True
+        ),
+    }
+
+
 def build_report(project: Path) -> dict[str, object]:
     project = project.resolve()
     missing = [rel for rel in REQUIRED_PATHS if not (project / rel).exists()]
@@ -351,6 +387,11 @@ def build_report(project: Path) -> dict[str, object]:
         )
 
     code_intelligence = code_intelligence_status(project)
+    cjira_registry = cjira_registry_status(project)
+    if cjira_registry["stale_status_pages"]:
+        recommended_actions.append(
+            "Refresh active cjira statuses with `llm-wiki update`; if Jira auth is missing, configure local SSO/Jira auth first."
+        )
     wiki_built = (project / "wiki" / "index.md").is_file()
     query_may_work_without_full_evidence = wiki_built and bool(evidence_gaps)
 
@@ -387,6 +428,7 @@ def build_report(project: Path) -> dict[str, object]:
         "image_evidence_status": image_evidence_status,
         "image_evidence_gaps": image_evidence_gaps,
         "image_refinement_candidates": image_candidates,
+        "cjira_registry": cjira_registry,
         "code_intelligence": code_intelligence,
         "recommended_actions": recommended_actions,
         "query_may_work_without_full_evidence": query_may_work_without_full_evidence,

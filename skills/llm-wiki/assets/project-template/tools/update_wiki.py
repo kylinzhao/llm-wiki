@@ -703,6 +703,21 @@ def run_code_sync(project: Path, cli_command: object, skip_auto: bool) -> int:
     return 0
 
 
+def deterministic_steps(tools: Path, graphify: bool = False) -> list[tuple[Path, list[str]]]:
+    steps = [
+        (tools / "build_wiki.py", []),
+        (tools / "cjira_registry.py", ["--refresh"]),
+        (tools / "scan_code.py", []),
+        (tools / "build_traceability.py", []),
+        (tools / "health.py", ["--json"]),
+        (tools / "build_graph.py", []),
+        (tools / "anchor_check.py", []),
+    ]
+    if graphify:
+        steps.insert(3, (tools / "graphify_code.py", ["--all"]))
+    return steps
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", default=".", help="Project root. Defaults to current directory.")
@@ -782,16 +797,7 @@ def main() -> int:
         write_failure_report(project, "code_sync", code)
         return code
 
-    steps = [
-        (tools / "build_wiki.py", []),
-        (tools / "scan_code.py", []),
-        (tools / "build_traceability.py", []),
-        (tools / "health.py", ["--json"]),
-        (tools / "build_graph.py", []),
-        (tools / "anchor_check.py", []),
-    ]
-    if args.graphify:
-        steps.insert(2, (tools / "graphify_code.py", ["--all"]))
+    steps = deterministic_steps(tools, graphify=bool(args.graphify))
 
     exit_code = 0
     for script, extra in steps:

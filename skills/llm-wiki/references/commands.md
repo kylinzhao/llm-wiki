@@ -165,6 +165,7 @@ Default update order:
 4. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
    - when upstream sync is enabled in the project, prefer an update command path that includes the raw refresh automatically, for example by auto-running Cwiki sync and `tools/rss_sync.py` inside `tools/update_wiki.py` or by passing `--raw-sync-command`
    - when `raw-code/` codebases are connected as git worktrees, prefer an update command path that includes the code refresh automatically, for example by auto-running `git pull --ff-only` per clean codebase or a manifest-defined override inside `tools/update_wiki.py`
+   - when the standard template is installed, `update` should refresh `staging/cjira-registry/active.json` after source scan; terminal pages move to `archive.json`
 5. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
    - Read `staging/refinement-plan.json` and `references/refinement-contract.md`; use them as the write-scope and acceptance contract for semantic refinement.
    - Read `staging/update/latest.json` `gplus_quality`; if `status=needs_attention`, treat it as an update trigger even when `semantic_update_required=false`.
@@ -199,6 +200,10 @@ Default update order:
    - run `tools/anchor_check.py` when traceability pages or code anchors changed
    - if validation fails and the fix is low-risk and in scope, fix it before final reporting
    - if validation fails and cannot be fixed safely, report the blocker and recommend the smallest safe continuation
+15. For status-sensitive projects, read `staging/cjira-registry/active.json` and `archive.json` during update / doctor / query:
+   - `doctor` should report stale Jira fetches and low-confidence primary selections
+   - `query` should use registry state when answering whether a requirement is `idea`, `in_progress`, or `frozen`
+   - unknown or failed Jira lookups must remain active and must not be promoted to `frozen`
 
 Project command convention:
 

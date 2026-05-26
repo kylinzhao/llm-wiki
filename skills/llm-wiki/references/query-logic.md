@@ -192,3 +192,17 @@
 缺失证据 / 未决点：
 - ...
 ```
+
+## Document Status Semantics
+
+当 `staging/cjira-registry/active.json` 或 `staging/cjira-registry/archive.json` 为某个 source page 提供了记录时：
+
+- `idea`：按 idea / proposal / exploratory evidence 描述，不要表述成已承诺范围。
+- `in_progress`：按 active / in-progress requirement evidence 描述，不要直接当成稳定事实。
+- `frozen`：可以作为稳定需求证据使用，但仍需遵守正常来源支持强度。
+
+做 mapping 和 traceability 时：
+
+- 优先使用 `frozen`
+- 允许 `in_progress` 作为 provisional mapping
+- 将 `idea` 明确标成 candidate-only，而不是 authoritative target
