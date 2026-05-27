@@ -16,6 +16,7 @@ zip 原型：无 / 已分析 N 个 / 存在但无法解压或识别入口
 前端评审：不涉及 / 已按前端规则执行 / 涉及前端但需求缺失
 代码证据：未使用 / 已使用 raw-code/wiki-code / 代码缺失
 历史数据探查：不适用 / 已执行 / 需要人工确认数据权限
+PRD 质量门禁：已执行 / 不适用（说明原因）
 检索路径：
 1. BUSINESS_CONTEXT.md
 2. 目标需求源
@@ -25,6 +26,7 @@ zip 原型：无 / 已分析 N 个 / 存在但无法解压或识别入口
 6. raw-code 或 wiki/code/capabilities
 7. wiki/code/traceability
 8. 图片与 zip 原型证据
+9. PRD 质量门禁
 ```
 
 ## Input Handling
@@ -48,19 +50,53 @@ Do not rewrite existing raw pages by hand. If the same pageId exists with confli
 
 If the request says `产品评审`, `产品视角`, `PM 评审`, `从产品角度看`, use 产品评审. If it says `评分`, `评分概览`, or asks only for completeness score, use 评分概览. If it names dimensions, roles, or areas, use 快速评审. Otherwise default to 完整评审 for PRD/spec review.
 
+## PRD Quality Gate
+
+Always read `prd-quality-gate.md` before scoring dimensions. The quality gate is a document-level readiness check, not a replacement for the 16 dimensions.
+
+Apply it to:
+
+- Cwiki PRDs, Markdown PRDs, product plans, specs, pasted PRDs, and HTML/zip prototypes with PRD text.
+- 产品评审 and 完整评审 by default.
+- 快速评审 when the user asks whether a PRD is ready, complete, clear, reviewable, or can enter development.
+
+Output a concise gate table:
+
+```text
+| 门禁项 | 结论 | 主要缺口 | 影响等级 |
+```
+
+Gate items:
+
+- 文档结构：标题、任务看板对应关系、修订记录、目录、正文组织。
+- 调研证据和目标闭环：问题损害、价值、范围、紧急程度、业务闭环、调研来源。
+- 生命周期交付物：调研、设计、产品评审、研发评审、开发测试、上线验证交付物。
+- 用例化需求：用户原始需求到系统用例、事件流、前置/后置条件、业务/数据/非功能规则。
+- 流程图质量：分角色泳道图、时序对应、信息输入输出、数据传输路线、部门/岗位职责、入口入参/出参。
+- 名词和实体：业务名词、系统名词、实体定义、关联关系、唯一性/主键、业务语义。
+- 字段、状态和断点：必填字段来源、字段/状态变更影响、状态组合事件、断点页面。
+- 数据、埋点和统计：前端埋点 sample、后端统计落表 sample、指标口径、上线后 3-7 天效果验证。
+- 配置、权限、消息和上线：状态机、权限默认值、消息触发/开关/汇总/落地页、多端差异、灰度/回滚/宣导。
+
+Severity guidance:
+
+- P0: gate failure blocks unique implementation, acceptance, data correctness, permissions, or launch rollback.
+- P1: gate failure creates major review ambiguity, testing gaps, operational explanation risk, or cross-role inconsistency.
+- P2: gate failure is a document-quality or traceability improvement that does not block implementation.
+
 ## Sixteen-Dimension Review
 
 Score every in-scope dimension as `完整` / `部分` / `缺失`. A dimension can be `不适用` only with an explicit reason.
 
 | # | Dimension | Required checks |
 | --- | --- | --- |
-| 1 | 背景与目标 | Why now, business goal, success metric, baseline/target, time constraint |
-| 2 | 业务概念定义 | Core entities, relationships, roles, new-vs-existing concepts, ambiguity |
-| 3 | 业务流程 | Entry-by-entry end-to-end path, cross-system handoff, abnormal path, state/flow diagram |
+| 1 | 背景与目标 | Why now, concrete harm/opportunity, research evidence, business goal, success metric, baseline/target, time constraint |
+| 2 | 业务概念定义 | Business/system terms, core entities, unique keys, relationships, roles, business semantics, new-vs-existing concepts, ambiguity |
+| 3 | 业务流程 | Entry-by-entry end-to-end path, user-story/use-case mapping, swimlane/timeline, input/output data route, cross-system handoff, abnormal path, state/flow diagram |
 | 4 | 领域边界 | In/out scope, owning system/module, interface/data/code boundary, disputed boundary |
-| 5 | 功能需求完整性 | Normal/abnormal/boundary scenarios, user stories, empty/pagination/search/sort, notifications/logs/bulk operations |
-| 6 | 数据口径 | Formula, numerator/denominator, time window, null/zero/outlier, realtime/offline frequency |
-| 7 | 规则清晰度 | State machine, pre/post condition, permission, validation, numeric constraint, rule priority/order |
+| 5 | 功能需求完整性 | Normal/abnormal/boundary scenarios, user stories/use cases, complete entry set with inputs/outputs, empty/pagination/search/sort, notifications/logs/bulk operations |
+| 6 | 数据口径 | Formula, numerator/denominator, field source for required fields, tracking/statistics samples, time window, null/zero/outlier, realtime/offline frequency |
+| 7 | 规则清晰度 | State machine, state-combination events, pre/post condition, permission defaults, validation, numeric constraint, rule priority/order, operation breakpoints |
 | 8 | 技术约束 | Stack, architecture, integration, environment, data, compatibility constraints |
 | 9 | 已有实现差异 | Existing implementation, behavior consistency, reusable parts, data-level impact |
 | 10 | 依赖方 | Upstream/downstream/cross-team dependencies, contract, downgrade plan |
@@ -68,8 +104,8 @@ Score every in-scope dimension as `完整` / `部分` / `缺失`. A dimension ca
 | 12 | 性能 | Data volume, query complexity, N+1, cache/precompute, concurrency, response target |
 | 13 | 假设与限制条件 | Implicit assumptions, external/data/user/environment limits, non-goals |
 | 14 | 风险问题 | Business, technical, security, dependency, schedule, complaint/compliance risks |
-| 15 | 成功标准 | Functional/performance/security/business acceptance, launch condition, pass/fail criteria |
-| 16 | 上线与兼容性 | Gray release, migration, old/new compatibility, rollback, monitoring/alerting |
+| 15 | 成功标准 | Functional/performance/security/business acceptance, launch condition, 3-7 day post-launch validation, pass/fail criteria |
+| 16 | 上线与兼容性 | Gray release, migration, old/new compatibility, rollback, monitoring/alerting, business announcement, unmet-target handling |
 
 For product review, only cover dimensions 1,2,3,5,6,7,13,14,15,16. For scoring overview, output the scorecard and statistics only unless the user asks for detail.
 
@@ -163,8 +199,8 @@ If frontend details exist, judge whether the logic is reasonable against busines
 | Document signal/noise | Change summary, scope/non-goals, live baseline links; noise heuristics per `references/fe-req-signal-noise.md` |
 | Backend capability | API, service, job, message, table, external dependencies, existing gaps |
 | Data migration | Old status, new status, compatibility, gray release, rollback |
-| Notification/ops | Push, site message, announcement, help center, CS script, manual operation |
-| Metrics/monitoring | Business harm, governance value, alerts, anomaly diagnosis, rollback guard |
+| Notification/ops | Push, site message, notification trigger/switch/merge strategy/copy/landing page, announcement, help center, CS script, manual operation |
+| Metrics/monitoring | Business harm, governance value, frontend tracking sample, backend statistics sample, post-launch 3-7 day comparison, alerts, anomaly diagnosis, rollback guard |
 
 ## Severity
 

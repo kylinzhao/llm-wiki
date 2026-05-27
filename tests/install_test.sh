@@ -75,6 +75,7 @@ test_dry_run_does_not_write() {
   assert_no_path "$home/skills"
   assert_contains "dry-run" "$TMP_DIR/dry-run.out"
   assert_contains "would copy llm-wiki" "$TMP_DIR/dry-run.out"
+  assert_contains "would copy llm-wiki-backfill" "$TMP_DIR/dry-run.out"
 }
 
 test_backup_preserves_existing_skill() {
@@ -103,6 +104,7 @@ test_force_replaces_existing_skill() {
   run_install "$home" --copy --force >"$TMP_DIR/force.out"
 
   assert_file "$home/skills/llm-wiki/SKILL.md"
+  assert_file "$home/skills/llm-wiki-backfill/SKILL.md"
   assert_no_path "$home/skills/llm-wiki/local.txt"
   assert_contains "replaced llm-wiki" "$TMP_DIR/force.out"
 }

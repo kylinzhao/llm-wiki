@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki"
+  short_description: "用 fast/update/trace/doctor 等命令构建、维护、查询和诊断 LLM Wiki"
+  default_prompt: "用 $llm-wiki 处理这个项目。新项目用 fast，变更响应用 update，需求到代码审计用 trace，站点体检用 doctor；先读 BUSINESS_CONTEXT.md 和当前状态，结束时建议下一步。"
