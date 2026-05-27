@@ -15,6 +15,9 @@ ENGINE_PREFIXES = (
     "tools/",
     "docs/tooling-dependencies.md",
     "docs/implementation-workflow.md",
+    "docs/traceability-contract.md",
+    "staging/traceability/state.schema.json",
+    "staging/traceability/proposals.schema.json",
 )
 
 QUERY_ROUTING_HEADING = "## Query Routing"

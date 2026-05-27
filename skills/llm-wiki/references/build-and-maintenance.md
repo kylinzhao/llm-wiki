@@ -66,7 +66,10 @@ uv run python tools/anchor_check.py
 
 - 基于 source manifest 和 code scan 输出生成 traceability 种子
 - 写入 `wiki/code/traceability/index.md`
-- 只生成待 Codex 验证的候选行，不替代证据强度判断
+- 从 code manifest 生成 `Code Anchor Candidates`，完整候选写入 `staging/traceability-candidates.json`
+- 合并 `staging/traceability/runs/<run_id>/proposals.json` 到单一长期状态 `staging/traceability/state.json`
+- 从 `state.json` 渲染 `Verified`、`Proposed`、`Gaps` 和 `Rejected` traceability sections
+- 生成确定性候选行和候选级别；真实需求点到代码锚点只有在存在可规则匹配或已验证证据时才能提升为 `strong`、`partial`、`inferred`、`external` 或 `missing`
 
 ### `health.py`
 

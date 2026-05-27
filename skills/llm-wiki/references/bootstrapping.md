@@ -103,7 +103,7 @@ COOKIE_HEADER='从浏览器 DevTools 复制的完整 Cookie' \
 
 6. 对全量语料完成首轮大模型 summary
 7. 对全量语料完成 AI-native 文本精修与分层落位
-8. 对代码能力页和 traceability 完成 Codex-native 证据强度判定
+8. 对代码能力页和 traceability 生成确定性代码锚点候选；如有当前 agent 或外部 agent worker 执行 trace worker contract，则合并 proposals 到 `staging/traceability/state.json` 并渲染 traceability Markdown
 9. 运行 `health.py --json`
 10. 运行 `build_graph.py`
 11. 运行 `anchor_check.py`

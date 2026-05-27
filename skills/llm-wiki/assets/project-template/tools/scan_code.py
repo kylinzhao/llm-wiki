@@ -190,7 +190,7 @@ def codebase_page(
 - Concepts: {upstream_summary.get('concept_count', 0)}
 - Source map entries: {upstream_summary.get('source_map_entries', 0)}
 
-This upstream wiki is a derived hint. Codex must still verify direct code anchors before claiming implementation certainty.
+This upstream wiki is a derived hint. Direct code anchors are still required before claiming implementation certainty.
 """
     return f"""# Codebase: {codebase}
 
@@ -215,7 +215,7 @@ This upstream wiki is a derived hint. Codex must still verify direct code anchor
 
 ## Evidence Boundary
 
-This page is deterministic code evidence. Codex must verify business meaning before linking it to requirement facts.
+This page is deterministic code evidence. Do not link it to requirement facts unless direct requirement and code evidence are available.
 """
 
 

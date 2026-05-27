@@ -10,7 +10,7 @@
 这里的“翻译”不是把原始材料交给脚本做语义理解。LLM Wiki 的基本原则是：
 
 - 本地脚本只做确定性工作：扫描、建索引、抽取候选、生成骨架、检查断链、构建图谱。
-- Codex / subagent 做语义工作：摘要、归类、实体归一、业务能力判断、需求到代码的证据强度判定。
+- Agent / reviewer 可辅助语义工作：摘要、归类、实体归一、业务能力判断。需求到代码的证据强度必须由确定性候选、可规则匹配信号或直接审计证据支撑，不能依赖模型作为运行时补全步骤。
 - `raw/` 和 `raw-code/` 是原始证据层，不应被修改。
 - `wiki/` 是面向查询、审查和交接的可读知识层。
 - `staging/` 是机器可读中间层，保存 manifest、health、graph、code scan、graphify 输出和 drift 状态。
@@ -170,13 +170,15 @@ graphify 不回答业务语义问题：
 - `capabilities/` 记录业务能力如何跨前端、后端、接口、Service、DAO、消息、任务串起来。
 - `traceability/` 记录需求点到代码证据的可审计矩阵。
 
-`tools/build_traceability.py` 只生成追踪矩阵种子：
+`tools/build_traceability.py` 生成并增量维护追踪矩阵入口：
 
 - 左侧列出需求 source。
 - 右侧列出 codebase scan 候选。
+- 从 `staging/code-graph/<codebase_id>/manifest.json` 提取代码锚点候选，写入 `wiki/code/traceability/index.md` 的 `Code Anchor Candidates`，完整候选同时写入 `staging/traceability-candidates.json`。
+- 保留 `Verified Traceability` 中已验证的追踪行，避免每次 update 覆盖已确认结论。
 - evidence strength 默认为 `missing`、`partial` 等待判断。
 
-Codex 后续必须把种子替换为真实追踪关系：
+候选锚点只有在存在可审计需求证据时才能提升为真实追踪关系：
 
 - 需求来源
 - 需求点
@@ -382,5 +384,5 @@ wiki/code/traceability = 需求到代码的审计结论
 核心原则一句话：
 
 ```text
-raw 和 raw-code 提供事实，脚本提供索引和候选，graph 提供导航和结构线索，Codex 负责语义关联，traceability 负责留下可审计结论。
+raw 和 raw-code 提供事实，脚本提供索引、候选和可规则化的证据分级，graph 提供导航和结构线索，traceability 负责留下可审计结论。模型判断如果参与 traceability，必须作为 trace worker proposal 落到结构化文件，再由确定性工具合并和渲染。
 ```
