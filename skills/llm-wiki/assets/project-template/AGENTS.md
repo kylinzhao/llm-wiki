@@ -38,7 +38,7 @@ uv run python tools/update_wiki.py
 uv run python tools/update_wiki.py --graphify
 ```
 
-`tools/update_wiki.py` runs the deterministic chain (including health/graph/anchor checks). Use Codex-native work for summaries, entity normalization, business judgment, implementation judgment, and final traceability strength.
+`tools/update_wiki.py` runs the deterministic chain (including health/graph/anchor checks). Traceability model work must follow `docs/traceability-contract.md`: the current agent or an external agent worker writes `staging/traceability/runs/<run_id>/proposals.json`, and deterministic tooling merges it into `staging/traceability/state.json` before rendering Markdown.
 
 ## Cwiki Authentication
 

@@ -338,7 +338,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --source /path/
 - `install_project_template.py`：把完整项目脚手架复制到目标 wiki 项目
 - `build_wiki.py`：搭 wiki 骨架
 - `scan_code.py`：扫描 `raw-code/*` 并生成代码事实入口
-- `build_traceability.py`：生成需求到代码追踪矩阵种子
+- `build_traceability.py`：生成需求到代码追踪矩阵种子，记录代码扫描锚点候选，合并 trace worker proposals 到 `staging/traceability/state.json`，并渲染 `wiki/code/traceability/`
 - `health.py`：检查结构是否健康
 - `build_graph.py`：把 wikilink 连成图谱
 - `anchor_check.py`：检查 traceability 中的代码锚点是否存在
@@ -353,7 +353,7 @@ uv run python tools/graphify_code.py --all
 
 - 必需：Python 3.10+、`uv`
 - 可选：`graphify`，用于代码图谱提取，输出归档到 `staging/code-graph/<codebase_id>/graphify-out/`
-- 本地脚本不得调用模型 SDK；语义 summary、实体归一、能力判断和证据强度由 Codex / subagent 完成
+- 本地脚本不得调用模型 SDK；语义 summary、实体归一和能力判断可由 Codex / subagent 辅助。traceability 的模型步骤必须走 `docs/traceability-contract.md`：当前 agent 或外部 agent worker 输出 `staging/traceability/runs/<run_id>/proposals.json`，确定性工具合并到 `staging/traceability/state.json` 并渲染 Markdown。
 
 代码 wiki 的构建可以是 AI-native 编排任务，不要求一开始就写入仓库脚本。执行时先识别 codebase，再按确定性扫描、graphify 图谱、Markdown 精修、跨层链接的顺序推进。
 

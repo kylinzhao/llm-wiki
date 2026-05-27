@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import scan_code
+import build_traceability
 from build_traceability import build_code_seed_row
 from code_intelligence import (
     collect_upstream_summary,
@@ -198,6 +199,209 @@ class TraceabilitySeedTests(unittest.TestCase):
         )
         self.assertIn("partial", row)
         self.assertIn("Derived upstream topic matched; direct code anchor still required.", row)
+
+    def test_build_traceability_preserves_verified_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw" / "source").mkdir(parents=True)
+            (project / "raw" / "source" / "index.md").write_text("# source\n", encoding="utf-8")
+            (project / "raw-code" / "sell-taro").mkdir(parents=True)
+            (project / "staging").mkdir()
+            (project / "staging" / "source-manifest.json").write_text(
+                json.dumps({"sources": [{"slug": "source-index", "title": "Source"}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (project / "staging" / "code-graph").mkdir(parents=True)
+            (project / "staging" / "code-graph" / "summary.json").write_text(
+                json.dumps({"codebases": [{"codebase_id": "sell-taro", "stack": ["node"]}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            traceability = project / "wiki" / "code" / "traceability" / "index.md"
+            traceability.parent.mkdir(parents=True)
+            traceability.write_text(
+                "# Traceability Matrix\n\n"
+                "## Verified Traceability\n\n"
+                "| Requirement Source | Requirement Point | Code Anchors | Evidence Strength | Notes |\n"
+                "| --- | --- | --- | --- | --- |\n"
+                "| [[sources/source-index|Source]] | verified point | `raw-code/sell-taro/src/app.tsx` | strong | keep me |\n",
+                encoding="utf-8",
+            )
+
+            build_traceability.build_traceability(project)
+
+            content = traceability.read_text(encoding="utf-8")
+            self.assertIn("verified point", content)
+            self.assertIn("keep me", content)
+
+    def test_build_traceability_preserves_legacy_manual_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw" / "source").mkdir(parents=True)
+            (project / "raw" / "source" / "index.md").write_text("# source\n", encoding="utf-8")
+            (project / "raw-code" / "sell-taro").mkdir(parents=True)
+            (project / "staging").mkdir()
+            (project / "staging" / "source-manifest.json").write_text(
+                json.dumps({"sources": [{"slug": "source-index", "title": "Source"}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (project / "staging" / "code-graph").mkdir(parents=True)
+            (project / "staging" / "code-graph" / "summary.json").write_text(
+                json.dumps({"codebases": [{"codebase_id": "sell-taro", "stack": ["node"]}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            traceability = project / "wiki" / "code" / "traceability" / "index.md"
+            traceability.parent.mkdir(parents=True)
+            traceability.write_text(
+                "# Traceability Matrix\n\n"
+                "## Requirement Seeds\n\n"
+                "| [[sources/source-index|Source]] | legacy manual point | service anchor | strong | keep legacy |\n",
+                encoding="utf-8",
+            )
+
+            build_traceability.build_traceability(project)
+
+            content = traceability.read_text(encoding="utf-8")
+            self.assertIn("## Previous Traceability Content", content)
+            self.assertIn("legacy manual point", content)
+            self.assertIn("keep legacy", content)
+
+    def test_build_traceability_lists_code_anchor_candidates_from_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw" / "source").mkdir(parents=True)
+            (project / "raw" / "source" / "index.md").write_text("# source\n", encoding="utf-8")
+            codebase = project / "raw-code" / "sell-taro"
+            (codebase / "src").mkdir(parents=True)
+            (codebase / "src" / "app.tsx").write_text("export const url = '/api/cars';\n", encoding="utf-8")
+            (project / "staging").mkdir()
+            (project / "staging" / "source-manifest.json").write_text(
+                json.dumps({"sources": [{"slug": "source-index", "title": "Source"}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            scan_code.scan_codebase(project, codebase)
+            (project / "staging" / "code-graph" / "summary.json").write_text(
+                json.dumps({"codebases": [{"codebase_id": "sell-taro", "stack": ["node"]}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            build_traceability.build_traceability(project)
+
+            content = (project / "wiki" / "code" / "traceability" / "index.md").read_text(encoding="utf-8")
+            self.assertIn("## Code Anchor Candidates", content)
+            self.assertIn("`raw-code/sell-taro/src/app.tsx`", content)
+            self.assertIn("`/api/cars`", content)
+            self.assertIn("candidate", content)
+            self.assertNotIn("Codex must", content)
+
+    def test_build_traceability_merges_worker_proposals_into_single_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw" / "source").mkdir(parents=True)
+            (project / "raw" / "source" / "index.md").write_text("# source\n", encoding="utf-8")
+            codebase = project / "raw-code" / "sell-taro"
+            (codebase / "src").mkdir(parents=True)
+            (codebase / "src" / "app.tsx").write_text("export const url = '/api/cars';\n", encoding="utf-8")
+            (project / "staging").mkdir()
+            (project / "staging" / "source-manifest.json").write_text(
+                json.dumps({"sources": [{"slug": "source-index", "title": "Source"}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            scan_code.scan_codebase(project, codebase)
+            (project / "staging" / "code-graph" / "summary.json").write_text(
+                json.dumps({"codebases": [{"codebase_id": "sell-taro", "stack": ["node"]}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            run_dir = project / "staging" / "traceability" / "runs" / "run-1"
+            run_dir.mkdir(parents=True)
+            run_dir.joinpath("proposals.json").write_text(
+                json.dumps(
+                    {
+                        "links": [
+                            {
+                                "id": "tr_api_cars",
+                                "requirement": "车辆列表查询",
+                                "source": "wiki/sources/source-index.md",
+                                "code": ["raw-code/sell-taro/src/app.tsx#/api/cars"],
+                                "strength": "partial",
+                                "status": "proposed",
+                                "note": "需求与接口路径相关，但缺少服务端实现锚点。",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            build_traceability.build_traceability(project)
+
+            state = json.loads((project / "staging" / "traceability" / "state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["links"][0]["id"], "tr_api_cars")
+            self.assertEqual(state["links"][0]["status"], "proposed")
+            content = (project / "wiki" / "code" / "traceability" / "index.md").read_text(encoding="utf-8")
+            self.assertIn("## Proposed Traceability", content)
+            self.assertIn("车辆列表查询", content)
+            self.assertIn("部分证据", content)
+
+    def test_build_traceability_preserves_confirmed_and_rejected_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw" / "source").mkdir(parents=True)
+            (project / "raw" / "source" / "index.md").write_text("# source\n", encoding="utf-8")
+            (project / "raw-code" / "sell-taro").mkdir(parents=True)
+            (project / "staging").mkdir()
+            (project / "staging" / "source-manifest.json").write_text(
+                json.dumps({"sources": [{"slug": "source-index", "title": "Source"}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (project / "staging" / "code-graph").mkdir(parents=True)
+            (project / "staging" / "code-graph" / "summary.json").write_text(
+                json.dumps({"codebases": [{"codebase_id": "sell-taro", "stack": ["node"]}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            state_dir = project / "staging" / "traceability"
+            state_dir.mkdir(parents=True)
+            state_dir.joinpath("state.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "links": [
+                            {"id": "tr_keep", "requirement": "保留确认", "source": "wiki/sources/source-index.md", "code": [], "strength": "strong", "status": "confirmed"},
+                            {"id": "tr_reject", "requirement": "保留拒绝", "source": "wiki/sources/source-index.md", "code": [], "strength": "inferred", "status": "rejected"},
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            run_dir = state_dir / "runs" / "run-1"
+            run_dir.mkdir(parents=True)
+            run_dir.joinpath("proposals.json").write_text(
+                json.dumps(
+                    {
+                        "links": [
+                            {"id": "tr_keep", "requirement": "新文案", "source": "wiki/sources/source-index.md", "code": ["raw-code/sell-taro/src/app.tsx#App"], "strength": "partial", "status": "proposed"},
+                            {"id": "tr_reject", "requirement": "新拒绝文案", "source": "wiki/sources/source-index.md", "code": ["raw-code/sell-taro/src/app.tsx#App"], "strength": "partial", "status": "proposed"},
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            build_traceability.build_traceability(project)
+
+            state = json.loads(state_dir.joinpath("state.json").read_text(encoding="utf-8"))
+            by_id = {link["id"]: link for link in state["links"]}
+            self.assertEqual(by_id["tr_keep"]["status"], "confirmed")
+            self.assertEqual(by_id["tr_keep"]["requirement"], "新文案")
+            self.assertEqual(by_id["tr_reject"]["status"], "rejected")
+            content = (project / "wiki" / "code" / "traceability" / "index.md").read_text(encoding="utf-8")
+            self.assertIn("## Verified Traceability", content)
+            self.assertIn("新拒绝文案", content)
+            proposed_section = content.split("## Proposed Traceability", 1)[1].split("## Traceability Gaps", 1)[0]
+            self.assertNotIn("新拒绝文案", proposed_section)
 
 
 if __name__ == "__main__":

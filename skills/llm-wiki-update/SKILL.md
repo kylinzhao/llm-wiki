@@ -18,7 +18,7 @@ description: LLM Wiki 增量维护入口。用于 raw/、BUSINESS_CONTEXT.md、r
    - 任何跳过都必须显式告诉用户。当前 update 可能跳过的步骤包括：`confluence_sync` / `auto_raw_sync`（用户显式 `--no-auto-raw-sync` 或 `LLM_WIKI_NO_AUTO_RAW_SYNC=1`）、`agent_rules_refresh`（`--no-agent-rules-refresh`）、`graphify_code`（未传 `--graphify`）、以及缺少对应工具脚本时的失败/阻塞。不要把 raw-code 权限失败、legacy unmanaged raw-code、dirty worktree 或损坏 checkout 归类为可静默跳过。
 5. 刷新受影响页面；除非直接过期，否则保留人工编辑。
 6. 必须读取 `staging/update/latest.json` 里的 `gplus_quality`（或用 doctor 同口径只读判断）。即使 health pass、raw 未变、stale source 为 0，只要 `gplus_quality.status=needs_attention`，也把它当作 update 触发器：进入 Codex-native G+ semantic expansion，扩展/校准 concepts/entities/truth/conflicts/evidence/proposals/operations/reference，回填 source Business Links，刷新 query acceptance 和 G+ quality audit；不要为了 G+ 欠拟合重建 `raw/`。
-7. 如果同一轮变更同时影响 source 精修和代码追踪，把 source 精修、capability 更新、traceability 刷新作为同一个 update 收口动作。
+7. 如果同一轮变更同时影响 source 精修和代码追踪，把 source 精修、capability 更新、traceability 刷新作为同一个 update 收口动作。代码更新后必须让 `build_traceability.py` 刷新 `Code Anchor Candidates` 和 `staging/traceability-candidates.json`。如果当前 agent 或外部 agent worker 能执行 trace worker contract，则把结果写入 `staging/traceability/runs/<run_id>/proposals.json`，再由 `build_traceability.py` 合并到 `staging/traceability/state.json`；没有模型 worker 输出时，只能记录候选，不能自动宣称 `strong`。
 8. 如果发现当前命令可以安全完成的 pending/stale/source/traceability/G+/health/graph 工作，继续完成，不要建议用户再跑一次同一个 update。
 9. update 结束前必须自动执行收口检查：health、graph；如果 traceability 或代码锚点变化，再执行可用的 anchor check。
 10. 如果收口检查失败或仍有可安全修复的问题，优先继续修复或建议继续 `llm-wiki update`。

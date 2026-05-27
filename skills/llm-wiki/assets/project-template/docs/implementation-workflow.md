@@ -39,6 +39,6 @@ For code evidence:
 
 The engine may still use deterministic code scanning and graphification internally, but users should continue to think in terms of `llm-wiki update` rather than manual script chains.
 
-`scan_code.py` provides deterministic facts. `graphify_code.py` provides graph structure. Codex must still write the business capability interpretation.
+`scan_code.py` provides deterministic facts. `graphify_code.py` provides graph structure. Agent / reviewer work may write business capability interpretation. Traceability model work must use `docs/traceability-contract.md` and write proposals under `staging/traceability/runs/<run_id>/`; deterministic tooling owns the long-lived state and Markdown rendering.
 
 To refresh code before rebuilding code wiki, use `llm-wiki update`. The engine should refresh only managed raw-code checkouts and should not expose alternate per-codebase sync modes.

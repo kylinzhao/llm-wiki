@@ -36,4 +36,4 @@ If `graphify` is missing or fails, the wrapper records `skipped` or `failed` sta
 ## Capability Boundary
 
 - Scripts scan files, compare hashes, detect project shape, seed Markdown, validate links, and build graph files.
-- Codex performs source summaries, concept/entity normalization, capability judgment, requirement-code matching, and evidence strength assignment.
+- Agent / reviewer work may perform source summaries, concept/entity normalization, and capability judgment. Requirement-code matching and evidence strength assignment must be backed by deterministic candidates or direct audited evidence. When model work is used for traceability, it must follow `docs/traceability-contract.md` and emit structured proposals for deterministic merge.

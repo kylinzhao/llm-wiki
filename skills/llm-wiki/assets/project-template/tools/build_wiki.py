@@ -441,7 +441,7 @@ uv run python tools/build_graph.py
 uv run python tools/anchor_check.py
 ```
 
-摘要、实体归一、来源精修、能力判断和追踪推理由 Codex 原生完成。
+摘要、实体归一、来源精修和能力判断由 agent / reviewer 完成；追踪矩阵的模型步骤必须按 `docs/traceability-contract.md` 输出 proposals，再由确定性工具合并 state 并渲染 Markdown。
 本地脚本只负责扫描、生成种子页、校验和构建图谱文件。
 """,
     )
@@ -477,7 +477,7 @@ uv run python tools/update_wiki.py
 uv run python tools/update_wiki.py --graphify
 ```
 
-确定性种子页生成后，使用 Codex 完成来源摘要、分层页面、概念、实体、能力页和追踪证据强度判断。
+确定性种子页生成后，使用 agent / reviewer 完成来源摘要、分层页面、概念、实体和能力页。追踪证据强度只能在有可审计需求证据和代码锚点时提升。
 """,
     )
 
