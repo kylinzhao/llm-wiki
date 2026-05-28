@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -55,7 +56,75 @@ def upsert_code_source(project: Path, entry: dict[str, object]) -> Path:
     ]
     sources.append(entry)
     updated = {"version": 1, "sources": sorted(sources, key=lambda item: str(item["codebase_id"]))}
+    validate_code_sources_manifest(updated, shared_mode=False, project=project)
     return write_code_sources_manifest(project, updated)
+
+
+def is_local_repo_url(value: str) -> bool:
+    return value.startswith("/") or value.startswith("./") or value.startswith("../") or not ("://" in value or "@" in value)
+
+
+def validate_code_sources_manifest(manifest: dict[str, object], shared_mode: bool, project: Path | None = None) -> list[dict[str, object]]:
+    if manifest.get("version") != 1:
+        raise RawCodeManagerError("code_source_config_failed", "upstream/code-sources.json 的 version 必须是 1")
+    sources = manifest.get("sources")
+    if not isinstance(sources, list):
+        raise RawCodeManagerError("code_source_config_failed", "upstream/code-sources.json 的 sources 必须是列表")
+
+    normalized: list[dict[str, object]] = []
+    seen_ids: set[str] = set()
+    seen_targets: set[str] = set()
+    for raw in sources:
+        if not isinstance(raw, dict):
+            raise RawCodeManagerError("code_source_config_failed", "每个代码证据源必须是对象")
+        codebase_id = str(raw.get("codebase_id", ""))
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", codebase_id) or codebase_id in {".", ".."}:
+            raise RawCodeManagerError("code_source_config_failed", f"无效的 codebase_id：{codebase_id}")
+        target_dir = str(raw.get("target_dir", ""))
+        if codebase_id in seen_ids or target_dir in seen_targets:
+            raise RawCodeManagerError("code_source_config_failed", "重复的 codebase_id 或 target_dir")
+        if target_dir != f"raw-code/{codebase_id}":
+            raise RawCodeManagerError("code_source_config_failed", f"target_dir 必须是 raw-code/{codebase_id}")
+        seen_ids.add(codebase_id)
+        seen_targets.add(target_dir)
+
+        repo_url = str(raw.get("repo_url", ""))
+        if not repo_url:
+            raise RawCodeManagerError("code_source_config_failed", "缺少必填字段 repo_url")
+        if is_local_repo_url(repo_url):
+            if shared_mode:
+                raise RawCodeManagerError("code_source_config_failed", "共享模式不允许使用本机 repo_url")
+            if project is None:
+                raise RawCodeManagerError("code_source_config_failed", "校验本机 repo_url 时必须提供项目目录")
+            local_path = (project / repo_url).resolve() if not Path(repo_url).is_absolute() else Path(repo_url).resolve()
+            if ".." in Path(repo_url).parts or not local_path.exists() or run_git(["rev-parse", "--is-inside-work-tree"], cwd=local_path).returncode != 0:
+                raise RawCodeManagerError("code_source_config_failed", "本机 repo_url 必须指向已存在的 git 仓库")
+        elif not (repo_url.startswith("git@") or repo_url.startswith("ssh://") or repo_url.startswith("http://") or repo_url.startswith("https://")):
+            raise RawCodeManagerError("code_source_config_failed", f"不支持的 repo_url：{repo_url}")
+
+        origin_ref = str(raw.get("origin_ref", ""))
+        bad_ref = origin_ref.startswith(("origin/", "refs/")) or ".." in origin_ref or "//" in origin_ref or re.fullmatch(r"[0-9a-fA-F]{40}", origin_ref)
+        if bad_ref or run_git(["check-ref-format", "--branch", origin_ref]).returncode != 0:
+            raise RawCodeManagerError("code_source_config_failed", f"无效的 origin_ref：{origin_ref}")
+        if not isinstance(raw.get("enabled"), bool) or raw.get("managed") is not True or raw.get("sync") != {"mode": "ff-only"}:
+            raise RawCodeManagerError("code_source_config_failed", "enabled、managed 或 sync.mode 配置无效")
+
+        default_branch = raw.get("default_branch")
+        if not isinstance(default_branch, str) or not default_branch:
+            raise RawCodeManagerError("code_source_config_failed", "缺少必填字段 default_branch")
+        normalized.append(
+            {
+                "codebase_id": codebase_id,
+                "repo_url": repo_url,
+                "origin_ref": origin_ref,
+                "default_branch": default_branch,
+                "target_dir": target_dir,
+                "enabled": raw["enabled"],
+                "managed": True,
+                "sync": {"mode": "ff-only"},
+            }
+        )
+    return sorted(normalized, key=lambda source: str(source["codebase_id"]))
 
 
 def slugify_codebase_id(name: str) -> str:
