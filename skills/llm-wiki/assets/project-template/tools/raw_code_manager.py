@@ -11,6 +11,15 @@ import yaml
 
 METADATA_FILENAME = ".llm-wiki-codebase.yaml"
 CODE_SOURCES_PATH = Path("upstream/code-sources.json")
+CODE_REPO_PERMISSION_PATTERNS = (
+    "permission denied",
+    "authentication failed",
+    "repository not found",
+    "403",
+    "you are not allowed",
+    "could not read from remote repository",
+    "http basic: access denied",
+)
 
 
 class RawCodeManagerError(RuntimeError):
@@ -63,6 +72,11 @@ def upsert_code_source(project: Path, entry: dict[str, object]) -> Path:
 
 def is_local_repo_url(value: str) -> bool:
     return value.startswith("/") or value.startswith("./") or value.startswith("../") or not ("://" in value or "@" in value)
+
+
+def is_permission_error(message: str) -> bool:
+    lowered = message.lower()
+    return any(pattern in lowered for pattern in CODE_REPO_PERMISSION_PATTERNS)
 
 
 def validate_code_sources_manifest(manifest: dict[str, object], shared_mode: bool, project: Path | None = None) -> list[dict[str, object]]:
@@ -234,6 +248,53 @@ def clone_repo(source: str, target: Path) -> None:
     if result.returncode != 0:
         code = "missing_access" if "denied" in result.stderr.lower() or "auth" in result.stderr.lower() else "invalid_repo_source"
         raise RawCodeManagerError(code, result.stderr.strip() or f"failed to clone {source}")
+
+
+def ensure_managed_checkout(project: Path, source: dict[str, object]) -> Path:
+    target = project / str(source["target_dir"])
+    if target.exists():
+        return target
+    try:
+        clone_repo(str(source["repo_url"]), target)
+    except RawCodeManagerError as exc:
+        if is_permission_error(exc.message):
+            raise RawCodeManagerError("evidence_failed", f"无法访问代码证据仓库。请先获取代码仓库读取权限后重试。详情：{exc.message}") from exc
+        raise RawCodeManagerError("evidence_failed", f"代码证据仓库克隆失败。请检查仓库地址、网络或分支配置。详情：{exc.message}") from exc
+
+    for args, message in [
+        (["checkout", str(source["origin_ref"])], "无法切换到声明的代码分支。请检查代码仓库分支权限和 origin_ref 配置。"),
+        (["branch", "--set-upstream-to", f"origin/{source['origin_ref']}"], "无法配置代码仓库上游分支。请检查代码仓库读取权限和分支配置。"),
+    ]:
+        result = run_git(args, cwd=target)
+        if result.returncode != 0:
+            detail = result.stderr.strip()
+            suffix = f"详情：{detail}" if detail else ""
+            raise RawCodeManagerError("evidence_failed", message + suffix)
+    write_codebase_metadata(
+        target,
+        {
+            "codebase_id": str(source["codebase_id"]),
+            "repo_url": str(source["repo_url"]),
+            "origin_ref": str(source["origin_ref"]),
+            "default_branch": str(source["default_branch"]),
+            "managed_path": str(source["target_dir"]),
+            "managed": True,
+            "created_by": "llm-wiki-add-code",
+        },
+    )
+    return target
+
+
+def managed_code_sync_specs(project: Path, shared_mode: bool = False) -> list[dict[str, object]]:
+    manifest = read_code_sources_manifest(project)
+    sources = validate_code_sources_manifest(manifest, shared_mode=shared_mode, project=project)
+    specs: list[dict[str, object]] = []
+    for source in sources:
+        if not source["enabled"]:
+            continue
+        target = ensure_managed_checkout(project, source)
+        specs.append({"label": str(source["codebase_id"]), "cwd": target, "command": ["git", "pull", "--ff-only"]})
+    return specs
 
 
 def add_managed_codebase(project: Path, source: str, codebase_id: str | None = None) -> dict[str, str]:

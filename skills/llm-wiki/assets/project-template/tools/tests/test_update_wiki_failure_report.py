@@ -1,6 +1,10 @@
 import importlib.util
+import contextlib
+import io
 import json
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,6 +19,69 @@ def load_update_wiki():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
+
+
+@contextlib.contextmanager
+def capture_stderr():
+    buffer = io.StringIO()
+    with contextlib.redirect_stderr(buffer):
+        yield buffer
+
+
+def make_source_repo_and_kb(extra_branch: str | None = None) -> tuple[Path, Path, Path]:
+    root = Path(tempfile.mkdtemp())
+    source = root / "source"
+    project = root / "kb"
+    source.mkdir()
+    project.mkdir()
+    git(source, "init", "-b", "main")
+    git(source, "config", "user.name", "Codex")
+    git(source, "config", "user.email", "codex@example.com")
+    (source / "README.md").write_text("# demo\n", encoding="utf-8")
+    git(source, "add", "README.md")
+    git(source, "commit", "-m", "init")
+    if extra_branch:
+        git(source, "checkout", "-b", extra_branch)
+        (source / "README.md").write_text("# release\n", encoding="utf-8")
+        git(source, "commit", "-am", f"prepare {extra_branch}")
+        git(source, "checkout", "main")
+    return root, source, project
+
+
+def valid_source(
+    repo_url: str,
+    codebase_id: str = "demo",
+    target_dir: str = "raw-code/demo",
+    origin_ref: str = "main",
+    enabled: bool = True,
+) -> dict[str, object]:
+    return {
+        "codebase_id": codebase_id,
+        "repo_url": repo_url,
+        "origin_ref": origin_ref,
+        "default_branch": "main",
+        "target_dir": target_dir,
+        "enabled": enabled,
+        "managed": True,
+        "sync": {"mode": "ff-only"},
+    }
+
+
+def write_code_sources(
+    project: Path,
+    repo_url: str | None = None,
+    origin_ref: str = "main",
+    enabled: bool = True,
+    sources: list[dict[str, object]] | None = None,
+) -> None:
+    payload = {"version": 1, "sources": sources if sources is not None else [valid_source(repo_url or "", origin_ref=origin_ref, enabled=enabled)]}
+    path = project / "upstream" / "code-sources.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 class UpdateFailureReportTest(unittest.TestCase):
@@ -48,6 +115,68 @@ class UpdateFailureReportTest(unittest.TestCase):
             code = update_wiki.run_code_sync(project)
 
             self.assertEqual(code, 2)
+
+    def test_run_code_sync_clones_missing_enabled_source(self):
+        update_wiki = load_update_wiki()
+        root, source, project = make_source_repo_and_kb()
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)], check=False))
+        write_code_sources(project, repo_url=str(source), enabled=True)
+
+        code = update_wiki.run_code_sync(project, shared_mode=False)
+
+        self.assertEqual(code, 0)
+        metadata = (project / "raw-code" / "demo" / ".llm-wiki-codebase.yaml").read_text(encoding="utf-8")
+        for expected in [
+            "codebase_id: demo",
+            "repo_url: " + str(source),
+            "origin_ref: main",
+            "default_branch: main",
+            "managed_path: raw-code/demo",
+            "managed: true",
+            "created_by: llm-wiki-add-code",
+        ]:
+            self.assertIn(expected, metadata)
+
+    def test_run_code_sync_rejects_local_repo_url_in_shared_mode(self):
+        update_wiki = load_update_wiki()
+        root, source, project = make_source_repo_and_kb()
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)], check=False))
+        write_code_sources(project, repo_url=str(source), enabled=True)
+
+        with capture_stderr() as stderr:
+            code = update_wiki.run_code_sync(project, shared_mode=True)
+
+        self.assertEqual(code, 2)
+        self.assertIn("code_source_config_failed", stderr.getvalue())
+        self.assertIn("共享模式不允许使用本机 repo_url", stderr.getvalue())
+        self.assertNotIn("是否切换到本机模式", stderr.getvalue())
+        self.assertFalse((project / "raw-code" / "demo").exists())
+
+    def test_run_code_sync_validates_all_sources_before_clone(self):
+        update_wiki = load_update_wiki()
+        root, source, project = make_source_repo_and_kb()
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)], check=False))
+        write_code_sources(
+            project,
+            sources=[
+                valid_source(repo_url=str(source), codebase_id="first", target_dir="raw-code/first"),
+                {**valid_source(repo_url="git@example.com:team/bad.git"), "target_dir": "../bad"},
+            ],
+        )
+
+        self.assertEqual(update_wiki.run_code_sync(project, shared_mode=False), 2)
+        self.assertFalse((project / "raw-code").exists())
+
+    def test_run_code_sync_clones_origin_ref_branch_not_default_branch(self):
+        update_wiki = load_update_wiki()
+        root, source, project = make_source_repo_and_kb(extra_branch="release/1")
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)], check=False))
+        write_code_sources(project, repo_url=str(source), origin_ref="release/1", enabled=True)
+
+        self.assertEqual(update_wiki.run_code_sync(project, shared_mode=False), 0)
+        branch = git(project / "raw-code" / "demo", "branch", "--show-current").stdout.strip()
+        upstream = git(project / "raw-code" / "demo", "rev-parse", "--abbrev-ref", "@{u}").stdout.strip()
+        self.assertEqual((branch, upstream), ("release/1", "origin/release/1"))
 
     def test_deterministic_steps_include_cjira_refresh_after_build(self):
         update_wiki = load_update_wiki()

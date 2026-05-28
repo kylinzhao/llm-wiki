@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 import yaml
 from agent_rules import refresh_agent_rules
 from gplus_quality import inspect_gplus_quality
-from raw_code_manager import read_codebase_metadata
+from raw_code_manager import RawCodeManagerError, managed_code_sync_specs as declared_code_sync_specs, read_codebase_metadata
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
 
@@ -633,7 +633,7 @@ def iter_codebases(project: Path) -> list[Path]:
     return sorted(path for path in raw_code.iterdir() if path.is_dir())
 
 
-def managed_code_sync_specs(project: Path) -> tuple[list[dict[str, object]], str | None]:
+def legacy_managed_code_sync_specs(project: Path) -> tuple[list[dict[str, object]], str | None]:
     specs: list[dict[str, object]] = []
     for path in iter_codebases(project):
         metadata = read_codebase_metadata(path)
@@ -645,11 +645,19 @@ def managed_code_sync_specs(project: Path) -> tuple[list[dict[str, object]], str
     return specs, None
 
 
-def run_code_sync(project: Path) -> int:
-    specs, error = managed_code_sync_specs(project)
-    if error:
-        print(error, file=sys.stderr)
-        return 2
+def run_code_sync(project: Path, shared_mode: bool = False) -> int:
+    manifest_path = project / "upstream" / "code-sources.json"
+    if manifest_path.is_file():
+        try:
+            specs = declared_code_sync_specs(project, shared_mode=shared_mode)
+        except RawCodeManagerError as exc:
+            print(f"{exc.code}: {exc.message}", file=sys.stderr)
+            return 2
+    else:
+        specs, error = legacy_managed_code_sync_specs(project)
+        if error:
+            print(error, file=sys.stderr)
+            return 2
     for spec in specs:
         cwd = spec["cwd"]
         assert isinstance(cwd, Path)
