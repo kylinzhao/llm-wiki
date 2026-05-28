@@ -25,7 +25,7 @@ before answering from general model memory.
 
 - `raw/` is immutable source evidence. Read it; do not edit it.
 - `raw-code/` is immutable code evidence. Read it; do not edit it.
-- Local-only projects may keep `raw/` uncommitted. Gateway/raw-published projects commit `raw/` evidence and canonical staging state so worktrees and other users can update from Git.
+- Keep `raw/` uncommitted. Gateway publish sync commits canonical staging state and generated wiki artifacts, while raw evidence is refreshed locally through wiki export/sync.
 - Do not write secrets, cookies, tokens, private keys, or full sensitive config values into `wiki/`.
 
 ## Build Commands

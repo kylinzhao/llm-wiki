@@ -278,7 +278,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 ### 10. 安全与证据边界
 
 - 可以读取 `raw/`，不得修改 `raw/`。
-- 默认本地项目可以不提交 `raw/`；Gateway/raw-published 项目会提交 `raw/` 证据和 canonical staging 状态。无论哪种模式，都不得由 agent 直接修改 `raw/` 原文。
+- 默认不提交 `raw/`；Gateway 发布同步也只提交 canonical staging 状态和生成知识层，`raw/` 由本地 wiki-export/sync 刷新。无论哪种模式，都不得由 agent 直接修改 `raw/` 原文。
 - 不调用本地模型 SDK 做摘要、分类、实体归一或语义判断；这些由 Codex / subagent 完成。
 - 本地脚本只做确定性扫描、health、graph、文件统计和格式检查。
 - 不把 token、cookie、密码、私钥、access key、内部凭据或完整敏感配置值写入 wiki；必要时只写用途并脱敏。

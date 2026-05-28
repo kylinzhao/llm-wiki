@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Migrate a KB project to Gateway raw-published mode."""
+"""Normalize KB wiki-export state without making raw/ publishable."""
 
 from __future__ import annotations
 
@@ -10,11 +10,9 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-import yaml
-
-
 CANONICAL_METADATA_DIR = "staging/wiki-export-state"
-RAW_PUBLISHED_IGNORES = [
+RAW_STATE_IGNORES = [
+    "raw/",
     "raw/progress/",
     "raw/export-state.json",
     "raw/.obsidian-wiki-export/",
@@ -47,17 +45,6 @@ def write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def read_yaml(path: Path) -> dict:
-    if not path.is_file():
-        return {}
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return payload if isinstance(payload, dict) else {}
-
-
-def write_yaml(path: Path, payload: dict) -> None:
-    path.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
-
-
 def git_dirty(project: Path) -> bool:
     probe = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=project, capture_output=True, text=True)
     if probe.returncode != 0:
@@ -86,14 +73,12 @@ def rewrite_gitignore(project: Path) -> bool:
     kept: list[str] = []
     for line in existing:
         stripped = line.strip()
-        if stripped in WHOLE_RAW_IGNORES:
-            continue
-        if stripped in RAW_PUBLISHED_IGNORES:
+        if stripped in RAW_STATE_IGNORES:
             continue
         kept.append(line)
     if kept and kept[-1].strip():
         kept.append("")
-    kept.extend(RAW_PUBLISHED_IGNORES)
+    kept.extend(RAW_STATE_IGNORES)
     next_text = "\n".join(kept).rstrip() + "\n"
     path = project / ".gitignore"
     old_text = path.read_text(encoding="utf-8") if path.is_file() else ""
@@ -146,20 +131,6 @@ def normalize_wiki_sources(project: Path, *, apply: bool) -> tuple[list[str], li
     return warnings, blockers
 
 
-def ensure_manifest_raw(project: Path) -> bool:
-    path = project / "kb.manifest.yaml"
-    payload = read_yaml(path)
-    evidence = payload.get("evidence")
-    if not isinstance(evidence, dict):
-        evidence = {}
-        payload["evidence"] = evidence
-    if evidence.get("raw") is True:
-        return False
-    evidence["raw"] = True
-    write_yaml(path, payload)
-    return True
-
-
 def raw_index_exists(project: Path) -> bool:
     raw = project / "raw"
     return raw.is_dir() and any(raw.glob("**/index.md"))
@@ -201,9 +172,9 @@ def build_report(project: Path, *, status: str, warnings: list[str], blockers: l
 
 def write_report(project: Path, report: dict[str, object]) -> None:
     report_dir = project / "staging" / "migrations"
-    write_json(report_dir / "raw-publish-mode-latest.json", report)
+    write_json(report_dir / "raw-state-normalization-latest.json", report)
     lines = [
-        "# Raw Publish Mode Migration",
+        "# Raw State Normalization",
         "",
         f"- Status: `{report['status']}`",
         f"- Generated at: `{report['generated_at']}`",
@@ -218,15 +189,15 @@ def write_report(project: Path, report: dict[str, object]) -> None:
         *[f"- `{item}`" for item in report["actions"]],
         "",
     ]
-    (report_dir / "raw-publish-mode-latest.md").write_text("\n".join(lines), encoding="utf-8")
+    (report_dir / "raw-state-normalization-latest.md").write_text("\n".join(lines), encoding="utf-8")
 
 
 def check_project(project: Path) -> dict[str, object]:
     warnings: list[str] = []
     blockers: list[str] = []
     actions: list[str] = []
-    if raw_is_ignored(project):
-        warnings.append("raw_ignored")
+    if not raw_is_ignored(project):
+        warnings.append("raw_not_ignored")
     if not raw_index_exists(project):
         warnings.append("raw_index_missing")
     source_warnings, source_blockers = normalize_wiki_sources(project, apply=False)
@@ -246,8 +217,6 @@ def apply_project(project: Path, *, allow_dirty: bool = False) -> dict[str, obje
     actions: list[str] = []
     if rewrite_gitignore(project):
         actions.append("rewrote:.gitignore")
-    if ensure_manifest_raw(project):
-        actions.append("updated:kb.manifest.yaml")
     source_warnings, source_blockers = normalize_wiki_sources(project, apply=True)
     warnings.extend(source_warnings)
     blockers.extend(source_blockers)
