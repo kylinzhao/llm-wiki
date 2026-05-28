@@ -33,6 +33,7 @@ class ManagedRawCodeTests(unittest.TestCase):
             git(source, "init", "-b", "main")
             git(source, "config", "user.name", "Codex")
             git(source, "config", "user.email", "codex@example.com")
+            git(source, "remote", "add", "origin", "git@example.com:team/source-repo.git")
             (source / "README.md").write_text("# demo\n", encoding="utf-8")
             git(source, "add", "README.md")
             git(source, "commit", "-m", "init")
@@ -74,6 +75,7 @@ class ManagedRawCodeTests(unittest.TestCase):
             git(source, "init", "-b", "main")
             git(source, "config", "user.name", "Codex")
             git(source, "config", "user.email", "codex@example.com")
+            git(source, "remote", "add", "origin", "git@example.com:team/source-repo.git")
             (source / "README.md").write_text("# demo\n", encoding="utf-8")
             git(source, "add", "README.md")
             git(source, "commit", "-m", "init")
@@ -116,6 +118,84 @@ class ManagedRawCodeTests(unittest.TestCase):
         manager = load_raw_code_manager()
 
         self.assertEqual(manager.derive_codebase_id("https://git.example.com/team/sell_car_miniprogram.git"), "sell_car_miniprogram")
+
+    def test_add_managed_codebase_writes_code_sources_manifest(self):
+        manager = load_raw_code_manager()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source-repo"
+            source.mkdir()
+            git(source, "init", "-b", "main")
+            git(source, "config", "user.name", "Codex")
+            git(source, "config", "user.email", "codex@example.com")
+            git(source, "remote", "add", "origin", "git@example.com:team/source-repo.git")
+            (source / "README.md").write_text("# demo\n", encoding="utf-8")
+            git(source, "add", "README.md")
+            git(source, "commit", "-m", "init")
+
+            project = root / "kb"
+            project.mkdir()
+
+            manager.add_managed_codebase(project, str(source))
+
+            manifest = manager.read_code_sources_manifest(project)
+            self.assertEqual(manifest["version"], 1)
+            [entry] = manifest["sources"]
+            self.assertEqual(entry["codebase_id"], "source-repo")
+            self.assertEqual(entry["repo_url"], "git@example.com:team/source-repo.git")
+            self.assertEqual(entry["origin_ref"], "main")
+            self.assertEqual(entry["default_branch"], "main")
+            self.assertEqual(entry["target_dir"], "raw-code/source-repo")
+            self.assertTrue(entry["enabled"])
+            self.assertTrue(entry["managed"])
+            self.assertEqual(entry["sync"]["mode"], "ff-only")
+            metadata = (project / "raw-code" / "source-repo" / ".llm-wiki-codebase.yaml").read_text(encoding="utf-8")
+            self.assertIn("managed_path: raw-code/source-repo", metadata)
+            self.assertTrue((project / "upstream" / "code-sources.json").is_file())
+
+    def test_add_managed_codebase_requires_remote_for_shared_manifest(self):
+        manager = load_raw_code_manager()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source-repo"
+            source.mkdir()
+            git(source, "init", "-b", "main")
+            project = root / "kb"
+            project.mkdir()
+            with self.assertRaises(manager.RawCodeManagerError) as ctx:
+                manager.add_managed_codebase(project, str(source))
+            self.assertEqual(ctx.exception.code, "code_source_config_failed")
+            self.assertIn("远程", ctx.exception.message)
+            self.assertFalse((project / "upstream" / "code-sources.json").exists())
+            self.assertFalse((project / "raw-code").exists())
+
+    def test_write_code_source_manifest_replaces_existing_entry(self):
+        manager = load_raw_code_manager()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            manager.upsert_code_source(project, {
+                "codebase_id": "demo",
+                "repo_url": "git@example.com:team/demo.git",
+                "origin_ref": "main",
+                "default_branch": "main",
+                "target_dir": "raw-code/demo",
+                "enabled": True,
+                "managed": True,
+                "sync": {"mode": "ff-only"},
+            })
+            manager.upsert_code_source(project, {
+                "codebase_id": "demo",
+                "repo_url": "git@example.com:team/demo.git",
+                "origin_ref": "release/1",
+                "default_branch": "main",
+                "target_dir": "raw-code/demo",
+                "enabled": True,
+                "managed": True,
+                "sync": {"mode": "ff-only"},
+            })
+            manifest = manager.read_code_sources_manifest(project)
+            self.assertEqual(len(manifest["sources"]), 1)
+            self.assertEqual(manifest["sources"][0]["origin_ref"], "release/1")
 
 
 if __name__ == "__main__":

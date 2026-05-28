@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -8,6 +9,7 @@ import yaml
 
 
 METADATA_FILENAME = ".llm-wiki-codebase.yaml"
+CODE_SOURCES_PATH = Path("upstream/code-sources.json")
 
 
 class RawCodeManagerError(RuntimeError):
@@ -22,6 +24,38 @@ class RawCodeManagerError(RuntimeError):
 
 def run_git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=cwd, check=False, capture_output=True, text=True)
+
+
+def read_code_sources_manifest(project: Path) -> dict[str, object]:
+    path = project / CODE_SOURCES_PATH
+    if not path.is_file():
+        return {"version": 1, "sources": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RawCodeManagerError("code_source_config_failed", f"upstream/code-sources.json 不是合法 JSON：{exc}") from exc
+    if not isinstance(data, dict):
+        raise RawCodeManagerError("code_source_config_failed", "upstream/code-sources.json 必须是对象")
+    return data
+
+
+def write_code_sources_manifest(project: Path, manifest: dict[str, object]) -> Path:
+    path = project / CODE_SOURCES_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def upsert_code_source(project: Path, entry: dict[str, object]) -> Path:
+    manifest = read_code_sources_manifest(project)
+    sources = [
+        source
+        for source in manifest.get("sources", [])
+        if isinstance(source, dict) and source.get("codebase_id") != entry["codebase_id"]
+    ]
+    sources.append(entry)
+    updated = {"version": 1, "sources": sorted(sources, key=lambda item: str(item["codebase_id"]))}
+    return write_code_sources_manifest(project, updated)
 
 
 def slugify_codebase_id(name: str) -> str:
@@ -45,6 +79,17 @@ def resolve_repo_source(source: str) -> tuple[str, str]:
     if source_path.exists():
         return str(source_path.resolve()), source_path.name
     return source, Path(source.rstrip("/")).name or "repo"
+
+
+def remote_origin_url(source: str) -> str:
+    source_path = Path(source)
+    if not source_path.exists():
+        return source
+    result = run_git(["config", "--get", "remote.origin.url"], cwd=source_path)
+    remote = result.stdout.strip()
+    if result.returncode != 0 or not remote:
+        raise RawCodeManagerError("code_source_config_failed", "代码仓库缺少远程 origin，无法写入可共享的代码证据源声明。请先配置远程仓库后重试。")
+    return remote
 
 
 def probe_repo_access(source: str) -> tuple[bool, str | None]:
@@ -130,6 +175,7 @@ def add_managed_codebase(project: Path, source: str, codebase_id: str | None = N
     if not ok:
         message = "repository access is missing" if error_code == "missing_access" else "source is not a readable git repository"
         raise RawCodeManagerError(error_code or "invalid_repo_source", message)
+    origin_url = remote_origin_url(resolved_source)
 
     target = managed_codebase_path(project, resolved_codebase_id)
     ensure_clean_target(target)
@@ -142,17 +188,30 @@ def add_managed_codebase(project: Path, source: str, codebase_id: str | None = N
         target,
         {
             "codebase_id": resolved_codebase_id,
-            "repo_url": resolved_source,
+            "repo_url": origin_url,
             "origin_ref": default_branch,
             "default_branch": default_branch,
-            "managed_path": str(target),
+            "managed_path": f"raw-code/{resolved_codebase_id}",
+        },
+    )
+    upsert_code_source(
+        project,
+        {
+            "codebase_id": resolved_codebase_id,
+            "repo_url": origin_url,
+            "origin_ref": default_branch,
+            "default_branch": default_branch,
+            "target_dir": f"raw-code/{resolved_codebase_id}",
+            "enabled": True,
+            "managed": True,
+            "sync": {"mode": "ff-only"},
         },
     )
 
     return {
         "codebase_id": resolved_codebase_id,
-        "managed_path": str(target),
-        "repo_url": resolved_source,
+        "managed_path": f"raw-code/{resolved_codebase_id}",
+        "repo_url": origin_url,
         "default_branch": default_branch,
         "metadata_path": str(metadata_path),
     }
