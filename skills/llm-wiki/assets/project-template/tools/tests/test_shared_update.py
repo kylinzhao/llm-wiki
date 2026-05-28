@@ -486,6 +486,47 @@ class SharedUpdateTests(unittest.TestCase):
             self.assertEqual(result.status, "shared_sync_failed")
             self.assertNotEqual(result.status, "no_changes")
 
+    def test_resolve_update_mode_defaults_to_shared(self):
+        shared = load_shared_update()
+        self.assertEqual(shared.resolve_update_mode(local_flag=False, shared_flag=False, env={}), "shared")
+        self.assertEqual(shared.resolve_update_mode(local_flag=True, shared_flag=False, env={}), "local")
+        self.assertEqual(shared.resolve_update_mode(local_flag=False, shared_flag=False, env={"LLM_WIKI_UPDATE_MODE": "local"}), "local")
+
+    def test_shared_protocol_rejects_skip_flags_before_update_callback(self):
+        shared = load_shared_update()
+        for kwargs in [
+            {"no_auto_raw_sync": True, "env": {}},
+            {"no_auto_raw_sync": False, "env": {"LLM_WIKI_NO_AUTO_RAW_SYNC": "1"}},
+        ]:
+            with self.subTest(kwargs=kwargs):
+                calls = []
+                result = shared.begin_update(project=Path("."), mode="shared", interactive=False, update_callback=lambda: calls.append("update"), **kwargs)
+                self.assertEqual(result.status, "shared_sync_failed")
+                self.assertIn("共享模式不能跳过 raw/raw-code 同步", result.message)
+                self.assertEqual(calls, [])
+
+    def test_shared_protocol_does_not_publish_before_semantic_callback_finishes(self):
+        shared = load_shared_update()
+        events = []
+        result = shared.complete_shared_update(
+            project=Path("."),
+            semantic_validation=lambda: events.append("semantic") or shared.PublishResult("ok"),
+            publisher=lambda project: events.append("publish") or shared.PublishResult("published"),
+        )
+        self.assertEqual(result.status, "published")
+        self.assertEqual(events, ["semantic", "publish"])
+
+    def test_accept_local_fallback_restarts_local_preflight(self):
+        shared = load_shared_update()
+        events = []
+        result = shared.accept_local_fallback(
+            project=Path("."),
+            local_preflight_fn=lambda project: events.append("local_preflight") or shared.PreflightResult("ok"),
+            update_callback=lambda: events.append("update") or 0,
+        )
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(events, ["local_preflight", "update"])
+
 
 if __name__ == "__main__":
     unittest.main()

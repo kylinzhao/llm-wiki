@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import os
 import subprocess
 from pathlib import Path
 
@@ -394,3 +395,48 @@ def publish_shared_baseline(project: Path, actor: str = "local-skill", git_runne
         return PublishResult("unpublished_local_baseline", "共享 KB 已在本地提交，但推送失败。请检查网络、仓库地址或 Git 凭证后重试。")
 
     return PublishResult("published", "共享 KB 已发布。")
+
+
+def resolve_update_mode(local_flag: bool, shared_flag: bool, env: dict[str, str] | None = None) -> str:
+    values = os.environ if env is None else env
+    if local_flag or values.get("LLM_WIKI_UPDATE_MODE") == "local":
+        return "local"
+    return "shared"
+
+
+def raw_sync_skipped(no_auto_raw_sync: bool, env: dict[str, str] | None = None) -> bool:
+    values = os.environ if env is None else env
+    return no_auto_raw_sync or values.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
+
+
+def begin_update(
+    project: Path,
+    mode: str,
+    no_auto_raw_sync: bool,
+    interactive: bool,
+    update_callback,
+    env: dict[str, str] | None = None,
+) -> PreflightResult:
+    skipped = raw_sync_skipped(no_auto_raw_sync, env)
+    preflight = shared_preflight(project, skipped, interactive) if mode == "shared" else local_preflight(project)
+    if preflight.status != "ok":
+        return preflight
+    code = update_callback()
+    if code == 0:
+        return PreflightResult("ok")
+    return PreflightResult("validation_failed", "确定性更新失败，未发布共享 KB。")
+
+
+def accept_local_fallback(project: Path, local_preflight_fn=local_preflight, update_callback=None) -> PreflightResult:
+    preflight = local_preflight_fn(project)
+    if preflight.status != "ok":
+        return preflight
+    code = update_callback() if update_callback else 0
+    return PreflightResult("ok" if code == 0 else "validation_failed")
+
+
+def complete_shared_update(project: Path, semantic_validation, publisher=publish_shared_baseline) -> PublishResult:
+    validation = semantic_validation()
+    if validation.status != "ok":
+        return validation
+    return publisher(project)
