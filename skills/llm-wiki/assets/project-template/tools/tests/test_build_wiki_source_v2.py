@@ -39,6 +39,12 @@ class SourceV2BuildWikiTest(unittest.TestCase):
         self.assertIn("待基于", overview)
         self.assertIn("# 检索手册", playbook)
         self.assertIn("先读取 `BUSINESS_CONTEXT.md`", playbook)
+        self.assertIn("## 查询意图路由", playbook)
+        self.assertIn("通用扩展层", playbook)
+        self.assertIn("专项目录层", playbook)
+        self.assertIn("`wiki/concepts/` 和 `wiki/entities/` 不是最终证据层", playbook)
+        self.assertIn("不要把 `wiki/code/` 作为业务规则的主证据", playbook)
+        self.assertIn("已有 KB 的本文件不会被 `update` 静默覆盖", playbook)
         self.assertIn("## 来源", source)
         self.assertIn("待完成 AI 原生摘要", source)
 

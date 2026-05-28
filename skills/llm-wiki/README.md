@@ -236,11 +236,11 @@ SOP、活动执行、流程落地、运营动作。
 
 ### `wiki/concepts/`
 
-按主题聚合的索引层。
+按主题聚合的通用扩展层，用于从用户问题扩展到相关来源、规则、方案、风险和证据。它是导航和归一化入口，不是最终证据层。
 
 ### `wiki/entities/`
 
-按实体聚合的索引层。
+按实体聚合的通用扩展层，用于统一业务对象、角色、系统、页面、状态、历史别名和冲突叫法。它帮助回到 `wiki/sources/` 找证据，不替代来源证据。
 
 ### `wiki/code/`
 
@@ -361,16 +361,17 @@ uv run python tools/graphify_code.py --all
 
 默认查询顺序是：
 
-1. 识别问题类型
-2. 读取 `BUSINESS_CONTEXT.md`
-3. 提取关键词和近义词
-4. 选择优先目录层
-5. 扩展 `concepts / entities`
-6. 回到 `sources`
+1. 读取 `BUSINESS_CONTEXT.md`
+2. 判断查询意图
+3. 先查 `wiki/overview.md`
+4. 按查询意图进入专项目录层
+5. 用 `concepts / entities` 做通用扩展和归一
+6. 回到 `sources` 找直接需求/业务证据
 7. 必要时回 `raw/`
-8. 输出结论、证据和未决点
+8. 只有实现、架构、接口、调用链、落地状态、测试追踪或 `query-plus` 问题才进入 `wiki/code/`
+9. 输出结论、证据、推断和未决点
 
-问题类型与优先层：
+问题类型与专项目录层：
 
 - 问题/风险：`conflicts -> evidence -> proposals -> sources`
 - 证据/效果：`evidence -> sources`
@@ -379,10 +380,12 @@ uv run python tools/graphify_code.py --all
 - 当前状态：`truth -> reference -> sources`
 - 操作执行：`operations -> sources`
 
+`concepts / entities` 是通用扩展层，不是和 `evidence / operations / proposals / reference / truth / conflicts` 互斥的同类目录。先按意图选择专项目录层，再用 `concepts / entities` 扩展主题、实体和别名，最终回到 `sources` 或 `raw/` 核验证据。
+
 如果问题涉及代码实现，追加代码检索路径：
 
-- 业务问题：`BUSINESS_CONTEXT.md -> concepts/entities -> sources -> code/capabilities -> code/codebases`
-- 代码问题：`code/codebases -> code/capabilities -> concepts/entities -> sources`
+- 业务实现状态：`BUSINESS_CONTEXT.md -> concepts/entities -> sources -> code/traceability -> code/capabilities -> code/codebases`
+- 代码问题：`code/traceability -> code/capabilities -> code/codebases -> concepts/entities -> sources`
 
 回答必须区分：
 

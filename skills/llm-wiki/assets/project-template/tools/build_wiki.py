@@ -419,13 +419,57 @@ def create_docs(project: Path) -> None:
         project / "docs" / "retrieval-playbook.md",
         """# 检索手册
 
-1. 先读取 `BUSINESS_CONTEXT.md`。它是 init/fast/update 的硬性前置，不能是模板 TODO 占位。
-2. 判断问题类型。
-3. 先查 `wiki/overview.md`，再查相关分层页面。
-4. 通过 `wiki/concepts/` 和 `wiki/entities/` 扩展检索。
-5. 使用 `wiki/sources/` 作为需求证据。
-6. 只有回答代码实现证据时才使用 `wiki/code/`。
-7. 明确区分需求证据、代码证据、推断和缺失证据。
+本文件是查询路由说明书，不是业务证据本身。回答业务、产品、需求、术语、实现状态或代码追踪问题时，先用它决定检索路径，再引用 `wiki/` 或 `raw/` 中的证据。
+
+## 基线步骤
+
+1. 先读取 `BUSINESS_CONTEXT.md`。它是业务语义基线，也是 init/fast/update 的硬性前置，不能是模板 TODO 占位。
+2. 判断查询意图，不要直接从模型记忆、单个 `rg` 命中或孤立代码片段下结论。
+3. 先查 `wiki/overview.md`，确认站点范围、主链路和已知缺口。
+4. 按查询意图进入对应专项目录层。
+5. 用 `wiki/concepts/` 和 `wiki/entities/` 做通用扩展层，扩展主题、实体、别名和相关来源。
+6. 回到 `wiki/sources/` 找直接需求/业务证据；必要时再回查 `raw/`。
+7. 只有当问题涉及实现、架构、接口、调用链、落地状态、测试追踪，或用户明确要求 `query-plus` 时，才进入 `wiki/code/`。
+8. 明确区分需求证据、代码证据、推断和缺失证据。
+
+## 查询意图路由
+
+| 查询意图 | 优先检索路径 |
+| --- | --- |
+| 业务知识 / 产品规则 / 需求口径 / 术语解释 | `BUSINESS_CONTEXT.md` -> `wiki/overview.md` -> 专项目录层 -> `wiki/concepts/` / `wiki/entities/` -> `wiki/sources/` -> 必要时 `raw/` |
+| 问题 / 风险 / 冲突 / 未决项 | `wiki/conflicts/` -> `wiki/evidence/` -> `wiki/proposals/` -> `wiki/sources/` |
+| 证据 / 结果 / 实验 / 复盘 / 数据结论 | `wiki/evidence/` -> `wiki/sources/` -> 必要时 `raw/` |
+| 方案 / 规划 / 草案 / 设计 | `wiki/proposals/` -> `wiki/sources/` |
+| 接口 / 字段 / 规则 / 参数 / 字典 | `wiki/reference/` -> `wiki/truth/` -> `wiki/sources/` |
+| 当前事实 / 稳定状态 / 明确说明 | `wiki/truth/` -> `wiki/reference/` -> `wiki/sources/` |
+| SOP / 活动执行 / 流程落地 / 运营动作 | `wiki/operations/` -> `wiki/sources/` |
+| 代码实现 / 架构 / 调用链 / 源码位置 | `wiki/code/traceability/` -> `wiki/code/capabilities/` -> `wiki/code/codebases/` -> `wiki/concepts/` / `wiki/entities/` -> `wiki/sources/` |
+| 业务逻辑是否已实现 / 需求落在哪里 / 线上行为和代码是否一致 | `BUSINESS_CONTEXT.md` -> `wiki/concepts/` / `wiki/entities/` -> `wiki/sources/` -> `wiki/code/traceability/` -> `wiki/code/capabilities/` -> `wiki/code/codebases/` |
+
+## 通用扩展层
+
+`wiki/concepts/` 和 `wiki/entities/` 不是最终证据层，而是跨来源的导航和归一化层。
+
+- `wiki/concepts/` 用于按主题扩展相关需求、规则、方案、风险和证据。
+- `wiki/entities/` 用于统一业务对象、角色、系统、页面、状态、历史别名和冲突叫法。
+- 当用户问题里的词和 `BUSINESS_CONTEXT.md` 或来源页口径不一致时，先按规范概念/实体归一，再回到 `wiki/sources/` 找证据。
+
+## 专项目录层
+
+`wiki/evidence/`、`wiki/operations/`、`wiki/proposals/`、`wiki/reference/`、`wiki/truth/`、`wiki/conflicts/` 是按问题类型组织的投影视图。它们用于缩小范围和发现候选证据，但结论仍应回到 `wiki/sources/` 或 `raw/` 核验。
+
+不要把 `wiki/concepts/` / `wiki/entities/` 和这些专项目录层理解成互斥关系：前者负责扩展和归一，后者负责按意图定位事实视图。
+
+## 代码证据边界
+
+- 不要把 `wiki/code/` 作为业务规则的主证据。
+- 不要把“代码里有接口/类/任务”直接写成“业务一定生效”。
+- 当业务证据不足时，说清楚证据不足；不要用代码实现补成需求口径。
+- 当回答涉及代码时，必须说明使用了哪些 codebase、哪些 `wiki/code/` 页面、哪些结论来自需求文档、哪些来自代码实现、哪些只是推断。
+
+## 维护说明
+
+本文件由 `tools/build_wiki.py` 为新 KB 生成。已有 KB 的本文件不会被 `update` 静默覆盖；如果需要升级旧 KB 的查询路由，请显式执行迁移或人工确认后再替换。
 """,
     )
     write_if_missing(

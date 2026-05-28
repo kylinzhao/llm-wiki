@@ -236,10 +236,12 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 - 问题类型
 - 是否用了 `BUSINESS_CONTEXT.md`
-- 先查哪一层目录
-- 有没有用 `concepts / entities` 扩展
+- 按查询意图先查了哪些专项目录层：`truth`、`conflicts`、`evidence`、`proposals`、`reference`、`operations`
+- 有没有用 `concepts / entities` 作为通用扩展层做主题、实体、别名和相关来源扩展
 - 最终依据了哪些 `sources`
 - 只有当问题涉及代码、实现状态或使用 `query-plus` 时，才说明使用了哪些 `wiki/code/` 页面、代码库、接口、类或方法；业务知识查询不要为了填格式而展开代码证据
+
+`concepts / entities` 是导航和归一化层，不是最终证据层，也不替代 `evidence / operations / proposals / reference / truth / conflicts`。结论必须回到 `sources`、必要时回到 `raw/` 核验。
 
 ### 8. 规范实体优先
 
