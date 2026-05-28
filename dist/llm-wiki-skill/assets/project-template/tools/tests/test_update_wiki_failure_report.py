@@ -18,6 +18,115 @@ def load_update_wiki():
 
 
 class UpdateFailureReportTest(unittest.TestCase):
+    def test_run_code_sync_blocks_legacy_unmanaged_raw_code_directory(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            codebase = project / "raw-code" / "legacy-app"
+            codebase.mkdir(parents=True)
+            (codebase / "README.md").write_text("# legacy\n", encoding="utf-8")
+
+            code = update_wiki.run_code_sync(project)
+
+            self.assertEqual(code, 2)
+
+    def test_run_code_sync_blocks_metadata_without_git_checkout(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            codebase = project / "raw-code" / "broken-app"
+            codebase.mkdir(parents=True)
+            (codebase / ".llm-wiki-codebase.yaml").write_text(
+                "codebase_id: broken-app\nmanaged: true\nrepo_url: /tmp/broken.git\norigin_ref: main\ndefault_branch: main\nmanaged_path: raw-code/broken-app\ncreated_by: llm-wiki-add-code\n",
+                encoding="utf-8",
+            )
+
+            code = update_wiki.run_code_sync(project)
+
+            self.assertEqual(code, 2)
+
+    def test_deterministic_steps_include_cjira_refresh_after_build(self):
+        update_wiki = load_update_wiki()
+        tools = TOOLS_DIR
+
+        steps = update_wiki.deterministic_steps(tools, graphify=True)
+
+        self.assertEqual(
+            [(script.name, extra) for script, extra in steps],
+            [
+                ("build_wiki.py", []),
+                ("cjira_registry.py", ["--refresh"]),
+                ("scan_code.py", []),
+                ("graphify_code.py", ["--all"]),
+                ("build_traceability.py", []),
+                ("health.py", ["--json"]),
+                ("build_graph.py", []),
+                ("anchor_check.py", []),
+            ],
+        )
+
+    def test_drawio_repair_runs_before_code_sync(self):
+        import tempfile
+        from unittest import mock
+
+        update_wiki = load_update_wiki()
+        calls = []
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            script = project / "tools" / "drawio_repair.py"
+            script.parent.mkdir(parents=True)
+            script.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+
+            with mock.patch.object(update_wiki, "run_python_script", side_effect=lambda path, _project, extra=None: calls.append(path.name) or 0):
+                code = update_wiki.run_drawio_repair(project)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["drawio_repair.py"])
+
+    def test_prepare_raw_evidence_runs_confluence_sync_before_raw_preflight(self):
+        import tempfile
+        from unittest import mock
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw").mkdir()
+            (project / "wiki" / "sources").mkdir(parents=True)
+            (project / "wiki" / "sources" / "existing.md").write_text("# Existing\n", encoding="utf-8")
+
+            self.assertIsNotNone(update_wiki.raw_evidence_preflight_failed(project))
+
+            def sync_raw(_project):
+                (project / "raw" / "index.md").write_text("# Synced\n", encoding="utf-8")
+                return 0
+
+            with mock.patch.object(update_wiki, "run_confluence_sync", side_effect=sync_raw):
+                code, failed_step = update_wiki.prepare_raw_evidence(project, "", False)
+
+            self.assertEqual(code, 0)
+            self.assertIsNone(failed_step)
+            self.assertIsNone(update_wiki.raw_evidence_preflight_failed(project))
+
+    def test_prepare_raw_evidence_keeps_no_sync_preflight_blocker_visible(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw").mkdir()
+            (project / "wiki" / "sources").mkdir(parents=True)
+            (project / "wiki" / "sources" / "existing.md").write_text("# Existing\n", encoding="utf-8")
+
+            code, failed_step = update_wiki.prepare_raw_evidence(project, "", True)
+
+            self.assertEqual(code, 0)
+            self.assertIsNone(failed_step)
+            self.assertIn("empty_raw_evidence", update_wiki.raw_evidence_preflight_failed(project) or "")
+
     def test_failure_report_replaces_previous_success_report(self):
         import tempfile
 
@@ -120,16 +229,124 @@ class UpdateFailureReportTest(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            progress_dir = state_dir / "progress"
+            progress_dir.mkdir(parents=True)
+            (progress_dir / "638576143.json").write_text(
+                json.dumps(
+                    {
+                        "root_page_id": "638576143",
+                        "depth_limit": 3,
+                        "pages": {},
+                        "queue": [],
+                        "enqueued": [],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
             commands = update_wiki.confluence_sync_commands(project)
             config = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
 
             self.assertEqual(config["sources"][0]["page_id"], "638576143")
             self.assertEqual(config["sources"][0]["depth"], 3)
+            self.assertEqual(config["sources"][0]["metadata_dir"], "staging/wiki-export-state")
             self.assertEqual(len(commands), 1)
             self.assertIn("--update", commands[0])
             self.assertIn("--rss-include-new", commands[0])
+            self.assertIn(str(project / "staging" / "wiki-export-state"), commands[0])
             self.assertIn("638576143=https://cwiki.guazi.com/spaces/createrssfeed.action?x=1", commands[0])
+
+    def test_upstream_wiki_sources_normalizes_metadata_dir(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source = {
+                "type": "confluence",
+                "page_id": "123",
+                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=123",
+                "depth": 2,
+            }
+
+            update_wiki.write_upstream_wiki_sources(project, [source])
+
+            payload = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["sources"][0]["metadata_dir"], "staging/wiki-export-state")
+
+    def test_upstream_wiki_sources_converts_project_absolute_metadata_dir(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source = {
+                "type": "confluence",
+                "page_id": "123",
+                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=123",
+                "depth": 2,
+                "metadata_dir": str(project / "staging" / "wiki-export-state"),
+            }
+
+            update_wiki.write_upstream_wiki_sources(project, [source])
+
+            payload = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["sources"][0]["metadata_dir"], "staging/wiki-export-state")
+
+    def test_upstream_wiki_sources_rejects_external_absolute_metadata_dir(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source = {
+                "type": "confluence",
+                "page_id": "123",
+                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=123",
+                "depth": 2,
+                "metadata_dir": "/tmp/outside-wiki-export-state",
+            }
+
+            with self.assertRaises(ValueError):
+                update_wiki.write_upstream_wiki_sources(project, [source])
+
+    def test_confluence_sync_uses_normal_export_when_progress_state_is_missing(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            exporter = project / "tools" / "confluence_sync" / "export_obsidian_wiki.py"
+            exporter.parent.mkdir(parents=True)
+            exporter.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            state_dir = project / "staging" / "wiki-export"
+            state_dir.mkdir(parents=True)
+            (state_dir / "export-state.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "roots": [
+                            {
+                                "page_id": "638576143",
+                                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=638576143",
+                                "site_base": "https://cwiki.guazi.com",
+                                "depth_limit": 3,
+                                "space_key": "ztcpb",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            commands = update_wiki.confluence_sync_commands(project)
+
+            self.assertIn("--url", commands[0])
+            self.assertNotIn("--update", commands[0])
 
     def test_rss_upstream_config_migrates_from_legacy_config(self):
         import tempfile
@@ -197,10 +414,10 @@ class UpdateFailureReportTest(unittest.TestCase):
             config = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
 
             self.assertEqual(config["sources"][0]["page_id"], "642319072")
-            self.assertEqual(config["sources"][0]["metadata_dir"], "raw")
+            self.assertEqual(config["sources"][0]["metadata_dir"], "staging/wiki-export-state")
             self.assertEqual(config["sources"][0]["source_id"], "cwiki-642319072")
             self.assertEqual(config["sources"][0]["relationship"]["role"], "primary")
-            self.assertIn(str(project / "raw"), commands[0])
+            self.assertIn(str(project / "staging" / "wiki-export-state"), commands[0])
 
     def test_cwiki_rss_with_source_url_migrates_to_confluence_source(self):
         import tempfile

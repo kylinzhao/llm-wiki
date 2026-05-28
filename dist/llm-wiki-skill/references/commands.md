@@ -10,6 +10,7 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki init` | New project, user wants phased initialization | Skeleton, deterministic build, first-pass plan |
 | `llm-wiki doctor` | User wants site status, diagnosis, quality review, or prioritized recommendations | Findings plus health portrait and next steps |
 | `llm-wiki update` | Existing KB needs resume, refinement, traceability refresh, source/code updates, or validation after changes | Impact-scoped update, validation, and maintenance report |
+| `llm-wiki backfill` | Existing KB was built with older skill versions and needs historical evidence re-scanned | Deterministic evidence backfill, then refinement absorption through update semantics |
 | `llm-wiki update-skill` | User explicitly asks to update the llm-wiki skill bundle itself, not the current KB content | Pull/reinstall the installed skill bundle, then optionally refresh project tooling |
 | `llm-wiki add-wiki` | Add another document/wiki directory or wiki URL as business or requirement evidence | Imported raw evidence, source provenance, RSS/update status, and affected wiki updates |
 | `llm-wiki add-code` | Add or refresh implementation evidence, code wiki, capabilities, and traceability | raw-code codebase plus code wiki and mappings |
@@ -64,7 +65,7 @@ Run order:
 1. Validate `raw/` and `BUSINESS_CONTEXT.md`.
 2. Install the bundled project template unless equivalent scripts already exist: after bundle install, use your client's skills root (for example Codex: `python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"`), or use `python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"` when the package lives elsewhere (see main `SKILL.md` "Skill 包路径").
 3. Run deterministic build with `uv run python tools/update_wiki.py`.
-   - when the standard template is installed, this command should auto-refresh enabled RSS/feed raw inputs and connected clean `raw-code/<codebase_id>/` git worktrees before rebuilding deterministic code outputs
+   - when the standard template is installed, this command should auto-refresh enabled RSS/feed raw inputs and engine-managed `raw-code/<codebase_id>/` git checkouts before rebuilding deterministic code outputs
 4. If `raw-code/` exists and code graph extraction is useful, run `uv run python tools/graphify_code.py --all`, then rerun `scan_code.py` and `build_traceability.py`.
 5. Complete first-pass source summary and AI-native refinement.
 6. Build layered pages, concepts, entities, truth, conflicts, evidence, proposals, reference, operations.
@@ -72,8 +73,9 @@ Run order:
 8. If implementation review is in scope, create traceability pages for highest-value capabilities.
 9. Run G+ readiness checks when feasible: query acceptance and quality audit. For 0-1 builds this is part of the default path, not an optional follow-up: complete concepts/entities/truth/conflicts/evidence/proposals/reference/operations calibration unless a hard blocker appears or the user explicitly asks to stop after the baseline.
 10. Inventory raw image assets and image-note status. Do not batch-analyze images by default, but if images exist and no image evidence pass is complete, record phase H as pending and recommend `llm-wiki image`.
-11. Run health, graph, and anchor check.
-12. Update `staging/refinement-status.md`.
+11. Include deterministic text sidecars generated from `.zip` prototype attachments in source summary and refinement scope. Treat the sidecar Markdown as source evidence with provenance; do not treat binary zip files or extracted prototype assets as standalone system facts.
+12. Run health, graph, and anchor check.
+13. Update `staging/refinement-status.md`.
 
 Default behavior:
 
@@ -159,12 +161,13 @@ Default update order:
    - when an older repo only has `config/rss-feeds.yaml`, treat it as legacy input and let `tools/update_wiki.py` migrate it into `upstream/wiki-sources.json`
    - if upstream wiki URLs are configured but RSS/feed URLs are missing, attempt deterministic feed discovery from the wiki URL and platform metadata before syncing
    - if an RSS/feed URL cannot be inferred, tell the user exactly which wiki URL needs a manually supplied RSS URL; if the user does not provide one, leave the RSS/feed field empty and report that automatic future updates for that source cannot be completed
-   - if the project has connected `raw-code/<codebase_id>/` git worktrees, refresh them by default before code wiki rebuild; for the standard template this means auto-running a safe code sync inside `tools/update_wiki.py`
-   - default code sync should use a safe fast-forward-only strategy for git worktrees unless the project manifest explicitly overrides the command
+   - if the project has engine-managed `raw-code/<codebase_id>/` git checkouts, refresh them by default before code wiki rebuild; for the standard template this means auto-running `git pull --ff-only` inside `tools/update_wiki.py`
+   - unmanaged, copied, symlinked, or ad-hoc raw-code directories are legacy states and should block update until migrated
    - never silently overwrite dirty `raw-code/*` worktrees; block and report the specific codebase instead
 4. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
    - when upstream sync is enabled in the project, prefer an update command path that includes the raw refresh automatically, for example by auto-running Cwiki sync and `tools/rss_sync.py` inside `tools/update_wiki.py` or by passing `--raw-sync-command`
-   - when `raw-code/` codebases are connected as git worktrees, prefer an update command path that includes the code refresh automatically, for example by auto-running `git pull --ff-only` per clean codebase or a manifest-defined override inside `tools/update_wiki.py`
+   - when `raw-code/` codebases are connected through `llm-wiki add-code`, prefer an update command path that includes the code refresh automatically by auto-running `git pull --ff-only` per clean managed codebase inside `tools/update_wiki.py`
+   - when the standard template is installed, `update` should refresh `staging/cjira-registry/active.json` after source scan; terminal pages move to `archive.json`
 5. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
    - Read `staging/refinement-plan.json` and `references/refinement-contract.md`; use them as the write-scope and acceptance contract for semantic refinement.
    - Read `staging/update/latest.json` `gplus_quality`; if `status=needs_attention`, treat it as an update trigger even when `semantic_update_required=false`.
@@ -199,6 +202,10 @@ Default update order:
    - run `tools/anchor_check.py` when traceability pages or code anchors changed
    - if validation fails and the fix is low-risk and in scope, fix it before final reporting
    - if validation fails and cannot be fixed safely, report the blocker and recommend the smallest safe continuation
+15. For status-sensitive projects, read `staging/cjira-registry/active.json` and `archive.json` during update / doctor / query:
+   - `doctor` should report stale Jira fetches and low-confidence primary selections
+   - `query` should use registry state when answering whether a requirement is `idea`, `in_progress`, or `frozen`
+   - unknown or failed Jira lookups must remain active and must not be promoted to `frozen`
 
 Project command convention:
 
@@ -238,6 +245,67 @@ Recommendation rule:
 - When validation fails, recommend the smallest safe continuation or fix, phrased as a command the user can run (`llm-wiki update`, `llm-wiki doctor`, or `llm-wiki image`) rather than a script chain.
 - When validation passes and there are no blockers, say the KB is ready to use or ready for the owner's normal git/release process.
 - Do not call a KB fully ready when `gplus_quality.status=needs_attention`; describe it as structurally healthy but semantically underfit, and either complete the G+ expansion in the current update or report the smallest blocker that prevents it.
+
+## `llm-wiki backfill`
+
+Purpose: upgrade an existing LLM Wiki project built with older skill versions by re-scanning historical evidence and then absorbing newly available evidence into the refined wiki layers.
+
+Use when:
+
+- The project predates newer deterministic evidence features such as draw.io text extraction, Cjira/Jira/IDEA registry, source metadata v2, or query-routing agent rules.
+- The user wants a hotfix for many existing KBs without manually rebuilding from scratch.
+- A doctor/update report says historical evidence exists but backfill artifacts are missing.
+- A newly released deterministic feature requires re-reading old `raw/`, `wiki/sources/`, or `staging/` files.
+
+Default order:
+
+1. Read `BUSINESS_CONTEXT.md` when present, but do not block deterministic backfill solely because it is incomplete; report the issue before semantic absorption.
+2. Refresh engine-owned tools and agent rules from the installed skill:
+
+   ```bash
+   python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD" --engine-only --refresh-agent-rules
+   ```
+
+3. Run the backfill pipeline:
+
+   ```bash
+   uv run python tools/backfill.py
+   ```
+
+   If `uv` is unavailable but project dependencies are already satisfied, fall back to `python3 tools/backfill.py`.
+
+4. Read `staging/backfill/latest.json` and `latest.md`.
+5. If `refinement_absorption_required=true`, continue directly with `llm-wiki update` semantics over `refinement_scope`:
+   - update affected `wiki/sources/*` summaries and Business Links
+   - refresh related concepts/entities
+   - refresh truth/conflicts/evidence/proposals/operations/reference
+   - refresh query acceptance and G+ quality audit
+   - run health, graph, and anchor checks when relevant
+6. If no deterministic evidence changed, run or recommend `llm-wiki doctor` for a read-only confirmation.
+
+Current deterministic passes:
+
+- `drawio`: converts historical `.drawio` / `.dio` files into Mermaid-backed Markdown evidence and links that evidence from raw page indexes.
+- `source_metadata`: patches existing `wiki/sources/*` with Delivery Tracking and Source Metadata without rewriting refined summaries.
+- `cjira`: rebuilds `staging/cjira-registry/` from historical raw Jira/Cjira/IDEA signals.
+- `agent_rules`: patches missing project query-routing rules.
+
+Extensibility rule: future features that need to re-scan historical documents should become a new `tools/backfill.py` pass and feed `refinement_scope`, instead of being hidden inside query or doctor.
+
+Do not:
+
+- Treat backfill as a full rebuild.
+- Rewrite `raw/` source text, except deterministic evidence-link sections managed by the backfill pass.
+- Stop after deterministic backfill when new evidence changed source/G+ behavior; continue into refinement absorption unless blocked.
+- Silently ignore Jira auth failures. Offline key extraction can continue, but status refresh blockers must be reported.
+
+Final report:
+
+- backfill passes run and changed counts
+- source/raw/evidence pages in `refinement_scope`
+- semantic absorption performed after backfill
+- health / graph / G+ quality results
+- blockers and remaining missing evidence
 
 ## `llm-wiki update-skill`
 
@@ -336,8 +404,9 @@ Default order:
 1. Read `BUSINESS_CONTEXT.md` and existing `wiki/code/index.md` when present.
 2. Inspect the provided code path, detect repo root, stack, entry points, docs, and whether it is a git repository.
 3. Choose a stable `codebase_id` from the repo or directory name; ask only if it collides or is misleading.
-4. Add the codebase under `raw-code/<codebase_id>/` by copying, symlinking, or recording the existing path according to project convention. Do not mix it into `raw/`.
-   - if the added codebase is a git worktree, future `llm-wiki update` runs should treat it as default-refreshable code evidence unless the project explicitly disables or overrides that behavior
+4. Add the codebase under `raw-code/<codebase_id>/` as an engine-managed git checkout or git worktree. Do not mix it into `raw/`.
+   - this is the only supported onboarding model
+   - if repository access is missing, stop immediately and tell the user to obtain permission before retrying
 5. Scan the codebase for README, AGENTS, OpenSpec, API contracts, routes, controllers, services, jobs, messages, data access, and config.
 6. Run graphify if available and useful; otherwise record why it was skipped.
 7. Create or update `wiki/code/codebases/<codebase_id>/` and affected `wiki/code/capabilities/`.
@@ -348,13 +417,13 @@ Stop for confirmation when:
 
 - The source path is missing.
 - The target `raw-code/<codebase_id>/` already exists.
-- Copying the repo would include secrets, credentials, build artifacts, or very large dependency directories.
-- The codebase is dirty and the user asked to pull or update it.
+- The current machine cannot read or clone the repository.
+- The existing managed target is dirty and cannot be safely reused.
 
 Final report:
 
 - codebase_id
-- source path and import method
+- repository source and managed checkout path
 - detected stack and entry points
 - pages created or updated
 - capability and traceability coverage
@@ -391,6 +460,7 @@ Optional read-only checks:
 - Surface P0/P1/P2 findings directly in `主要问题`; do not require a separate `audit` command.
 - Count image assets under `raw/**/assets/` and image notes under `staging/image-notes/`.
 - When image assets exist without a completed image evidence pass, list prioritized image refinement candidate pages, using signals such as flow diagrams, state screenshots, money/account/risk/permission terms, launch tables, test conclusions, data tables, tracking, and pages already central to overview/concepts/query acceptance.
+- Count generated prototype evidence notes under `raw/**/assets/*.prototype.md`; flag linked zip evidence that has no sidecar note.
 - Count `wiki/code/codebases/*`, `wiki/code/capabilities/*.md`, and `wiki/code/traceability/*.md`.
 - Inspect latest health status.
 - Inspect graph node / edge counts.
@@ -600,7 +670,7 @@ Final report:
 
 Use the same early stages as `fast`, but stop after the initialized baseline and first-pass plan if the user wants phased work.
 
-When the user supplies a **Confluence/Cwiki URL** (`pageId=`) as the evidence source: install the bundled template (includes **`tools/confluence_sync/`**), run **`uv sync`**, then run **`uv run python tools/confluence_sync/export_obsidian_wiki.py`** with `--project-dir` so pages land under **`raw/<pageId>-<slug>/`**. Sync metadata defaults to **`staging/wiki-export/`**, not inside `raw/`. See `references/bootstrapping.md` section「从 wiki URL 拉取 raw」.
+When the user supplies a **Confluence/Cwiki URL** (`pageId=`) as the evidence source: install the bundled template (includes **`tools/confluence_sync/`**), run **`uv sync`**, then run **`uv run python tools/confluence_sync/export_obsidian_wiki.py`** with `--project-dir` so pages land under **`raw/<pageId>-<slug>/`**. Sync metadata defaults to **`staging/wiki-export-state/`**, not inside `raw/`. See `references/bootstrapping.md` section「从 wiki URL 拉取 raw」.
 
 ### `llm-wiki doctor`
 

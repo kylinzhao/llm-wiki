@@ -64,9 +64,10 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"
 ```
 
-该模板提供 `tools/build_wiki.py`、`tools/scan_code.py`、`tools/graphify_code.py`、`tools/build_traceability.py`、`tools/health.py`、`tools/build_graph.py`、`tools/anchor_check.py`、项目 `AGENTS.md`、`.gitignore` 和依赖说明。模板脚本只做确定性扫描、脚手架、校验和图谱构建；语义 summary、实体归一、能力判断和证据强度仍由 Codex / subagent 完成。
+该模板提供 `tools/build_wiki.py`、`tools/scan_code.py`、`tools/graphify_code.py`、`tools/build_traceability.py`、`tools/health.py`、`tools/build_graph.py`、`tools/anchor_check.py`、项目 `AGENTS.md`、`.gitignore` 和依赖说明。模板脚本负责确定性扫描、脚手架、校验、图谱构建、代码锚点候选和 traceability state 合并；语义 summary、实体归一和能力判断可由 Codex / subagent 辅助。traceability 的模型步骤必须走 `docs/traceability-contract.md`：当前 agent 或外部 agent worker 都只能输出 `staging/traceability/runs/<run_id>/proposals.json`，由确定性工具合并到 `staging/traceability/state.json` 并渲染 Markdown。
+标准模板现在还会维护 `staging/cjira-registry/active.json`、`archive.json` 和 `cache.json`，用于记录 source page 的 `cjira` / `idea` 状态、刷新 Jira 活跃状态，并在 query / mapping / doctor 中区分 `idea`、`in_progress`、`frozen`。
 
-**内置 Confluence/Cwiki 下载（无需单独安装 obsidian-wiki-export skill）**：模板中包含 `tools/confluence_sync/export_obsidian_wiki.py`。安装模板并 `uv sync` 后，用带 `pageId` 的空间页面 URL 可把 wiki 树落入 **`raw/<pageId>-<slug>/index.md`**（每页目录 + `assets/`），同步元数据（`export-state.json`、`progress/`、`manifest-*.json`）默认写在 **`staging/wiki-export/`**，不把状态文件放进 `raw/`。项目的根 wiki、后续新增 wiki、RSS URL、层级和筛选条件统一落在 **`upstream/wiki-sources.json`**；日期筛选使用对应 source 的 `filters.updated_since`。详见 `references/bootstrapping.md`「从 wiki URL 拉取 raw」。
+**内置 Confluence/Cwiki 下载（无需单独安装 obsidian-wiki-export skill）**：模板中包含 `tools/confluence_sync/export_obsidian_wiki.py`。安装模板并 `uv sync` 后，用带 `pageId` 的空间页面 URL 可把 wiki 树落入 **`raw/<pageId>-<slug>/index.md`**（每页目录 + `assets/`），同步元数据（`export-state.json`、`progress/`、`manifest-*.json`）默认写在 **`staging/wiki-export-state/`**，不把状态文件放进 `raw/`。项目的根 wiki、后续新增 wiki、RSS URL、层级和筛选条件统一落在 **`upstream/wiki-sources.json`**；日期筛选使用对应 source 的 `filters.updated_since`。详见 `references/bootstrapping.md`「从 wiki URL 拉取 raw」。
 
 ## 阅读顺序
 
@@ -126,9 +127,11 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `llm-wiki init`：0-1 初始化，可分阶段汇报。
 - `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，集合原 audit 能力，指出健康度、质量问题、缺口、优化建议和下一步命令。
 - `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新；也负责续跑、source/concept/entity 精修、代码 wiki 和 traceability 收口；结束前自动运行 health/graph/必要 anchor 检查。
+- 对带 `cjira` 或 `【IDEA】` 信号的来源页，`update` 还应刷新 active registry，终态 requirement 归档到 `staging/cjira-registry/archive.json`，并把低置信度主单号或 stale Jira 拉取暴露给 `doctor` / `health`。
+- `llm-wiki backfill`：存量 KB 历史证据补全。先刷新 engine-owned 工具，重新扫描历史 `raw/` / `wiki/sources/` / `staging/`，补齐新版确定性派生能力（draw.io、Cjira/Jira/IDEA、source metadata、agent rules 等），再默认进入 `llm-wiki update` 语义做精修吸收和 G+ 收口。
 - `llm-wiki update-skill`：显式更新已安装的 llm-wiki skill bundle 本体；不要混入普通 KB 内容更新，除非用户明确要求。
 - `llm-wiki add-wiki`：把另一个文档/wiki 目录或 wiki URL 接入当前项目，作为新的 `raw/` 需求/业务证据来源；wiki URL 应在同一个 `upstream/wiki-sources.json` source object 中记录关系、层级、RSS/feed URL 和筛选条件，无法推导 RSS/feed 时要求用户手动提供，否则该来源 RSS 留空且不具备后续自动更新能力。
-- `llm-wiki add-code`：把另一个项目代码库接入当前项目，作为新的 `raw-code/<codebase_id>/` 代码证据来源，并构建代码 wiki、capability 和 traceability。
+- `llm-wiki add-code`：把另一个项目代码库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout，作为唯一受支持的代码证据接入方式，并构建代码 wiki、capability 和 traceability。
 - `llm-wiki query`：按意图分流回答业务或代码问题；业务知识默认不展开大量代码实现证据。
 - `llm-wiki query-plus`：同时拉通业务/需求证据和代码实现证据，输出更详尽的联合答案。
 - `llm-wiki review-requirement`：对新 PRD、Cwiki 页面或需求文档做证据型需求评审，纳入 raw 原文、图片、zip 原型、前端评审和代码能力证据。
@@ -181,6 +184,8 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - 不主动做图片多模态识别
 - 不把 `staging/image-notes/` 当默认主链路
 - 代码也按文本证据处理，先使用 AST/路由/API/调用关系/技术设计文档，不默认进入截图或视觉资产
+
+文本优先包含由导出器确定性生成的附件文本证据：Cwiki 页面中的 `.zip` 附件会作为可能的 HTML 原型下载、解压并生成 `raw/<page>/assets/*.prototype.md`。普通 `init` / `fast` / `update` 应把这些 sidecar Markdown 当作母 wiki 的来源证据一起 summary 和 AI-native 精修；原始 zip 和解压出的静态资源本身只作为可追溯来源，不直接升级为系统事实。
 
 文本层完成后可以进入阶段 H，但只处理高价值图片证据。图片 note 必须结合图片在 `raw/**/index.md` 中的前后文，不做裸图 OCR。低价值页面走查、重复 UI 截图、装饰图默认跳过。
 
@@ -273,7 +278,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 ### 10. 安全与证据边界
 
 - 可以读取 `raw/`，不得修改 `raw/`。
-- `raw/` 不应被提交到 Git；提交前检查它没有被 track 或 staged。
+- 默认本地项目可以不提交 `raw/`；Gateway/raw-published 项目会提交 `raw/` 证据和 canonical staging 状态。无论哪种模式，都不得由 agent 直接修改 `raw/` 原文。
 - 不调用本地模型 SDK 做摘要、分类、实体归一或语义判断；这些由 Codex / subagent 完成。
 - 本地脚本只做确定性扫描、health、graph、文件统计和格式检查。
 - 不把 token、cookie、密码、私钥、access key、内部凭据或完整敏感配置值写入 wiki；必要时只写用途并脱敏。

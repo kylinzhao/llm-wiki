@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -18,7 +19,11 @@ from urllib.parse import urlparse
 import yaml
 from agent_rules import refresh_agent_rules
 from gplus_quality import inspect_gplus_quality
+from raw_code_manager import read_codebase_metadata
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
+
+
+CANONICAL_WIKI_EXPORT_METADATA_DIR = "staging/wiki-export-state"
 
 
 def utc_now() -> str:
@@ -218,7 +223,7 @@ def legacy_rss_config_sources(project: Path) -> list[dict[str, object]]:
                     "rss_url_is_custom": True,
                     "rss_max_results": int(feed.get("rss_max_results", 200) or 200),
                     "output_dir": "raw",
-                    "metadata_dir": "staging/wiki-export",
+                    "metadata_dir": CANONICAL_WIKI_EXPORT_METADATA_DIR,
                     "migrated_from": relative_path(resolve_rss_config(project), project),
                 }
             )
@@ -338,18 +343,46 @@ def relative_path(path: Path, project: Path) -> str:
         return str(path)
 
 
+def normalize_metadata_dir(value: object, project: Path) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return CANONICAL_WIKI_EXPORT_METADATA_DIR
+    path_value = Path(text)
+    if not path_value.is_absolute():
+        return path_value.as_posix()
+    try:
+        return path_value.resolve().relative_to(project.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError(f"metadata_dir must stay inside project: {text}") from exc
+
+
 def load_upstream_wiki_sources(project: Path) -> dict:
     payload = read_json_if_present(upstream_wiki_sources_path(project))
     return payload if isinstance(payload, dict) else {}
 
 
+def copy_legacy_export_state_to_canonical(project: Path, state_path: Path) -> None:
+    canonical_dir = project / CANONICAL_WIKI_EXPORT_METADATA_DIR
+    if state_path.parent.resolve() == canonical_dir.resolve():
+        return
+    canonical_dir.mkdir(parents=True, exist_ok=True)
+    canonical_state = canonical_dir / "export-state.json"
+    if not canonical_state.exists() and state_path.is_file():
+        shutil.copy2(state_path, canonical_state)
+    legacy_progress = state_path.parent / "progress"
+    canonical_progress = canonical_dir / "progress"
+    if legacy_progress.is_dir() and not canonical_progress.exists():
+        shutil.copytree(legacy_progress, canonical_progress)
+
+
 def write_upstream_wiki_sources(project: Path, sources: list[dict[str, object]]) -> None:
+    normalized_sources = [normalize_upstream_source(dict(source), project) for source in sources]
     write_json(
         upstream_wiki_sources_path(project),
         {
             "version": 1,
             "updated_at": utc_now(),
-            "sources": sources,
+            "sources": normalized_sources,
         },
     )
 
@@ -364,13 +397,40 @@ def source_updated_since(source: dict[str, object]) -> str:
     return str(filters.get("updated_since") or source.get("updated_since") or "").strip()
 
 
-def normalize_upstream_source(source: dict[str, object], *, default_relationship: str = "additional") -> dict[str, object]:
+def has_saved_confluence_progress(metadata_dir: Path, output_dir: Path, page_id: str, depth: int) -> bool:
+    """Return true when an RSS update has a crawl progress state to resume from."""
+    candidates = [
+        metadata_dir / "progress" / f"{page_id}.json",
+        output_dir / "progress" / f"{page_id}.json",
+    ]
+    for candidate in candidates:
+        payload = read_json_if_present(candidate)
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("root_page_id") or "") != str(page_id):
+            continue
+        try:
+            payload_depth = int(payload.get("depth_limit", -1))
+        except (TypeError, ValueError):
+            continue
+        if payload_depth == int(depth):
+            return True
+    return False
+
+
+def normalize_upstream_source(
+    source: dict[str, object],
+    project: Path,
+    *,
+    default_relationship: str = "additional",
+) -> dict[str, object]:
     normalized = dict(source)
     source_type = str(normalized.get("type") or "").strip()
     if source_type == "confluence":
         page_id = str(normalized.get("page_id") or "").strip()
         if page_id and not str(normalized.get("source_id") or "").strip():
             normalized["source_id"] = f"cwiki-{page_id}"
+        normalized["metadata_dir"] = normalize_metadata_dir(normalized.get("metadata_dir"), project)
     elif source_type == "rss":
         source_id = str(normalized.get("id") or normalized.get("source_id") or "").strip()
         if source_id and not str(normalized.get("source_id") or "").strip():
@@ -398,17 +458,18 @@ def export_state_to_upstream_sources(project: Path) -> list[dict[str, object]]:
         (
             candidate
             for candidate in [
-                project / "staging" / "wiki-export" / "export-state.json",
                 project / "staging" / "wiki-export-state" / "export-state.json",
+                project / "staging" / "wiki-export" / "export-state.json",
                 project / "raw" / "export-state.json",
             ]
             if candidate.is_file()
         ),
-        project / "staging" / "wiki-export" / "export-state.json",
+        project / "staging" / "wiki-export-state" / "export-state.json",
     )
     state = read_json_if_present(state_path)
     if not isinstance(state, dict):
         return []
+    copy_legacy_export_state_to_canonical(project, state_path)
     roots = state.get("roots")
     if not isinstance(roots, list):
         return []
@@ -435,7 +496,7 @@ def export_state_to_upstream_sources(project: Path) -> list[dict[str, object]]:
                 "rss_url_is_custom": bool(root.get("rss_url_is_custom", False)),
                 "rss_max_results": int(root.get("rss_max_results", 200) or 200),
                 "output_dir": "raw",
-                "metadata_dir": relative_path(state_path.parent, project),
+                "metadata_dir": CANONICAL_WIKI_EXPORT_METADATA_DIR,
                 "migrated_from": relative_path(state_path, project),
             }
         )
@@ -447,7 +508,7 @@ def ensure_upstream_wiki_sources(project: Path) -> list[dict[str, object]]:
     existing = config.get("sources")
     sources = (
         [
-            normalize_upstream_source(dict(item), default_relationship="additional")
+            normalize_upstream_source(dict(item), project, default_relationship="additional")
             for item in existing
             if isinstance(item, dict)
         ]
@@ -457,7 +518,7 @@ def ensure_upstream_wiki_sources(project: Path) -> list[dict[str, object]]:
     migrated = export_state_to_upstream_sources(project)
     migrated.extend(legacy_rss_config_sources(project))
     migrated = [
-        normalize_upstream_source(source, default_relationship="primary" if not sources and index == 0 else "additional")
+        normalize_upstream_source(source, project, default_relationship="primary" if not sources and index == 0 else "additional")
         for index, source in enumerate(migrated)
     ]
     if not migrated:
@@ -501,11 +562,12 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         page_id = str(source.get("page_id") or "").strip()
         if not page_id:
             continue
-        metadata_dir_text = str(source.get("metadata_dir") or "staging/wiki-export")
+        metadata_dir_text = str(source.get("metadata_dir") or CANONICAL_WIKI_EXPORT_METADATA_DIR)
         metadata_dir = project / metadata_dir_text if not Path(metadata_dir_text).is_absolute() else Path(metadata_dir_text)
         output_dir_text = str(source.get("output_dir") or "raw")
         output_dir = project / output_dir_text if not Path(output_dir_text).is_absolute() else Path(output_dir_text)
-        has_state = (metadata_dir / "export-state.json").is_file() or (output_dir / "export-state.json").is_file()
+        depth = int(source.get("depth", 0) or 0)
+        has_state = has_saved_confluence_progress(metadata_dir, output_dir, page_id, depth)
         if has_state:
             saved_state_groups.setdefault(str(metadata_dir), []).append(source)
             continue
@@ -517,7 +579,7 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
             "--metadata-dir",
             str(metadata_dir),
             "--levels",
-            str(int(source.get("depth", 0) or 0)),
+            str(depth),
         ]
         url = str(source.get("url") or "").strip()
         if not url:
@@ -610,78 +672,23 @@ def iter_codebases(project: Path) -> list[Path]:
     return sorted(path for path in raw_code.iterdir() if path.is_dir())
 
 
-def normalize_code_sync_command(value: object) -> str | list[str] | None:
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    if isinstance(value, list) and value and all(isinstance(item, str) and item.strip() for item in value):
-        return [item.strip() for item in value]
-    return None
-
-
-def manifest_code_sync_specs(project: Path) -> list[dict[str, object]]:
-    manifest = load_manifest(project)
-    overrides = manifest.get("overrides")
-    if not isinstance(overrides, dict):
-        return []
-    entries = overrides.get("raw_code_update_commands")
-    if not isinstance(entries, list):
-        return []
-
-    specs: list[dict[str, object]] = []
-    for index, entry in enumerate(entries, start=1):
-        if not isinstance(entry, dict):
-            raise SystemExit(f"Invalid kb.manifest.yaml overrides.raw_code_update_commands[{index - 1}]: expected mapping.")
-        command = normalize_code_sync_command(entry.get("command"))
-        if not command:
-            raise SystemExit(
-                f"Invalid kb.manifest.yaml overrides.raw_code_update_commands[{index - 1}].command: expected non-empty string or string list."
-            )
-        codebase = entry.get("codebase")
-        cwd_value = entry.get("cwd")
-        if codebase and not isinstance(codebase, str):
-            raise SystemExit(
-                f"Invalid kb.manifest.yaml overrides.raw_code_update_commands[{index - 1}].codebase: expected string."
-            )
-        if cwd_value and not isinstance(cwd_value, str):
-            raise SystemExit(
-                f"Invalid kb.manifest.yaml overrides.raw_code_update_commands[{index - 1}].cwd: expected string."
-            )
-        if not codebase and not cwd_value:
-            raise SystemExit(
-                f"Invalid kb.manifest.yaml overrides.raw_code_update_commands[{index - 1}]: set codebase or cwd."
-            )
-
-        if cwd_value:
-            cwd = Path(cwd_value)
-            if not cwd.is_absolute():
-                cwd = project / cwd
-        else:
-            cwd = project / "raw-code" / str(codebase)
-        specs.append({"label": str(codebase or cwd.name), "cwd": cwd, "command": command})
-    return specs
-
-
-def default_code_sync_specs(project: Path) -> list[dict[str, object]]:
+def managed_code_sync_specs(project: Path) -> tuple[list[dict[str, object]], str | None]:
     specs: list[dict[str, object]] = []
     for path in iter_codebases(project):
-        if is_git_worktree(path):
-            specs.append({"label": path.name, "cwd": path, "command": ["git", "pull", "--ff-only"]})
-    return specs
+        metadata = read_codebase_metadata(path)
+        if not metadata:
+            return [], f"legacy_unmanaged_raw_code: {path} is not managed by llm-wiki add-code; migrate it before update."
+        if not is_git_worktree(path):
+            return [], f"invalid_managed_checkout: {path} has metadata but is not a valid git checkout."
+        specs.append({"label": path.name, "cwd": path, "command": ["git", "pull", "--ff-only"]})
+    return specs, None
 
 
-def cli_code_sync_specs(project: Path, command_value: object) -> list[dict[str, object]]:
-    command = normalize_code_sync_command(command_value)
-    if not command:
-        return []
-    return [{"label": path.name, "cwd": path, "command": command} for path in iter_codebases(project)]
-
-
-def run_code_sync(project: Path, cli_command: object, skip_auto: bool) -> int:
-    specs = cli_code_sync_specs(project, cli_command)
-    if not specs and not skip_auto:
-        specs = manifest_code_sync_specs(project)
-    if not specs and not skip_auto:
-        specs = default_code_sync_specs(project)
+def run_code_sync(project: Path) -> int:
+    specs, error = managed_code_sync_specs(project)
+    if error:
+        print(error, file=sys.stderr)
+        return 2
     for spec in specs:
         cwd = spec["cwd"]
         assert isinstance(cwd, Path)
@@ -703,6 +710,46 @@ def run_code_sync(project: Path, cli_command: object, skip_auto: bool) -> int:
     return 0
 
 
+def run_drawio_repair(project: Path) -> int:
+    script = project / "tools" / "drawio_repair.py"
+    if not script.is_file():
+        return 0
+    return run_python_script(script, project)
+
+
+def prepare_raw_evidence(project: Path, raw_sync_command: str, no_auto_raw_sync: bool) -> tuple[int, str | None]:
+    """Refresh raw evidence before validating raw/ is locally populated."""
+    if not raw_sync_command and not no_auto_raw_sync:
+        raw_sync_command = auto_raw_sync_command(project) or ""
+
+    if not no_auto_raw_sync:
+        code = run_confluence_sync(project)
+        if code != 0:
+            return code, "confluence_sync"
+
+    if raw_sync_command:
+        code = run_shell(raw_sync_command, project)
+        if code != 0:
+            return code, "raw_sync"
+
+    return 0, None
+
+
+def deterministic_steps(tools: Path, graphify: bool = False) -> list[tuple[Path, list[str]]]:
+    steps = [
+        (tools / "build_wiki.py", []),
+        (tools / "cjira_registry.py", ["--refresh"]),
+        (tools / "scan_code.py", []),
+        (tools / "build_traceability.py", []),
+        (tools / "health.py", ["--json"]),
+        (tools / "build_graph.py", []),
+        (tools / "anchor_check.py", []),
+    ]
+    if graphify:
+        steps.insert(3, (tools / "graphify_code.py", ["--all"]))
+    return steps
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", default=".", help="Project root. Defaults to current directory.")
@@ -722,19 +769,6 @@ def main() -> int:
         help="Also run graphify for all raw-code codebases. Missing graphify is recorded as skipped.",
     )
     parser.add_argument(
-        "--code-sync-command",
-        nargs="+",
-        help=(
-            "Optional command to run inside each raw-code/<codebase_id>/ before scan_code. "
-            "Example: --code-sync-command git pull --ff-only"
-        ),
-    )
-    parser.add_argument(
-        "--no-auto-code-sync",
-        action="store_true",
-        help="Skip both manifest-configured and default raw-code auto-update commands.",
-    )
-    parser.add_argument(
         "--no-agent-rules-refresh",
         action="store_true",
         help="Skip automatic AGENTS.md query-routing rule maintenance.",
@@ -745,53 +779,37 @@ def main() -> int:
     if not args.no_agent_rules_refresh:
         print(f"agent_rules={refresh_agent_rules(project)}")
 
+    tools = project / "tools"
+    raw_sync_command = args.raw_sync_command.strip()
+    no_auto_raw_sync = args.no_auto_raw_sync or os.environ.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
+    skipped_steps: list[str] = []
+    if no_auto_raw_sync:
+        skipped_steps.append("auto_raw_sync")
+        skipped_steps.append("confluence_sync")
+
+    code, failed_step = prepare_raw_evidence(project, raw_sync_command, no_auto_raw_sync)
+    if code != 0:
+        assert failed_step is not None
+        write_failure_report(project, failed_step, code)
+        return code
+
     err = raw_evidence_preflight_failed(project)
     if err:
         print(err, file=sys.stderr)
         write_failure_report(project, "raw_evidence_preflight", 2, {"error": err})
         return 2
 
-    tools = project / "tools"
-    raw_sync_command = args.raw_sync_command.strip()
-    no_auto_raw_sync = args.no_auto_raw_sync or os.environ.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
-    no_auto_code_sync = args.no_auto_code_sync or os.environ.get("LLM_WIKI_NO_AUTO_CODE_SYNC") == "1"
-    skipped_steps: list[str] = []
-    if no_auto_raw_sync:
-        skipped_steps.append("auto_raw_sync")
-        skipped_steps.append("confluence_sync")
-    if no_auto_code_sync:
-        skipped_steps.append("auto_code_sync")
+    code = run_drawio_repair(project)
+    if code != 0:
+        write_failure_report(project, "drawio_repair", code)
+        return code
 
-    if not raw_sync_command and not no_auto_raw_sync:
-        raw_sync_command = auto_raw_sync_command(project) or ""
-
-    if not no_auto_raw_sync:
-        code = run_confluence_sync(project)
-        if code != 0:
-            write_failure_report(project, "confluence_sync", code)
-            return code
-
-    if raw_sync_command:
-        code = run_shell(raw_sync_command, project)
-        if code != 0:
-            write_failure_report(project, "raw_sync", code)
-            return code
-
-    code = run_code_sync(project, args.code_sync_command, no_auto_code_sync)
+    code = run_code_sync(project)
     if code != 0:
         write_failure_report(project, "code_sync", code)
         return code
 
-    steps = [
-        (tools / "build_wiki.py", []),
-        (tools / "scan_code.py", []),
-        (tools / "build_traceability.py", []),
-        (tools / "health.py", ["--json"]),
-        (tools / "build_graph.py", []),
-        (tools / "anchor_check.py", []),
-    ]
-    if args.graphify:
-        steps.insert(2, (tools / "graphify_code.py", ["--all"]))
+    steps = deterministic_steps(tools, graphify=bool(args.graphify))
 
     exit_code = 0
     for script, extra in steps:

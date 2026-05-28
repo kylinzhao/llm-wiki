@@ -182,7 +182,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="",
         help=(
             "Forwarded to export_confluence_tree.py — overrides default metadata location "
-            "(otherwise resolved next to raw/)."
+            "(otherwise defaults to staging/wiki-export-state for project raw/ exports)."
         ),
     )
     parser.add_argument(

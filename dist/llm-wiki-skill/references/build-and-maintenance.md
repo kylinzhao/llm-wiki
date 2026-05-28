@@ -14,7 +14,7 @@ uv run python tools/build_graph.py
 uv run python tools/anchor_check.py
 ```
 
-如果存在 `raw-code/`，标准文档构建之后还要进入代码 wiki 阶段。代码 wiki 可以先由 Codex-native 工作流完成，不要求项目一开始就有专门脚本。
+如果存在 `raw-code/`，标准文档构建之后还要进入代码 wiki 阶段。`raw-code/*` 只支持由 `llm-wiki add-code` 创建的 engine-managed git checkout；旧的复制、软链或外部路径形态属于迁移对象，不再是合法终态。
 如果需要 graphify 代码图谱增强，运行：
 
 ```text
@@ -48,6 +48,7 @@ uv run python tools/anchor_check.py
 ### `scan_code.py`
 
 - 扫描 `raw-code/*`
+- 验证每个 codebase 是否是合法的 engine-managed git checkout
 - 识别技术栈 marker、文件角色、endpoint / route 候选和符号
 - 输出 `staging/code-graph/<codebase_id>/manifest.json`
 - 输出 `staging/code-graph/<codebase_id>/endpoint-map.json`
@@ -65,7 +66,10 @@ uv run python tools/anchor_check.py
 
 - 基于 source manifest 和 code scan 输出生成 traceability 种子
 - 写入 `wiki/code/traceability/index.md`
-- 只生成待 Codex 验证的候选行，不替代证据强度判断
+- 从 code manifest 生成 `Code Anchor Candidates`，完整候选写入 `staging/traceability-candidates.json`
+- 合并 `staging/traceability/runs/<run_id>/proposals.json` 到单一长期状态 `staging/traceability/state.json`
+- 从 `state.json` 渲染 `Verified`、`Proposed`、`Gaps` 和 `Rejected` traceability sections
+- 生成确定性候选行和候选级别；真实需求点到代码锚点只有在存在可规则匹配或已验证证据时才能提升为 `strong`、`partial`、`inferred`、`external` 或 `missing`
 
 ### `health.py`
 
@@ -99,14 +103,16 @@ uv run python tools/anchor_check.py
 
 - **`export_obsidian_wiki.py`**：入口脚本（Cookie、`--project-dir`、`--levels`、`--update`）。
 - **`export_confluence_tree.py`**：REST API 拉取页面树、本地化 wiki 域内图片、写 Markdown。
-- 页面证据落在 **`raw/<pageId>-<slug>/index.md`**（及 `assets/`）；导出状态与 manifest 默认在 **`staging/wiki-export/`**，与 `rss_sync.py` 的通用 RSS 快照不同用途——前者拉完整 wiki 页面内容，后者只做 feed 条目镜像。
+- 页面证据落在 **`raw/<pageId>-<slug>/index.md`**（及 `assets/`）；导出状态与 manifest 默认在 **`staging/wiki-export-state/`**，与 `rss_sync.py` 的通用 RSS 快照不同用途——前者拉完整 wiki 页面内容，后者只做 feed 条目镜像。
+- Cwiki `.zip` 附件会按可能的 HTML 原型处理：zip 本体保存在 `assets/`，解压内容保存在 `assets/prototypes/<name>/`，可读摘要写入 `assets/<name>.zip.prototype.md` 并回链到页面正文。
 - 项目级上游配置落在 **`upstream/wiki-sources.json`**。0-1 从 Cwiki URL 导出成功后必须写入该文件；`tools/update_wiki.py` 会优先读取它并在确定性构建前自动运行 Cwiki `--update`。
 - 日期筛选统一写在 `filters.updated_since`，例如 `"filters": {"updated_since": "2025-10-01"}`。历史顶层 `updated_since` 只作为兼容输入。
-- 旧项目如果只有 `staging/wiki-export/export-state.json` 或历史 `raw/export-state.json`，`tools/update_wiki.py` 会自动迁移生成 `upstream/wiki-sources.json`，再按该配置刷新 Cwiki raw 页面。
+- 旧项目如果只有 legacy `staging/wiki-export/export-state.json` 或历史 `raw/export-state.json`，`tools/update_wiki.py` 会自动迁移生成 `upstream/wiki-sources.json`，再按该配置刷新 Cwiki raw 页面。
 
 ### 代码 wiki 阶段
 
 - 扫描 `raw-code/*`，识别每个 `codebase_id`
+- 要求每个 codebase 都是 `llm-wiki add-code` 创建的受管 git checkout
 - 读取 codebase 内部的 README、AGENTS、OpenSpec、技术设计等文本说明
 - 按技术栈抽取结构事实
 - 可选运行 graphify，生成源码图谱与结构报告

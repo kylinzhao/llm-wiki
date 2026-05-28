@@ -25,7 +25,7 @@ before answering from general model memory.
 
 - `raw/` is immutable source evidence. Read it; do not edit it.
 - `raw-code/` is immutable code evidence. Read it; do not edit it.
-- Do not commit `raw/` unless the owner explicitly asks for that.
+- Local-only projects may keep `raw/` uncommitted. Gateway/raw-published projects commit `raw/` evidence and canonical staging state so worktrees and other users can update from Git.
 - Do not write secrets, cookies, tokens, private keys, or full sensitive config values into `wiki/`.
 
 ## Build Commands
