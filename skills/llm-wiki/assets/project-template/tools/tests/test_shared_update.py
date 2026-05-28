@@ -148,6 +148,141 @@ class SharedUpdateTests(unittest.TestCase):
         self.assertEqual(decision.status, "unexpected_local_changes")
         self.assertIn("notes.md", decision.message)
 
+    def test_local_mode_blocks_dirty_worktree(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            git(project, "init", "-b", "main")
+            git(project, "config", "user.name", "Codex")
+            git(project, "config", "user.email", "codex@example.com")
+            (project / ".gitignore").write_text("raw/\nraw-code/\n", encoding="utf-8")
+            (project / "wiki").mkdir()
+            (project / "wiki" / "page.md").write_text("# v1\n", encoding="utf-8")
+            git(project, "add", ".")
+            git(project, "commit", "-m", "baseline")
+            (project / "wiki" / "page.md").write_text("# v2\n", encoding="utf-8")
+
+            result = shared.local_preflight(project)
+
+            self.assertEqual(result.status, "dirty_worktree_blocked")
+            self.assertIn("工作区", result.message)
+
+    def test_local_mode_allows_non_git_project_with_warning(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            result = shared.local_preflight(Path(tmp))
+        self.assertEqual(result.status, "ok")
+        self.assertIn("不是 git 仓库", result.message)
+
+    def test_shared_preflight_runs_hygiene_before_dirty_worktree(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            (project / "raw" / "page.md").parent.mkdir(exist_ok=True)
+            (project / "raw" / "page.md").write_text("# raw\n", encoding="utf-8")
+            git(project, "add", "-f", "raw/page.md")
+            result = shared.shared_preflight(project, no_auto_raw_sync=False, interactive=False)
+        self.assertEqual(result.status, "evidence_cache_tracked_failed")
+
+    def test_shared_mode_blocks_no_upstream(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            git(project, "init", "-b", "main")
+            git(project, "config", "user.name", "Codex")
+            git(project, "config", "user.email", "codex@example.com")
+            (project / ".gitignore").write_text("raw/\nraw-code/\n", encoding="utf-8")
+            (project / "wiki").mkdir()
+            (project / "wiki" / "page.md").write_text("# page\n", encoding="utf-8")
+            git(project, "add", ".")
+            git(project, "commit", "-m", "baseline")
+
+            result = shared.shared_preflight(project, no_auto_raw_sync=False, interactive=False)
+
+            self.assertEqual(result.status, "shared_sync_failed")
+            self.assertIn("上游", result.message)
+
+    def test_shared_mode_no_upstream_interactive_offers_local_mode(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            git(project, "init", "-b", "main")
+            (project / ".gitignore").write_text("raw/\nraw-code/\n", encoding="utf-8")
+            result = shared.shared_preflight(project, no_auto_raw_sync=False, interactive=True)
+            self.assertEqual(result.status, "offer_local_mode")
+            self.assertIn("是否切换到本机模式", result.message)
+
+    def test_shared_mode_rejects_skip_flags(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            git(project, "init", "-b", "main")
+
+            result = shared.shared_preflight(project, no_auto_raw_sync=True, interactive=False)
+
+            self.assertEqual(result.status, "shared_sync_failed")
+            self.assertIn("共享模式", result.message)
+            self.assertIn("不能跳过 raw/raw-code 同步", result.message)
+
+    def test_shared_mode_read_permission_failure_mentions_permission(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            git(project, "remote", "set-url", "origin", "git@example.invalid:no/read.git")
+
+            result = shared.shared_preflight(
+                project,
+                no_auto_raw_sync=False,
+                interactive=False,
+                git_runner=lambda args, cwd: shared.GitResult(128, "", "Permission denied (publickey)"),
+            )
+
+            self.assertEqual(result.status, "shared_sync_failed")
+            self.assertIn("读取权限", result.message)
+            self.assertIn("请先获取 KB 仓库权限", result.message)
+
+    def test_shared_mode_diverged_interactive_offers_local_mode(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            result = shared.shared_preflight(
+                project,
+                no_auto_raw_sync=False,
+                interactive=True,
+                git_runner=lambda args, cwd: shared.GitResult(0, "", ""),
+                divergence_reader=lambda cwd, upstream: (1, 1),
+            )
+            self.assertEqual(result.status, "offer_local_mode")
+            self.assertIn("是否切换到本机模式", result.message)
+
+    def test_shared_mode_behind_pull_permission_failure_offers_local_mode_interactively(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+
+            def fake_git(args, cwd):
+                if args[0] == "pull":
+                    return shared.GitResult(128, "", "Permission denied (publickey)")
+                return shared.GitResult(0, "", "")
+
+            result = shared.shared_preflight(project, False, True, git_runner=fake_git, divergence_reader=lambda cwd, upstream: (0, 1))
+            self.assertEqual(result.status, "offer_local_mode")
+            self.assertIn("读取权限", result.message)
+
+    def test_shared_mode_behind_pull_non_permission_failure_fails_closed_noninteractive(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+
+            def fake_git(args, cwd):
+                if args[0] == "pull":
+                    return shared.GitResult(1, "", "fatal: not possible to fast-forward")
+                return shared.GitResult(0, "", "")
+
+            result = shared.shared_preflight(project, False, False, git_runner=fake_git, divergence_reader=lambda cwd, upstream: (0, 1))
+            self.assertEqual(result.status, "shared_sync_failed")
+            self.assertNotIn("是否切换到本机模式", result.message)
+
 
 if __name__ == "__main__":
     unittest.main()

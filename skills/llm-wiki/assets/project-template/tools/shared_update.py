@@ -169,3 +169,102 @@ def decide_publish_paths(changes: list[GitChange]) -> PublishDecision:
             message="发现共享发布范围外的本地改动，请先处理后重试：" + ", ".join(unexpected),
         )
     return PublishDecision("ok", tuple(dict.fromkeys(allowed)))
+
+
+def is_git_repo(project: Path) -> bool:
+    return run_git(["rev-parse", "--is-inside-work-tree"], cwd=project).returncode == 0
+
+
+def git_status_dirty(project: Path) -> bool:
+    result = run_git(["status", "--porcelain"], cwd=project)
+    return result.returncode != 0 or bool(result.stdout.strip())
+
+
+def current_upstream(project: Path, git_runner=run_git) -> tuple[str | None, GitResult]:
+    result = git_runner(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], project)
+    upstream = result.stdout.strip()
+    return (upstream if result.returncode == 0 and upstream else None), result
+
+
+def read_divergence(project: Path, upstream: str) -> tuple[int, int]:
+    result = run_git(["rev-list", "--left-right", "--count", f"HEAD...{upstream}"], cwd=project)
+    if result.returncode != 0:
+        return 0, 0
+    parts = result.stdout.strip().split()
+    if len(parts) != 2:
+        return 0, 0
+    return int(parts[0]), int(parts[1])
+
+
+def local_mode_offer(message: str) -> PreflightResult:
+    return PreflightResult("offer_local_mode", message + " 是否切换到本机模式继续？")
+
+
+def local_preflight(project: Path) -> PreflightResult:
+    if not is_git_repo(project):
+        return PreflightResult("ok", "当前目录不是 git 仓库，将以本机模式继续。")
+    hygiene = check_evidence_cache_hygiene(project)
+    if hygiene.status != "ok":
+        return hygiene
+    if git_status_dirty(project):
+        return PreflightResult("dirty_worktree_blocked", "本机模式要求 git 工作区干净，请先提交、暂存或清理本地改动。")
+    return PreflightResult("ok")
+
+
+def shared_preflight(
+    project: Path,
+    no_auto_raw_sync: bool,
+    interactive: bool,
+    git_runner=run_git,
+    divergence_reader=read_divergence,
+) -> PreflightResult:
+    if no_auto_raw_sync:
+        return PreflightResult("shared_sync_failed", "共享模式不能跳过 raw/raw-code 同步。请取消跳过参数，或显式使用本机模式。")
+
+    hygiene = check_evidence_cache_hygiene(project)
+    if hygiene.status != "ok":
+        return hygiene
+
+    if not is_git_repo(project):
+        message = "共享模式需要 KB 目录是 git 仓库。"
+        return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
+
+    upstream, upstream_result = current_upstream(project)
+    if not upstream:
+        detail = upstream_result.stderr.strip()
+        message = "共享模式需要配置 KB 仓库上游分支。"
+        if classify_git_permission(detail, "pull") == "read_permission":
+            message = "无法读取 KB 仓库上游。请先获取 KB 仓库权限（读取权限）后重试。"
+        return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
+
+    fetch = git_runner(["fetch", "--prune", "origin"], project)
+    if fetch.returncode != 0:
+        detail = fetch.stderr.strip()
+        if classify_git_permission(detail, "pull") == "read_permission":
+            message = "无法读取 KB 仓库。请先获取 KB 仓库权限（读取权限）后重试。详情：" + detail
+        else:
+            message = "共享 KB 同步失败。详情：" + detail
+        return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
+
+    ahead, behind = divergence_reader(project, upstream)
+    if ahead and behind:
+        message = "共享 KB 分支已分叉，无法自动同步。"
+        return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
+
+    if behind:
+        pull = git_runner(["pull", "--ff-only"], project)
+        if pull.returncode != 0:
+            detail = pull.stderr.strip()
+            if classify_git_permission(detail, "pull") == "read_permission":
+                message = "无法读取 KB 仓库。请先获取 KB 仓库权限（读取权限）后重试。详情：" + detail
+            else:
+                message = "共享 KB pull 失败。详情：" + detail
+            return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
+
+    if ahead:
+        return PreflightResult("ahead_unrecognized_commits", "存在尚未发布的本地提交，当前步骤暂不自动恢复。")
+
+    if git_status_dirty(project):
+        return PreflightResult("dirty_worktree_blocked", "共享模式要求 git 工作区干净，请先提交、暂存或清理本地改动。")
+
+    return PreflightResult("ok")
