@@ -47,15 +47,26 @@
 
 `$llm-wiki-update` 应当默认一次性完成可安全自动完成的工作，而不是把同一轮的尾巴丢给“建议下一步”。
 
+默认协作模式：
+
+- `llm-wiki update` 默认运行共享模式：先 `git fetch/pull --ff-only` 同步 KB 基线，再按 `upstream/wiki-sources.json` 恢复 `raw/`、按 `upstream/code-sources.json` 恢复 `raw-code/`，完成确定性更新、语义精修和校验后自动提交并推送共享 KB 产物。
+- `raw/` 和 `raw-code/` 是本机证据缓存，必须被 `.gitignore` 忽略，不进入共享提交；共享发布只允许提交 KB 产物、upstream 声明、staging/graph/index 等受管输出。
+- `--local` 或 `LLM_WIKI_UPDATE_MODE=local` 才是本机模式；`--no-auto-raw-sync` / `LLM_WIKI_NO_AUTO_RAW_SYNC=1` 只能用于本机模式，共享模式必须在 update 前拒绝。
+- 如果 `git pull` / `git push` / 代码仓库 `git pull` 因权限失败，必须用中文说明缺少读取或写入权限，并提醒用户申请 KB/代码仓库权限或检查 SSH Key / Git 凭证。
+- 如果共享模式无法发布但可安全本机继续，交互式入口提示“是否切换到本机模式继续？”。用户接受后必须重新跑本机 preflight。
+
 标准顺序：
 
-1. 读取 `BUSINESS_CONTEXT.md` 和当前状态。
-2. 优先执行项目内确定性更新入口，例如 `uv run python tools/update_wiki.py`。
-3. 读取 `staging/update/latest.md` 和 `staging/update/latest.json`。
-4. 刷新受影响 source、concept、entity、layer index、overview/index。
-5. 如果同一轮影响代码证据，刷新受影响 codebase、capability 和 traceability。
-6. 如果发现当前命令能安全完成的 `pending`、`stale`、source 精修、code-trace、health、graph 工作，应继续完成。
-7. 只有遇到 blocker，或用户明确要求只做诊断/确定性阶段时，才建议后续继续 `llm-wiki update`。
+1. 解析模式：默认共享，显式 `--local` 才本机。
+2. 共享模式先完成 KB git preflight，确认上游、干净工作区、可快进同步、证据缓存未被跟踪且被忽略。
+3. 读取 `BUSINESS_CONTEXT.md` 和当前状态。
+4. 优先执行项目内确定性更新入口，例如 `uv run python tools/update_wiki.py`。
+5. 读取 `staging/update/latest.md` 和 `staging/update/latest.json`。
+6. 刷新受影响 source、concept、entity、layer index、overview/index。
+7. 如果同一轮影响代码证据，刷新受影响 codebase、capability 和 traceability。
+8. 如果发现当前命令能安全完成的 `pending`、`stale`、source 精修、code-trace、health、graph 工作，应继续完成。
+9. 收口校验通过后，共享模式提交并推送共享 KB；本机模式只保留本地结果。
+10. 只有遇到 blocker，或用户明确要求只做诊断/确定性阶段时，才建议后续继续 `llm-wiki update`。
 
 这条规则避免出现这种体验：
 

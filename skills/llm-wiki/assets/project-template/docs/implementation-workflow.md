@@ -13,9 +13,22 @@ uv run python tools/update_wiki.py
 
 `upstream/wiki-sources.json` is the single source of truth for upstream wiki relationships. It stores the 0-1 root wiki, later added wiki sources, relationship role, depth, RSS URL, output/metadata paths, and filters such as `filters.updated_since`.
 
-If `upstream/wiki-sources.json` contains enabled Cwiki or RSS sources, this update command should first refresh `raw/` automatically. Legacy `config/rss-feeds.yaml` is only a migration input.
+`upstream/code-sources.json` is the single source of truth for code repositories added by `llm-wiki add-code`. It records enough repository metadata to restore `raw-code/<codebase_id>/` as an engine-managed git checkout on another machine.
+
+Evidence cache mapping:
+
+- `upstream/wiki-sources.json` -> `raw/`
+- `upstream/code-sources.json` -> `raw-code/`
+- `llm-wiki update` -> shared by default
+- `llm-wiki update --local` or `LLM_WIKI_UPDATE_MODE=local` -> local-only trial
+
+If `upstream/wiki-sources.json` contains enabled Cwiki or RSS sources, update should first refresh `raw/` automatically. Legacy `config/rss-feeds.yaml` is only a migration input.
 
 If `raw-code/<codebase_id>/` contains engine-managed clean git checkouts, the same update command should refresh them by default with `git pull --ff-only` before `scan_code.py` and `build_traceability.py`. If access is missing, the checkout is broken, or the worktree is dirty, update must stop and tell the operator to repair the managed raw-code entry first.
+
+In shared mode, `raw/` and `raw-code/` remain ignored local evidence caches. The publish step must commit only the shared KB baseline outputs and must exclude evidence caches, secrets, logs, dependencies, and other unrecognized local files. `--no-auto-raw-sync` is valid only for explicit local mode; shared mode must reject it before any update work starts.
+
+If KB git pull/push or managed code checkout pull fails because of permissions, report the failure in Chinese and tell the operator to request KB/code repository access or check SSH Key / Git credentials. If a shared-mode failure can safely continue locally, interactive clients may ask whether to switch to local mode and must rerun local preflight before continuing.
 
 5. Use Codex to complete AI-native refinement of:
 

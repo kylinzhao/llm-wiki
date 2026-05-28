@@ -108,6 +108,16 @@ Purpose: respond to changes, resume incomplete work, refine affected pages, and 
 
 If the user asks to update the **llm-wiki skill itself** rather than KB content, route to `llm-wiki update-skill` semantics below. Do not mix global skill installation changes into an ordinary KB update unless the user explicitly asked for it.
 
+Shared update protocol:
+
+- `llm-wiki update` defaults to shared mode. Before local deterministic work starts, synchronize the KB git repository with its upstream branch. After deterministic update, semantic refinement, and validation finish, publish the shared KB baseline with a normal git commit and push.
+- `llm-wiki update --local` or `LLM_WIKI_UPDATE_MODE=local` is the explicit local-only trial mode. Local mode may update the user's working copy without pulling or pushing the shared KB baseline.
+- `--no-auto-raw-sync` and `LLM_WIKI_NO_AUTO_RAW_SYNC=1` are local-mode escape hatches only. Shared mode must reject them before running the update callback; do not publish a baseline built from intentionally stale `raw/` or `raw-code/`.
+- `upstream/wiki-sources.json` restores `raw/`. `upstream/code-sources.json` restores `raw-code/` as engine-managed git checkouts created by `llm-wiki add-code`.
+- `raw/` and `raw-code/` are local evidence caches. They must be ignored by git and excluded from shared publish. Shared publish is allowlisted to KB outputs such as `BUSINESS_CONTEXT.md`, `upstream/**`, `wiki/**`, selected `docs/**`, `staging/**`, `graph/**`, and `index/**`.
+- If the KB repository is missing, has no upstream, diverges, has dirty local changes, or contains unrecognized local commits, fail closed before update or publish. In interactive cases where the failure can safely remain local, ask in Chinese whether to switch to local mode, then rerun local-mode preflight before continuing.
+- If `git pull`, `git fetch`, raw-code checkout pull, or `git push` fails because of permission/authentication, report it in Chinese as missing read/write permission. Use wording like `缺少读取/写入权限，请先申请 KB/代码仓库权限，或检查 SSH Key / Git 凭证。` Do not present permission failures as skippable sync.
+
 Common triggers:
 
 - New or edited `raw/**/index.md`.
@@ -141,8 +151,11 @@ Impact analysis:
 
 Default update order:
 
-1. Identify changed files and classify the trigger.
-2. Repair project agent query-routing rules when the standard template tooling is available:
+1. Resolve update mode. Default to shared mode unless `--local` or `LLM_WIKI_UPDATE_MODE=local` is present.
+2. In shared mode, run KB git preflight first: evidence caches ignored and untracked, upstream configured, worktree clean, fetch/pull fast-forward only, recognized local shared-update commits pushed if needed, and skip flags rejected. If this fails with an interactive local fallback offer, continue only after the user accepts the switch to local mode.
+3. Restore evidence caches: use `upstream/wiki-sources.json` to sync `raw/`, and `upstream/code-sources.json` to clone or pull managed `raw-code/<codebase_id>/` checkouts. Local mode may use `--no-auto-raw-sync`; shared mode may not.
+4. Identify changed files and classify the trigger.
+5. Repair project agent query-routing rules when the standard template tooling is available:
    - Before running a local `tools/update_wiki.py` that may be from an older KB, refresh engine-owned project tooling from the installed skill template:
 
      ```bash
@@ -153,8 +166,9 @@ Default update order:
    - `tools/update_wiki.py` refreshes `AGENTS.md` by default so older KB projects gain the `## Query Routing` rules automatically.
    - use `--no-agent-rules-refresh` only when the user explicitly wants a deterministic update without touching project-level agent instructions.
    - `llm-wiki doctor` should only report missing agent rules; it should not modify files.
-3. Refresh upstream inputs when the project has a declared updater:
+6. Refresh upstream inputs when the project has a declared updater:
    - treat `upstream/wiki-sources.json` as the standard source of truth for upstream inputs; `type: confluence` refreshes full Cwiki pages, `type: rss` refreshes RSS/Atom snapshots
+   - treat `upstream/code-sources.json` as the standard source of truth for code inputs; each source restores one clean managed checkout under `raw-code/<codebase_id>/`
    - keep every wiki relationship in that source object: 0-1 root, later added wiki, source role, depth, RSS URL, output/metadata paths, and `filters.updated_since`
    - if the project has enabled RSS feeds or Cwiki sources, run that upstream sync before the deterministic update
    - when an older repo only has `config/rss-feeds.yaml`, treat it as legacy input and let `tools/update_wiki.py` migrate it into `upstream/wiki-sources.json`
@@ -163,25 +177,25 @@ Default update order:
    - if the project has engine-managed `raw-code/<codebase_id>/` git checkouts, refresh them by default before code wiki rebuild; for the standard template this means auto-running `git pull --ff-only` inside `tools/update_wiki.py`
    - unmanaged, copied, symlinked, or ad-hoc raw-code directories are legacy states and should block update until migrated
    - never silently overwrite dirty `raw-code/*` worktrees; block and report the specific codebase instead
-4. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
+7. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
    - when upstream sync is enabled in the project, prefer an update command path that includes the raw refresh automatically, for example by auto-running Cwiki sync and `tools/rss_sync.py` inside `tools/update_wiki.py` or by passing `--raw-sync-command`
    - when `raw-code/` codebases are connected through `llm-wiki add-code`, prefer an update command path that includes the code refresh automatically by auto-running `git pull --ff-only` per clean managed codebase inside `tools/update_wiki.py`
    - when the standard template is installed, `update` should refresh `staging/cjira-registry/active.json` after source scan; terminal pages move to `archive.json`
-5. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
+8. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
    - Read `staging/refinement-plan.json` and `references/refinement-contract.md`; use them as the write-scope and acceptance contract for semantic refinement.
    - Read `staging/update/latest.json` `gplus_quality`; if `status=needs_attention`, treat it as an update trigger even when `semantic_update_required=false`.
-6. Refresh affected pages:
+9. Refresh affected pages:
    - changed `raw/` pages update matching source pages, layered pages, concepts, entities, query readiness, health, and graph
    - changed `raw-code/` files update affected codebase pages, endpoint maps, capability pages, traceability rows, and graphify status when needed
    - changed `BUSINESS_CONTEXT.md` updates canonical aliases, concepts, entities, conflicts, truth, and retrieval guidance
    - if health or the update report shows remaining `pending` or `stale` source pages, resolve them in the same command when they are in scope or the backlog is small enough to finish safely
    - G+ semantic underfit updates concepts/entities, source Business Links, truth/conflicts/evidence/proposals/operations/reference, query acceptance, and G+ quality audit without rewriting unrelated source summaries
-7. When the same update affects both requirement/source evidence and implementation/code evidence, treat source refinement and code traceability refresh as one integrated update pass:
+10. When the same update affects both requirement/source evidence and implementation/code evidence, treat source refinement and code traceability refresh as one integrated update pass:
    - refine stale affected source pages first
    - immediately update affected `wiki/code/capabilities/` and `wiki/code/traceability/` rows against the refined requirement evidence
    - re-check evidence strength after both sides are updated
    - do not present these as separate optional next commands unless the user explicitly asked to stop after one layer
-8. Continue automatically through all low-risk update completion work:
+11. Continue automatically through all low-risk update completion work:
    - affected source AI refinement
    - affected concept/entity/layer page refresh
    - affected codebase and capability page refresh
@@ -189,19 +203,20 @@ Default update order:
    - G+ semantic expansion when deterministic diagnostics report underfit and the needed facts are already present in source pages
    - broken wikilink fixes
    - health and graph rebuild
-9. Preserve manual edits and refined prose unless directly stale.
-10. Re-run health after AI-native edits, not only after deterministic build.
-11. Rebuild graph after AI-native edits when wikilinks changed.
-12. Run optional traceability anchor check when traceability pages changed.
-13. Update `staging/refinement-status.md`.
-14. Treat validation as part of update completion:
+12. Preserve manual edits and refined prose unless directly stale.
+13. Re-run health after AI-native edits, not only after deterministic build.
+14. Rebuild graph after AI-native edits when wikilinks changed.
+15. Run optional traceability anchor check when traceability pages changed.
+16. Update `staging/refinement-status.md`.
+17. Treat validation as part of update completion:
    - run `tools/check_refinement.py` before health when `staging/refinement-plan.json` says semantic refinement is required
    - run health before final reporting when `tools/health.py` exists or the project has an equivalent health check
    - rebuild graph before final reporting when `tools/build_graph.py` exists or wikilinks changed
    - run `tools/anchor_check.py` when traceability pages or code anchors changed
    - if validation fails and the fix is low-risk and in scope, fix it before final reporting
    - if validation fails and cannot be fixed safely, report the blocker and recommend the smallest safe continuation
-15. For status-sensitive projects, read `staging/cjira-registry/active.json` and `archive.json` during update / doctor / query:
+18. In shared mode, publish the shared KB only after deterministic update, semantic refinement, and validation callbacks finish. Stage exact allowlisted paths only; never broad-add `raw/`, `raw-code/`, credentials, logs, dependencies, or unrecognized local files. If push fails after commit, say in Chinese that the shared KB is committed locally but unpublished, and include read/write permission guidance when applicable.
+19. For status-sensitive projects, read `staging/cjira-registry/active.json` and `archive.json` during update / doctor / query:
    - `doctor` should report stale Jira fetches and low-confidence primary selections
    - `query` should use registry state when answering whether a requirement is `idea`, `in_progress`, or `frozen`
    - unknown or failed Jira lookups must remain active and must not be promoted to `frozen`
