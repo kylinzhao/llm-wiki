@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -20,6 +21,9 @@ from agent_rules import refresh_agent_rules
 from gplus_quality import inspect_gplus_quality
 from raw_code_manager import read_codebase_metadata
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
+
+
+CANONICAL_WIKI_EXPORT_METADATA_DIR = "staging/wiki-export-state"
 
 
 def utc_now() -> str:
@@ -219,7 +223,7 @@ def legacy_rss_config_sources(project: Path) -> list[dict[str, object]]:
                     "rss_url_is_custom": True,
                     "rss_max_results": int(feed.get("rss_max_results", 200) or 200),
                     "output_dir": "raw",
-                    "metadata_dir": "staging/wiki-export",
+                    "metadata_dir": CANONICAL_WIKI_EXPORT_METADATA_DIR,
                     "migrated_from": relative_path(resolve_rss_config(project), project),
                 }
             )
@@ -339,18 +343,46 @@ def relative_path(path: Path, project: Path) -> str:
         return str(path)
 
 
+def normalize_metadata_dir(value: object, project: Path) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return CANONICAL_WIKI_EXPORT_METADATA_DIR
+    path_value = Path(text)
+    if not path_value.is_absolute():
+        return path_value.as_posix()
+    try:
+        return path_value.resolve().relative_to(project.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError(f"metadata_dir must stay inside project: {text}") from exc
+
+
 def load_upstream_wiki_sources(project: Path) -> dict:
     payload = read_json_if_present(upstream_wiki_sources_path(project))
     return payload if isinstance(payload, dict) else {}
 
 
+def copy_legacy_export_state_to_canonical(project: Path, state_path: Path) -> None:
+    canonical_dir = project / CANONICAL_WIKI_EXPORT_METADATA_DIR
+    if state_path.parent.resolve() == canonical_dir.resolve():
+        return
+    canonical_dir.mkdir(parents=True, exist_ok=True)
+    canonical_state = canonical_dir / "export-state.json"
+    if not canonical_state.exists() and state_path.is_file():
+        shutil.copy2(state_path, canonical_state)
+    legacy_progress = state_path.parent / "progress"
+    canonical_progress = canonical_dir / "progress"
+    if legacy_progress.is_dir() and not canonical_progress.exists():
+        shutil.copytree(legacy_progress, canonical_progress)
+
+
 def write_upstream_wiki_sources(project: Path, sources: list[dict[str, object]]) -> None:
+    normalized_sources = [normalize_upstream_source(dict(source), project) for source in sources]
     write_json(
         upstream_wiki_sources_path(project),
         {
             "version": 1,
             "updated_at": utc_now(),
-            "sources": sources,
+            "sources": normalized_sources,
         },
     )
 
@@ -386,13 +418,19 @@ def has_saved_confluence_progress(metadata_dir: Path, output_dir: Path, page_id:
     return False
 
 
-def normalize_upstream_source(source: dict[str, object], *, default_relationship: str = "additional") -> dict[str, object]:
+def normalize_upstream_source(
+    source: dict[str, object],
+    project: Path,
+    *,
+    default_relationship: str = "additional",
+) -> dict[str, object]:
     normalized = dict(source)
     source_type = str(normalized.get("type") or "").strip()
     if source_type == "confluence":
         page_id = str(normalized.get("page_id") or "").strip()
         if page_id and not str(normalized.get("source_id") or "").strip():
             normalized["source_id"] = f"cwiki-{page_id}"
+        normalized["metadata_dir"] = normalize_metadata_dir(normalized.get("metadata_dir"), project)
     elif source_type == "rss":
         source_id = str(normalized.get("id") or normalized.get("source_id") or "").strip()
         if source_id and not str(normalized.get("source_id") or "").strip():
@@ -420,17 +458,18 @@ def export_state_to_upstream_sources(project: Path) -> list[dict[str, object]]:
         (
             candidate
             for candidate in [
-                project / "staging" / "wiki-export" / "export-state.json",
                 project / "staging" / "wiki-export-state" / "export-state.json",
+                project / "staging" / "wiki-export" / "export-state.json",
                 project / "raw" / "export-state.json",
             ]
             if candidate.is_file()
         ),
-        project / "staging" / "wiki-export" / "export-state.json",
+        project / "staging" / "wiki-export-state" / "export-state.json",
     )
     state = read_json_if_present(state_path)
     if not isinstance(state, dict):
         return []
+    copy_legacy_export_state_to_canonical(project, state_path)
     roots = state.get("roots")
     if not isinstance(roots, list):
         return []
@@ -457,7 +496,7 @@ def export_state_to_upstream_sources(project: Path) -> list[dict[str, object]]:
                 "rss_url_is_custom": bool(root.get("rss_url_is_custom", False)),
                 "rss_max_results": int(root.get("rss_max_results", 200) or 200),
                 "output_dir": "raw",
-                "metadata_dir": relative_path(state_path.parent, project),
+                "metadata_dir": CANONICAL_WIKI_EXPORT_METADATA_DIR,
                 "migrated_from": relative_path(state_path, project),
             }
         )
@@ -469,7 +508,7 @@ def ensure_upstream_wiki_sources(project: Path) -> list[dict[str, object]]:
     existing = config.get("sources")
     sources = (
         [
-            normalize_upstream_source(dict(item), default_relationship="additional")
+            normalize_upstream_source(dict(item), project, default_relationship="additional")
             for item in existing
             if isinstance(item, dict)
         ]
@@ -479,7 +518,7 @@ def ensure_upstream_wiki_sources(project: Path) -> list[dict[str, object]]:
     migrated = export_state_to_upstream_sources(project)
     migrated.extend(legacy_rss_config_sources(project))
     migrated = [
-        normalize_upstream_source(source, default_relationship="primary" if not sources and index == 0 else "additional")
+        normalize_upstream_source(source, project, default_relationship="primary" if not sources and index == 0 else "additional")
         for index, source in enumerate(migrated)
     ]
     if not migrated:
@@ -523,7 +562,7 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         page_id = str(source.get("page_id") or "").strip()
         if not page_id:
             continue
-        metadata_dir_text = str(source.get("metadata_dir") or "staging/wiki-export")
+        metadata_dir_text = str(source.get("metadata_dir") or CANONICAL_WIKI_EXPORT_METADATA_DIR)
         metadata_dir = project / metadata_dir_text if not Path(metadata_dir_text).is_absolute() else Path(metadata_dir_text)
         output_dir_text = str(source.get("output_dir") or "raw")
         output_dir = project / output_dir_text if not Path(output_dir_text).is_absolute() else Path(output_dir_text)
