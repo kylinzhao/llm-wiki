@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 import yaml
 from agent_rules import refresh_agent_rules
 from gplus_quality import inspect_gplus_quality
-from raw_code_manager import RawCodeManagerError, managed_code_sync_specs as declared_code_sync_specs, read_codebase_metadata
+from raw_code_manager import RawCodeManagerError, is_permission_error, managed_code_sync_specs as declared_code_sync_specs, read_codebase_metadata
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
 
@@ -48,6 +48,27 @@ def run_command(command: str | Sequence[str], cwd: Path) -> int:
         shell = False
     print("+ " + display)
     return subprocess.call(command, cwd=cwd, shell=shell)
+
+
+class CommandResult:
+    def __init__(self, returncode: int, stdout: str = "", stderr: str = ""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def run_captured_command(command: str | Sequence[str], cwd: Path) -> CommandResult:
+    if isinstance(command, str):
+        display = command
+        shell = True
+    else:
+        display = shlex.join(command)
+        shell = False
+    print("+ " + display)
+    result = subprocess.run(command, cwd=cwd, shell=shell, capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout, end="")
+    return CommandResult(result.returncode, result.stdout, result.stderr)
 
 
 def load_yaml_dict(path: Path) -> dict:
@@ -651,7 +672,12 @@ def run_code_sync(project: Path, shared_mode: bool = False) -> int:
         try:
             specs = declared_code_sync_specs(project, shared_mode=shared_mode)
         except RawCodeManagerError as exc:
-            print(f"{exc.code}: {exc.message}", file=sys.stderr)
+            if exc.code == "code_source_config_failed":
+                print(f"{exc.code}: 代码证据源配置无效：{exc.message}", file=sys.stderr)
+            elif exc.code == "evidence_failed":
+                print(f"{exc.code}: 代码证据恢复失败：{exc.message}", file=sys.stderr)
+            else:
+                print(f"{exc.code}: {exc.message}", file=sys.stderr)
             return 2
     else:
         specs, error = legacy_managed_code_sync_specs(project)
@@ -673,9 +699,14 @@ def run_code_sync(project: Path, shared_mode: bool = False) -> int:
             return 2
         command = spec["command"]
         assert isinstance(command, (str, list))
-        code = run_command(command, cwd)
-        if code != 0:
-            return code
+        result = run_captured_command(command, cwd)
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            if is_permission_error(detail):
+                print(f"代码仓库同步失败：请先获取代码仓库读取权限后重试。详情：{detail}", file=sys.stderr)
+            else:
+                print(f"代码仓库同步失败：请检查网络、分支或 fast-forward 状态。详情：{detail}", file=sys.stderr)
+            return result.returncode
     return 0
 
 

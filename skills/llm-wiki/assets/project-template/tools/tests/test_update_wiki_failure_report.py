@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 TOOLS_DIR = Path(__file__).resolve().parents[1]
@@ -128,6 +129,44 @@ def set_wrong_upstream(target: Path) -> None:
 
 def dirty_checkout(target: Path) -> None:
     (target / "README.md").write_text("# dirty\n", encoding="utf-8")
+
+
+def commit_source_change(source: Path, content: str) -> None:
+    (source / "README.md").write_text(content, encoding="utf-8")
+    git(source, "commit", "-am", "update source")
+
+
+@contextlib.contextmanager
+def patched_specs_and_run_command(update_wiki, stderr: str):
+    with tempfile.TemporaryDirectory() as tmp:
+        project = Path(tmp)
+        write_code_sources(project, sources=[])
+        target = project / "raw-code" / "demo"
+        target.mkdir(parents=True)
+        stderr_buffer = io.StringIO()
+        spec = {"label": "demo", "cwd": target, "command": ["git", "pull", "--ff-only"]}
+        result = update_wiki.CommandResult(128, "", stderr)
+        with (
+            mock.patch.object(update_wiki, "declared_code_sync_specs", return_value=[spec]),
+            mock.patch.object(update_wiki, "git_worktree_dirty", return_value=False),
+            mock.patch.object(update_wiki, "run_captured_command", return_value=result),
+            contextlib.redirect_stderr(stderr_buffer),
+        ):
+            yield project, stderr_buffer
+
+
+@contextlib.contextmanager
+def patched_specs_error(update_wiki, code: str, message: str):
+    with tempfile.TemporaryDirectory() as tmp:
+        project = Path(tmp)
+        write_code_sources(project, sources=[])
+        stderr_buffer = io.StringIO()
+        error = update_wiki.RawCodeManagerError(code, message)
+        with (
+            mock.patch.object(update_wiki, "declared_code_sync_specs", side_effect=error),
+            contextlib.redirect_stderr(stderr_buffer),
+        ):
+            yield project, stderr_buffer
 
 
 def commit_code_page(project: Path, codebase_id: str = "demo", relative_path: str | None = None) -> None:
@@ -322,6 +361,37 @@ class UpdateFailureReportTest(unittest.TestCase):
 
         self.assertEqual(result, 2)
         self.assertIn("禁用", stderr.getvalue())
+
+    def test_run_code_sync_reports_permission_pull_failure_in_chinese(self):
+        update_wiki = load_update_wiki()
+        with patched_specs_and_run_command(update_wiki, stderr="Permission denied (publickey)") as (project, stderr):
+            code = update_wiki.run_code_sync(project, shared_mode=True)
+        self.assertEqual(code, 128)
+        self.assertIn("请先获取代码仓库读取权限", stderr.getvalue())
+
+    def test_run_code_sync_reports_non_permission_pull_failure_without_permission_claim(self):
+        update_wiki = load_update_wiki()
+        with patched_specs_and_run_command(update_wiki, stderr="fatal: not possible to fast-forward") as (project, stderr):
+            code = update_wiki.run_code_sync(project, shared_mode=True)
+        self.assertEqual(code, 128)
+        self.assertIn("代码仓库同步失败", stderr.getvalue())
+        self.assertNotIn("获取代码仓库读取权限", stderr.getvalue())
+
+    def test_run_code_sync_reports_invalid_config_without_local_fallback_prompt(self):
+        update_wiki = load_update_wiki()
+        with patched_specs_error(update_wiki, code="code_source_config_failed", message="target_dir 必须是 raw-code/demo") as (project, stderr):
+            code = update_wiki.run_code_sync(project, shared_mode=True)
+        self.assertEqual(code, 2)
+        self.assertIn("代码证据源配置无效", stderr.getvalue())
+        self.assertNotIn("是否切换到本机模式", stderr.getvalue())
+
+    def test_run_code_sync_pulls_existing_declared_checkout(self):
+        update_wiki = load_update_wiki()
+        root, source, project, target = make_declared_checkout()
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)], check=False))
+        commit_source_change(source, "# v2\n")
+        self.assertEqual(update_wiki.run_code_sync(project, shared_mode=False), 0)
+        self.assertEqual((target / "README.md").read_text(encoding="utf-8"), "# v2\n")
 
     def test_deterministic_steps_include_cjira_refresh_after_build(self):
         update_wiki = load_update_wiki()
