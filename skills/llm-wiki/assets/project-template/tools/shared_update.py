@@ -18,6 +18,19 @@ class PreflightResult:
         self.message = message
 
 
+class PublishResult:
+    def __init__(self, status: str, message: str = ""):
+        self.status = status
+        self.message = message
+
+
+class GitBytesResult:
+    def __init__(self, returncode: int, stdout: bytes = b"", stderr: str = ""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
 class GitChange:
     def __init__(self, status: str, paths: tuple[str, ...]):
         self.status = status
@@ -95,6 +108,11 @@ def classify_git_permission(stderr: str, operation: str) -> str:
 def run_git(args: list[str], cwd: Path) -> GitResult:
     result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
     return GitResult(result.returncode, result.stdout, result.stderr)
+
+
+def run_git_bytes(args: list[str], cwd: Path) -> GitBytesResult:
+    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True)
+    return GitBytesResult(result.returncode, result.stdout, result.stderr.decode("utf-8", errors="replace"))
 
 
 def check_evidence_cache_hygiene(project: Path) -> PreflightResult:
@@ -317,3 +335,40 @@ def shared_preflight(
                 return PreflightResult("shared_sync_failed", "共享 KB pull 失败。详情：" + detail)
 
     return PreflightResult("ok")
+
+
+def publish_shared_baseline(project: Path, actor: str = "local-skill", git_runner=run_git, status_runner=run_git_bytes) -> PublishResult:
+    status = status_runner(["status", "--porcelain=v1", "-z"], cwd=project)
+    if status.returncode != 0:
+        return PublishResult("shared_sync_failed", "读取 git 状态失败，未发布共享 KB。请检查本地仓库状态后重试。")
+    changes = parse_porcelain_z(status.stdout)
+    decision = decide_publish_paths(changes)
+    if decision.status != "ok":
+        return PublishResult(decision.status, decision.message)
+    if not decision.paths:
+        return PublishResult("no_changes", "共享 KB 没有需要发布的变更。")
+
+    add = git_runner(["add", "--", *decision.paths], cwd=project)
+    if add.returncode != 0:
+        return PublishResult("stage_failed_dirty_result", "暂存共享 KB 变更失败，未发布任何文件。请检查本地工作区状态后重试。")
+
+    commit = git_runner(
+        [
+            "commit",
+            "-m",
+            f"Update {project.name} knowledge base",
+            "-m",
+            f"Actor: {actor}",
+        ],
+        cwd=project,
+    )
+    if commit.returncode != 0:
+        return PublishResult("commit_failed_dirty_result", "提交共享 KB 失败，本地工作区可能保留了已暂存变更。请先处理后重试。")
+
+    push = git_runner(["push"], cwd=project)
+    if push.returncode != 0:
+        if classify_git_permission(push.stderr, "push") == "write_permission":
+            return PublishResult("unpublished_local_baseline", "共享 KB 已在本地提交，但推送失败：缺少写入权限。请先获取 KB 仓库权限后执行 git push。")
+        return PublishResult("unpublished_local_baseline", "共享 KB 已在本地提交，但推送失败。请检查网络、仓库地址或 Git 凭证后重试。")
+
+    return PublishResult("published", "共享 KB 已发布。")

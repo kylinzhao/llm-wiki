@@ -407,6 +407,72 @@ class SharedUpdateTests(unittest.TestCase):
             git(project, "commit", "-m", f"Update {project.name} knowledge base", "-m", "Actor: local-skill")
             self.assertFalse(shared.recognized_update_commits_only(project, "origin/main"))
 
+    def test_publish_no_changes_returns_no_changes(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+
+            result = shared.publish_shared_baseline(project, actor="local-skill")
+
+            self.assertEqual(result.status, "no_changes")
+
+    def test_publish_commits_allowlisted_changes_with_actor(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            (project / "wiki" / "page.md").write_text("# changed\n", encoding="utf-8")
+
+            result = shared.publish_shared_baseline(project, actor="local-skill")
+
+            self.assertEqual(result.status, "published")
+            message = git(project, "log", "-1", "--format=%B").stdout
+            self.assertIn("Update", message)
+            self.assertIn("Actor: local-skill", message)
+
+    def test_commit_failed_dirty_result_blocks_next_local_and_shared_preflight(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            hook = project / ".git" / "hooks" / "pre-commit"
+            hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+            hook.chmod(0o755)
+            (project / "wiki" / "page.md").write_text("# changed\n", encoding="utf-8")
+
+            result = shared.publish_shared_baseline(project, actor="local-skill")
+
+            self.assertEqual(result.status, "commit_failed_dirty_result")
+            self.assertEqual(shared.local_preflight(project).status, "dirty_worktree_blocked")
+            self.assertEqual(shared.shared_preflight(project, no_auto_raw_sync=False, interactive=False).status, "dirty_worktree_blocked")
+
+    def test_push_permission_failure_mentions_write_permission(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            (project / "wiki" / "page.md").write_text("# changed\n", encoding="utf-8")
+
+            def fake_run_git(args, cwd):
+                if args[0] == "push":
+                    return shared.GitResult(128, "", "remote: You are not allowed")
+                return shared.run_git(args, cwd)
+
+            result = shared.publish_shared_baseline(project, actor="local-skill", git_runner=fake_run_git)
+
+            self.assertEqual(result.status, "unpublished_local_baseline")
+            self.assertIn("写入权限", result.message)
+            self.assertIn("请先获取 KB 仓库权限", result.message)
+
+    def test_publish_status_failure_fails_closed(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            result = shared.publish_shared_baseline(
+                project,
+                actor="local-skill",
+                status_runner=lambda args, cwd: shared.GitBytesResult(128, b"", "fatal: status failed"),
+            )
+            self.assertEqual(result.status, "shared_sync_failed")
+            self.assertNotEqual(result.status, "no_changes")
+
 
 if __name__ == "__main__":
     unittest.main()
