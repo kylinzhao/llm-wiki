@@ -324,7 +324,7 @@ def tracked_or_existing_code_paths(project: Path) -> list[str]:
     return [str(path.relative_to(project)).replace("\\", "/") for path in code_root.rglob("*") if path.is_file()]
 
 
-def codebase_ids_from_code_paths(paths: list[str]) -> set[str]:
+def codebase_ids_from_code_paths(paths: list[str], declared_ids: set[str]) -> set[str]:
     ids: set[str] = set()
     prefix = "wiki/code/codebases/"
     for path in paths:
@@ -333,6 +333,20 @@ def codebase_ids_from_code_paths(paths: list[str]) -> set[str]:
             codebase_id = remainder.split("/", 1)[0]
             if codebase_id:
                 ids.add(codebase_id)
+            continue
+        if not path.startswith("wiki/code/"):
+            continue
+        relative = path[len("wiki/code/"):]
+        parts = [part for part in relative.split("/") if part]
+        stem = Path(parts[-1]).stem if parts else ""
+        candidates = set(parts)
+        if stem:
+            candidates.add(stem)
+        matched = declared_ids & candidates
+        if matched:
+            ids.update(matched)
+        elif stem:
+            ids.add(stem)
     return ids
 
 
@@ -341,7 +355,7 @@ def validate_code_evidence_conflicts(project: Path, sources: list[dict[str, obje
     enabled = {codebase_id for codebase_id, source in declared.items() if source["enabled"]}
     disabled = set(declared) - enabled
     code_paths = tracked_or_existing_code_paths(project)
-    code_ids = codebase_ids_from_code_paths(code_paths)
+    code_ids = codebase_ids_from_code_paths(code_paths, set(declared))
 
     for codebase_id in sorted(disabled & code_ids):
         raise RawCodeManagerError("evidence_failed", f"代码证据源 {codebase_id} 已禁用，但仍存在 wiki/code/** 代码证据。")

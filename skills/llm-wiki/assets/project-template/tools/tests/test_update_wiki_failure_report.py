@@ -130,11 +130,11 @@ def dirty_checkout(target: Path) -> None:
     (target / "README.md").write_text("# dirty\n", encoding="utf-8")
 
 
-def commit_code_page(project: Path, codebase_id: str = "demo") -> None:
+def commit_code_page(project: Path, codebase_id: str = "demo", relative_path: str | None = None) -> None:
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "Codex")
     git(project, "config", "user.email", "codex@example.com")
-    page = project / "wiki" / "code" / "codebases" / codebase_id / "index.md"
+    page = project / (relative_path or f"wiki/code/codebases/{codebase_id}/index.md")
     page.parent.mkdir(parents=True, exist_ok=True)
     page.write_text("# Code\n", encoding="utf-8")
     git(project, "add", ".")
@@ -309,6 +309,19 @@ class UpdateFailureReportTest(unittest.TestCase):
                 self.assertTrue((project / "wiki" / "code" / "codebases").exists())
                 self.assertEqual(result, 2)
                 self.assertIn(expected, stderr.getvalue())
+
+    def test_run_code_sync_scans_all_wiki_code_paths_for_conflicts(self):
+        update_wiki = load_update_wiki()
+        root, source, project = make_source_repo_and_kb()
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)], check=False))
+        write_code_sources(project, repo_url=str(source), enabled=False)
+        commit_code_page(project, "demo", relative_path="wiki/code/capabilities/demo.md")
+
+        with capture_stderr() as stderr:
+            result = update_wiki.run_code_sync(project, shared_mode=False)
+
+        self.assertEqual(result, 2)
+        self.assertIn("禁用", stderr.getvalue())
 
     def test_deterministic_steps_include_cjira_refresh_after_build(self):
         update_wiki = load_update_wiki()
