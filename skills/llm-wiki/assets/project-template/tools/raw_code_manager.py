@@ -285,14 +285,89 @@ def ensure_managed_checkout(project: Path, source: dict[str, object]) -> Path:
     return target
 
 
+def validate_existing_checkout(project: Path, source: dict[str, object], target: Path) -> None:
+    metadata = read_codebase_metadata(target)
+    if not metadata:
+        raise RawCodeManagerError("evidence_failed", f"代码证据 {target} 缺少 llm-wiki 管理元数据。")
+    expected = {
+        "codebase_id": str(source["codebase_id"]),
+        "repo_url": str(source["repo_url"]),
+        "origin_ref": str(source["origin_ref"]),
+        "default_branch": str(source["default_branch"]),
+        "managed_path": str(source["target_dir"]),
+        "managed": True,
+        "created_by": "llm-wiki-add-code",
+    }
+    for key, value in expected.items():
+        if metadata.get(key) != value:
+            raise RawCodeManagerError("evidence_failed", f"代码证据 {target} 的 {key} 元数据不匹配。")
+    if run_git(["rev-parse", "--is-inside-work-tree"], cwd=target).returncode != 0:
+        raise RawCodeManagerError("evidence_failed", f"代码证据 {target} 不是有效的 git checkout。")
+    branch = run_git(["branch", "--show-current"], cwd=target)
+    if branch.returncode != 0 or branch.stdout.strip() != str(source["origin_ref"]):
+        raise RawCodeManagerError("evidence_failed", f"代码证据 {target} 当前分支不是 {source['origin_ref']}。")
+    upstream = run_git(["rev-parse", "--abbrev-ref", "@{u}"], cwd=target)
+    if upstream.returncode != 0 or upstream.stdout.strip() != f"origin/{source['origin_ref']}":
+        raise RawCodeManagerError("evidence_failed", f"代码证据 {target} 的上游分支不是 origin/{source['origin_ref']}。")
+    status = run_git(["status", "--porcelain"], cwd=target)
+    if status.returncode != 0 or status.stdout.strip():
+        raise RawCodeManagerError("evidence_failed", f"代码证据 {target} 有未提交改动，请先处理后重试。")
+
+
+def tracked_or_existing_code_paths(project: Path) -> list[str]:
+    result = run_git(["ls-files", "wiki/code"], cwd=project)
+    if result.returncode == 0:
+        return [path for path in result.stdout.splitlines() if path]
+    code_root = project / "wiki" / "code"
+    if not code_root.exists():
+        return []
+    return [str(path.relative_to(project)).replace("\\", "/") for path in code_root.rglob("*") if path.is_file()]
+
+
+def codebase_ids_from_code_paths(paths: list[str]) -> set[str]:
+    ids: set[str] = set()
+    prefix = "wiki/code/codebases/"
+    for path in paths:
+        if path.startswith(prefix):
+            remainder = path[len(prefix):]
+            codebase_id = remainder.split("/", 1)[0]
+            if codebase_id:
+                ids.add(codebase_id)
+    return ids
+
+
+def validate_code_evidence_conflicts(project: Path, sources: list[dict[str, object]]) -> None:
+    declared = {str(source["codebase_id"]): source for source in sources}
+    enabled = {codebase_id for codebase_id, source in declared.items() if source["enabled"]}
+    disabled = set(declared) - enabled
+    code_paths = tracked_or_existing_code_paths(project)
+    code_ids = codebase_ids_from_code_paths(code_paths)
+
+    for codebase_id in sorted(disabled & code_ids):
+        raise RawCodeManagerError("evidence_failed", f"代码证据源 {codebase_id} 已禁用，但仍存在 wiki/code/** 代码证据。")
+
+    raw_code = project / "raw-code"
+    if raw_code.is_dir():
+        for path in sorted(raw_code.iterdir()):
+            if path.is_dir() and path.name not in declared:
+                raise RawCodeManagerError("evidence_failed", f"发现未声明的代码证据缓存：raw-code/{path.name}。")
+
+    for codebase_id in sorted(code_ids - set(declared)):
+        if (raw_code / codebase_id).exists():
+            raise RawCodeManagerError("evidence_failed", f"发现未声明的代码证据：{codebase_id}。")
+        raise RawCodeManagerError("evidence_failed", f"缺少代码证据源：wiki/code/** 引用了 {codebase_id}，但 upstream/code-sources.json 未声明。")
+
+
 def managed_code_sync_specs(project: Path, shared_mode: bool = False) -> list[dict[str, object]]:
     manifest = read_code_sources_manifest(project)
     sources = validate_code_sources_manifest(manifest, shared_mode=shared_mode, project=project)
+    validate_code_evidence_conflicts(project, sources)
     specs: list[dict[str, object]] = []
     for source in sources:
         if not source["enabled"]:
             continue
         target = ensure_managed_checkout(project, source)
+        validate_existing_checkout(project, source, target)
         specs.append({"label": str(source["codebase_id"]), "cwd": target, "command": ["git", "pull", "--ff-only"]})
     return specs
 

@@ -52,6 +52,16 @@ def make_source_repo_and_kb(extra_branch: str | None = None) -> tuple[Path, Path
     return root, source, project
 
 
+def make_declared_checkout() -> tuple[Path, Path, Path, Path]:
+    update_wiki = load_update_wiki()
+    root, source, project = make_source_repo_and_kb()
+    write_code_sources(project, repo_url=str(source), enabled=True)
+    code = update_wiki.run_code_sync(project, shared_mode=False)
+    if code != 0:
+        raise AssertionError(f"failed to create declared checkout: {code}")
+    return root, source, project, project / "raw-code" / "demo"
+
+
 def valid_source(
     repo_url: str,
     codebase_id: str = "demo",
@@ -82,6 +92,86 @@ def write_code_sources(
     path = project / "upstream" / "code-sources.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def normalize_cases(cases):
+    for case in cases:
+        if len(case) == 2:
+            name, replacement = case
+            remove_key = None
+        else:
+            name, replacement, remove_key = case
+        yield name, replacement, remove_key
+
+
+def corrupt_metadata(target: Path, replacement: str | None = None, remove_key: str | None = None) -> None:
+    path = target / ".llm-wiki-codebase.yaml"
+    if replacement is None and remove_key is None:
+        path.unlink()
+        return
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if remove_key:
+        lines = [line for line in lines if not line.startswith(remove_key + ":")]
+    if replacement:
+        key = replacement.split(":", 1)[0]
+        lines = [replacement if line.startswith(key + ":") else line for line in lines]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def checkout_other_branch(target: Path) -> None:
+    git(target, "checkout", "-b", "other")
+
+
+def set_wrong_upstream(target: Path) -> None:
+    git(target, "branch", "--unset-upstream")
+
+
+def dirty_checkout(target: Path) -> None:
+    (target / "README.md").write_text("# dirty\n", encoding="utf-8")
+
+
+def commit_code_page(project: Path, codebase_id: str = "demo") -> None:
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "Codex")
+    git(project, "config", "user.email", "codex@example.com")
+    page = project / "wiki" / "code" / "codebases" / codebase_id / "index.md"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_text("# Code\n", encoding="utf-8")
+    git(project, "add", ".")
+    git(project, "commit", "-m", "code evidence")
+
+
+def run_disabled_source_with_code_page(update_wiki):
+    root, source, project = make_source_repo_and_kb()
+    write_code_sources(project, repo_url=str(source), enabled=False)
+    commit_code_page(project, "demo")
+    stderr = io.StringIO()
+    with contextlib.redirect_stderr(stderr):
+        result = update_wiki.run_code_sync(project, shared_mode=False)
+    return result, project, stderr
+
+
+def run_legacy_raw_code_with_code_page(update_wiki):
+    root, source, project = make_source_repo_and_kb()
+    write_code_sources(project, sources=[])
+    legacy = project / "raw-code" / "legacy"
+    legacy.mkdir(parents=True)
+    (legacy / "README.md").write_text("# legacy\n", encoding="utf-8")
+    commit_code_page(project, "legacy")
+    stderr = io.StringIO()
+    with contextlib.redirect_stderr(stderr):
+        result = update_wiki.run_code_sync(project, shared_mode=False)
+    return result, project, stderr
+
+
+def run_code_page_without_source(update_wiki):
+    root, source, project = make_source_repo_and_kb()
+    write_code_sources(project, sources=[])
+    commit_code_page(project, "missing")
+    stderr = io.StringIO()
+    with contextlib.redirect_stderr(stderr):
+        result = update_wiki.run_code_sync(project, shared_mode=False)
+    return result, project, stderr
 
 
 class UpdateFailureReportTest(unittest.TestCase):
@@ -177,6 +267,48 @@ class UpdateFailureReportTest(unittest.TestCase):
         branch = git(project / "raw-code" / "demo", "branch", "--show-current").stdout.strip()
         upstream = git(project / "raw-code" / "demo", "rev-parse", "--abbrev-ref", "@{u}").stdout.strip()
         self.assertEqual((branch, upstream), ("release/1", "origin/release/1"))
+
+    def test_run_code_sync_blocks_invalid_existing_checkout_metadata(self):
+        update_wiki = load_update_wiki()
+        cases = [
+            ("missing_metadata", None),
+            ("managed_false", "managed: false"),
+            ("wrong_origin_ref", "origin_ref: other"),
+            ("missing_default_branch", None, "default_branch"),
+            ("wrong_managed_path", "managed_path: raw-code/other"),
+            ("missing_created_by", None, "created_by"),
+        ]
+        for name, replacement, remove_key in normalize_cases(cases):
+            with self.subTest(name=name):
+                root, source, project, target = make_declared_checkout()
+                self.addCleanup(lambda root=root: subprocess.run(["rm", "-rf", str(root)], check=False))
+                corrupt_metadata(target, replacement=replacement, remove_key=remove_key)
+                with capture_stderr() as stderr:
+                    self.assertEqual(update_wiki.run_code_sync(project, shared_mode=False), 2)
+                self.assertIn("代码证据", stderr.getvalue())
+
+    def test_run_code_sync_blocks_wrong_branch_and_upstream_and_dirty_checkout(self):
+        update_wiki = load_update_wiki()
+        for corruptor in [checkout_other_branch, set_wrong_upstream, dirty_checkout]:
+            root, source, project, target = make_declared_checkout()
+            self.addCleanup(lambda root=root: subprocess.run(["rm", "-rf", str(root)], check=False))
+            corruptor(target)
+            with capture_stderr() as stderr:
+                self.assertEqual(update_wiki.run_code_sync(project, shared_mode=False), 2)
+            self.assertIn("代码证据", stderr.getvalue())
+
+    def test_run_code_sync_blocks_disabled_legacy_or_missing_code_source(self):
+        update_wiki = load_update_wiki()
+        for runner, expected in [
+            (run_disabled_source_with_code_page, "禁用"),
+            (run_legacy_raw_code_with_code_page, "未声明"),
+            (run_code_page_without_source, "缺少代码证据源"),
+        ]:
+            with self.subTest(expected=expected):
+                result, project, stderr = runner(update_wiki)
+                self.assertTrue((project / "wiki" / "code" / "codebases").exists())
+                self.assertEqual(result, 2)
+                self.assertIn(expected, stderr.getvalue())
 
     def test_deterministic_steps_include_cjira_refresh_after_build(self):
         update_wiki = load_update_wiki()
