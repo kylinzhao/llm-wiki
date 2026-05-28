@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import subprocess
 from pathlib import Path
 
@@ -17,6 +18,19 @@ class PreflightResult:
         self.message = message
 
 
+class GitChange:
+    def __init__(self, status: str, paths: tuple[str, ...]):
+        self.status = status
+        self.paths = paths
+
+
+class PublishDecision:
+    def __init__(self, status: str, paths: tuple[str, ...] = (), message: str = ""):
+        self.status = status
+        self.paths = paths
+        self.message = message
+
+
 PERMISSION_PATTERNS = (
     "permission denied",
     "authentication failed",
@@ -25,6 +39,49 @@ PERMISSION_PATTERNS = (
     "you are not allowed",
     "could not read from remote repository",
     "http basic: access denied",
+)
+INCLUDE_PATTERNS = (
+    "kb.manifest.yaml",
+    "BUSINESS_CONTEXT.md",
+    "upstream/**",
+    "wiki/**",
+    "docs/retrieval-playbook.md",
+    "docs/build-and-maintenance.md",
+    "docs/implementation-workflow.md",
+    "docs/query-acceptance.md",
+    "docs/*quality-audit*.md",
+    "docs/*tooling*.md",
+    "staging/update/latest.*",
+    "staging/refinement-status.md",
+    "staging/refinement-plan.json",
+    "staging/source-manifest.json",
+    "staging/code-graph/**",
+    "staging/traceability/**",
+    "graph/**",
+    "index/**",
+)
+EXCLUDE_PATTERNS = (
+    "raw/**",
+    "raw-code/**",
+    ".llm-wiki/**",
+    ".env",
+    ".env.*",
+    "**/.env",
+    "**/.env.*",
+    "*.pem",
+    "*.key",
+    "*.crt",
+    "*.p12",
+    "*.pfx",
+    "*.cookie",
+    "*.cookies",
+    "*cookie*",
+    "*token*",
+    "*secret*",
+    "*.log",
+    ".venv/**",
+    "venv/**",
+    "node_modules/**",
 )
 
 
@@ -68,3 +125,47 @@ def check_evidence_cache_hygiene(project: Path) -> PreflightResult:
                 f"证据缓存 {path} 必须写入 .gitignore 后才能使用共享更新。",
             )
     return PreflightResult("ok")
+
+
+def is_publish_allowed(path: str) -> bool:
+    normalized = path.replace("\\", "/").lstrip("/")
+    parts = normalized.split("/")
+    for pattern in EXCLUDE_PATTERNS:
+        if "/" not in pattern and any(fnmatch.fnmatchcase(part, pattern) for part in parts):
+            return False
+        if "/" in pattern and fnmatch.fnmatchcase(normalized, pattern):
+            return False
+    return any(fnmatch.fnmatchcase(normalized, pattern) for pattern in INCLUDE_PATTERNS)
+
+
+def parse_porcelain_z(data: bytes) -> list[GitChange]:
+    parts = [part.decode("utf-8") for part in data.split(b"\0") if part]
+    changes: list[GitChange] = []
+    index = 0
+    while index < len(parts):
+        item = parts[index]
+        status = item[:2]
+        first_path = item[3:]
+        if status[0] in {"R", "C"} or status[1] in {"R", "C"}:
+            index += 1
+            changes.append(GitChange(status, (first_path, parts[index])))
+        else:
+            changes.append(GitChange(status, (first_path,)))
+        index += 1
+    return changes
+
+
+def decide_publish_paths(changes: list[GitChange]) -> PublishDecision:
+    allowed: list[str] = []
+    unexpected: list[str] = []
+    for change in changes:
+        if all(is_publish_allowed(path) for path in change.paths):
+            allowed.extend(change.paths)
+        else:
+            unexpected.extend(change.paths)
+    if unexpected:
+        return PublishDecision(
+            "unexpected_local_changes",
+            message="发现共享发布范围外的本地改动，请先处理后重试：" + ", ".join(unexpected),
+        )
+    return PublishDecision("ok", tuple(dict.fromkeys(allowed)))

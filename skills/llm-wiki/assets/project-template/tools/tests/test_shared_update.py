@@ -109,6 +109,45 @@ class SharedUpdateTests(unittest.TestCase):
             self.assertEqual(result.status, "evidence_cache_ignore_failed")
             self.assertIn("raw-code/", result.message)
 
+    def test_classifies_allowed_and_excluded_paths(self):
+        shared = load_shared_update()
+        self.assertTrue(shared.is_publish_allowed("wiki/sources/demo.md"))
+        self.assertTrue(shared.is_publish_allowed("BUSINESS_CONTEXT.md"))
+        self.assertTrue(shared.is_publish_allowed("docs/retrieval-playbook.md"))
+        self.assertTrue(shared.is_publish_allowed("docs/team-quality-audit.md"))
+        self.assertTrue(shared.is_publish_allowed("staging/update/latest.json"))
+        self.assertTrue(shared.is_publish_allowed("wiki/key-concepts.md"))
+        self.assertFalse(shared.is_publish_allowed("raw/page/index.md"))
+        self.assertFalse(shared.is_publish_allowed("docs/random.md"))
+        self.assertFalse(shared.is_publish_allowed("staging/random.md"))
+        self.assertFalse(shared.is_publish_allowed("config/api-token.json"))
+        self.assertFalse(shared.is_publish_allowed("root-token.txt"))
+        self.assertFalse(shared.is_publish_allowed("wiki/secrets/config.md"))
+        self.assertFalse(shared.is_publish_allowed("certs/client.p12"))
+
+    def test_parse_porcelain_z_handles_rename_paths(self):
+        shared = load_shared_update()
+        for data in [
+            b"R  wiki/old.md\0wiki/new.md\0",
+            b" R wiki/old.md\0wiki/new.md\0",
+            b"C  wiki/source.md\0wiki/copy.md\0",
+            b" C wiki/source.md\0wiki/copy.md\0",
+        ]:
+            with self.subTest(data=data):
+                changes = shared.parse_porcelain_z(data)
+                self.assertEqual(changes[0].paths, ("wiki/old.md", "wiki/new.md") if b"old" in data else ("wiki/source.md", "wiki/copy.md"))
+
+    def test_publish_decision_blocks_mixed_allowed_and_unexpected_paths(self):
+        shared = load_shared_update()
+        decision = shared.decide_publish_paths(
+            [
+                shared.GitChange(" M", ("wiki/source.md",)),
+                shared.GitChange("??", ("notes.md",)),
+            ]
+        )
+        self.assertEqual(decision.status, "unexpected_local_changes")
+        self.assertIn("notes.md", decision.message)
+
 
 if __name__ == "__main__":
     unittest.main()
