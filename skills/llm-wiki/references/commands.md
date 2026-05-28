@@ -73,8 +73,9 @@ Run order:
 8. If implementation review is in scope, create traceability pages for highest-value capabilities.
 9. Run G+ readiness checks when feasible: query acceptance and quality audit. For 0-1 builds this is part of the default path, not an optional follow-up: complete concepts/entities/truth/conflicts/evidence/proposals/reference/operations calibration unless a hard blocker appears or the user explicitly asks to stop after the baseline.
 10. Inventory raw image assets and image-note status. Do not batch-analyze images by default, but if images exist and no image evidence pass is complete, record phase H as pending and recommend `llm-wiki image`.
-11. Run health, graph, and anchor check.
-12. Update `staging/refinement-status.md`.
+11. Include deterministic text sidecars generated from `.zip` prototype attachments in source summary and refinement scope. Treat the sidecar Markdown as source evidence with provenance; do not treat binary zip files or extracted prototype assets as standalone system facts.
+12. Run health, graph, and anchor check.
+13. Update `staging/refinement-status.md`.
 
 Default behavior:
 
@@ -459,6 +460,7 @@ Optional read-only checks:
 - Surface P0/P1/P2 findings directly in `主要问题`; do not require a separate `audit` command.
 - Count image assets under `raw/**/assets/` and image notes under `staging/image-notes/`.
 - When image assets exist without a completed image evidence pass, list prioritized image refinement candidate pages, using signals such as flow diagrams, state screenshots, money/account/risk/permission terms, launch tables, test conclusions, data tables, tracking, and pages already central to overview/concepts/query acceptance.
+- Count generated prototype evidence notes under `raw/**/assets/*.prototype.md`; flag linked zip evidence that has no sidecar note.
 - Count `wiki/code/codebases/*`, `wiki/code/capabilities/*.md`, and `wiki/code/traceability/*.md`.
 - Inspect latest health status.
 - Inspect graph node / edge counts.

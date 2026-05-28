@@ -119,6 +119,23 @@ OP-42513
         self.assertEqual(record["primary_cjira"], "")
         self.assertEqual(record["supporting_cjira"], [])
 
+    def test_loading_issue_detail_placeholder_does_not_hide_project_jira_links(self):
+        registry = load_cjira_registry()
+        text = """
+<a href="http://project.guazi-corp.com/browse/CTB-7850">CTB-7850</a>
+正在获取问题细节。。。
+<a href="http://project.guazi-corp.com/browse/CTB-8017">CTB-8017</a>
+正在获取问题细节。。。
+<a href="http://project.guazi-corp.com/browse/AUCT-676">AUCT-676</a>
+正在获取问题细节。。。
+"""
+
+        record = registry.classify_page("商好多V1.7_车商简报+诊断", "raw/product/index.md", text)
+
+        self.assertEqual(record["primary_cjira"], "CTB-7850")
+        self.assertEqual(record["supporting_cjira"], ["CTB-8017", "AUCT-676"])
+        self.assertEqual(record["confidence"], "low")
+
 
 class CjiraRegistryPersistenceTest(unittest.TestCase):
     def test_active_registry_is_written_for_idea_and_non_terminal_pages(self):

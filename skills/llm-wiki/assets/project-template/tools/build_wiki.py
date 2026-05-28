@@ -99,6 +99,8 @@ def discover_sources(raw_dir: Path) -> list[dict[str, object]]:
         if path.suffix.lower() not in TEXT_EXTENSIONS:
             continue
         rel = path.relative_to(raw_dir)
+        if "assets" in rel.parts and "prototypes" in rel.parts and path.suffix.lower() not in {".md", ".markdown"}:
+            continue
         base = slugify(str(rel.with_suffix("")).replace("/", "-"))
         slug = base
         counter = 2

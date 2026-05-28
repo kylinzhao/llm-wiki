@@ -12,6 +12,7 @@ import shlex
 import subprocess
 import sys
 import time
+import zipfile
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -1077,6 +1078,35 @@ def extract_drawio_attachment_names(html: str) -> list[str]:
     return deduped
 
 
+def extract_attachment_names_by_extension(html: str, extensions: tuple[str, ...]) -> list[str]:
+    soup = BeautifulSoup(html or "", "html.parser")
+    names: list[str] = []
+    lowered_extensions = tuple(ext.lower() for ext in extensions)
+
+    for attachment in soup.find_all(lambda tag: isinstance(tag, Tag) and tag_local_name(tag) == "attachment"):
+        value = tag_attr(attachment, "filename")
+        if value.lower().endswith(lowered_extensions):
+            names.append(value)
+
+    for link in soup.find_all("a"):
+        href = str(link.get("href") or "").strip()
+        label = collapse_whitespace(link.get_text(" ", strip=True))
+        for value in (href, label):
+            parsed_name = Path(urlparse(value).path).name if value else ""
+            if parsed_name.lower().endswith(lowered_extensions):
+                names.append(parsed_name)
+
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for name in names:
+        normalized = html_lib.unescape(name).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+    return deduped
+
+
 def resolve_metadata_dir(output_dir: Path, metadata_dir_arg: str) -> Path:
     """Where export-state, manifests, and crawl progress live.
 
@@ -1291,6 +1321,13 @@ def crawl_pages(
 
 def collapse_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
+
+
+def fenced_code_block(text: str, info: str = "text") -> list[str]:
+    fence = "```"
+    while fence in text:
+        fence += "`"
+    return [f"{fence}{info}", text, fence]
 
 
 def render_inline(
@@ -1768,6 +1805,344 @@ def download_drawio_attachment(
     return local_path, download_url
 
 
+def download_attachment(
+    session: Optional[requests.Session],
+    site_base: str,
+    page: PageNode,
+    filename: str,
+    assets_dir: Path,
+) -> tuple[Path, str] | None:
+    if session is None:
+        return None
+    payload = fetch_attachment_payload(session, site_base, page.page_id, filename)
+    if payload is None:
+        return None
+    download_url = attachment_download_url(site_base, payload)
+    if not download_url:
+        return None
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    local_path = assets_dir / sanitize_filename(filename)
+    if not local_path.exists():
+        response = send_request(
+            session,
+            download_url,
+            stream=True,
+            accept="*/*",
+            request_interval_override=getattr(session, "asset_request_interval", 0.0),
+        )
+        if response.status_code >= 400:
+            return None
+        with local_path.open("wb") as file_obj:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    file_obj.write(chunk)
+    return local_path, download_url
+
+
+def safe_extract_zip(zip_path: Path, target_dir: Path) -> list[Path]:
+    extracted: list[Path] = []
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_root = target_dir.resolve()
+    with zipfile.ZipFile(zip_path) as archive:
+        for member in archive.infolist():
+            if member.is_dir():
+                continue
+            repaired_name = repair_zip_member_name(member.filename)
+            parts = Path(repaired_name).parts
+            if any(part == "__MACOSX" or part == ".DS_Store" or part.startswith("._") for part in parts):
+                continue
+            destination = (target_dir / repaired_name).resolve()
+            if not str(destination).startswith(str(target_root) + os.sep):
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(member) as source, destination.open("wb") as output:
+                output.write(source.read())
+            extracted.append(destination)
+    return extracted
+
+
+def repair_zip_member_name(name: str) -> str:
+    repaired_parts: list[str] = []
+    for part in Path(name).parts:
+        try:
+            repaired = part.encode("cp437").decode("utf-8")
+        except UnicodeError:
+            repaired = part
+        repaired_parts.append(repaired)
+    return "/".join(repaired_parts)
+
+
+def extract_balanced_json(text: str, start: int) -> str:
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return ""
+
+
+def sketch_meaxure_summary(text: str) -> list[str]:
+    match = re.search(r"\blet\s+data\s*=\s*\{", text)
+    if not match:
+        return []
+    json_text = extract_balanced_json(text, match.end() - 1)
+    if not json_text:
+        return []
+    try:
+        payload = json.loads(json_text)
+    except json.JSONDecodeError:
+        return []
+    artboards = payload.get("artboards") if isinstance(payload, dict) else None
+    if not isinstance(artboards, list):
+        return []
+
+    lines = ["", "#### Sketch MeaXure artboards", ""]
+    for artboard in artboards[:30]:
+        if not isinstance(artboard, dict):
+            continue
+        name = str(artboard.get("name") or "").strip()
+        width = artboard.get("width")
+        height = artboard.get("height")
+        layers = artboard.get("layers")
+        text_values: list[str] = []
+        if isinstance(layers, list):
+            for layer in layers:
+                if not isinstance(layer, dict):
+                    continue
+                content = collapse_whitespace(str(layer.get("content") or ""))
+                if content and content not in text_values:
+                    text_values.append(content)
+                if len(text_values) >= 8:
+                    break
+        label = name or "unnamed artboard"
+        size = f" ({width}x{height})" if width and height else ""
+        lines.append(f"- {label}{size}")
+        if text_values:
+            lines.append(f"  - Text: {' / '.join(text_values)}")
+    return lines
+
+
+def direct_text(tag: Tag) -> str:
+    values: list[str] = []
+    for child in tag.children:
+        if isinstance(child, NavigableString):
+            value = collapse_whitespace(str(child))
+            if value:
+                values.append(value)
+        elif isinstance(child, Tag) and child.name == "span":
+            value = collapse_whitespace(child.get_text(" ", strip=True))
+            if value and value != "*":
+                values.append(value)
+    return collapse_whitespace(" ".join(values))
+
+
+def field_label(form_item: Tag) -> tuple[str, bool]:
+    label = form_item.find(class_="label") or form_item.find("label")
+    if not isinstance(label, Tag):
+        return "", False
+    raw = collapse_whitespace(label.get_text(" ", strip=True))
+    required = "*" in raw or label.find("span", string=re.compile(r"\*")) is not None
+    return raw.replace("*", "").strip(), required
+
+
+def field_control_summary(form_item: Tag) -> tuple[str, str, str]:
+    controls = form_item.find_all(["input", "textarea", "select"])
+    if not controls:
+        return "static", "", ""
+    first = controls[0]
+    if not isinstance(first, Tag):
+        return "static", "", ""
+    control_type = str(first.get("type") or first.name or "").strip() or first.name
+    identifier = str(first.get("name") or first.get("id") or "").strip()
+    details: list[str] = []
+
+    radio_values = []
+    for radio in form_item.find_all("input", attrs={"type": "radio"}):
+        if not isinstance(radio, Tag):
+            continue
+        value = str(radio.get("value") or "").strip()
+        if value:
+            radio_values.append(value)
+    if radio_values:
+        return "radio", str(first.get("name") or first.get("id") or "").strip(), "; ".join(radio_values)
+
+    if first.name == "select":
+        options = [
+            collapse_whitespace(option.get_text(" ", strip=True))
+            for option in first.find_all("option")
+            if collapse_whitespace(option.get_text(" ", strip=True))
+        ]
+        return "select", identifier, "; ".join(options)
+
+    placeholder = str(first.get("placeholder") or "").strip()
+    if placeholder:
+        details.append(placeholder)
+    accept = str(first.get("accept") or "").strip()
+    if accept:
+        details.append(f"accepts: {accept}")
+    if first.has_attr("multiple"):
+        details.append("multiple")
+    maxlength = str(first.get("maxlength") or "").strip()
+    if maxlength:
+        details.append(f"max length: {maxlength}")
+    return control_type, identifier, "; ".join(details)
+
+
+def html_form_structure_summary(soup: BeautifulSoup) -> list[str]:
+    form_items = soup.find_all(class_="form-item")
+    buttons = [collapse_whitespace(button.get_text(" ", strip=True)) for button in soup.find_all("button")]
+    buttons = [button for button in buttons if button]
+    tabs = [
+        collapse_whitespace(button.get_text(" ", strip=True))
+        for button in soup.find_all("button", class_=lambda value: value and "tab" in str(value))
+    ]
+    tabs = [tab for tab in tabs if tab]
+    if not form_items and not buttons and not tabs:
+        return []
+
+    lines = ["", "#### Prototype structure", ""]
+    if tabs:
+        lines.append(f"- Modes/tabs: {', '.join(tabs)}")
+    if buttons:
+        lines.append(f"- Buttons: {', '.join(buttons)}")
+
+    section_ids = ["newVisitFields", "returnVisitFields"]
+    sections: list[tuple[str, list[Tag]]] = []
+    for section_id in section_ids:
+        section = soup.find(id=section_id)
+        if isinstance(section, Tag):
+            sections.append((section_id, [item for item in section.find_all(class_="form-item") if isinstance(item, Tag)]))
+    if not sections and form_items:
+        sections.append(("page", [item for item in form_items if isinstance(item, Tag)]))
+
+    for section_id, items in sections:
+        lines.extend(["", f"##### Section `{section_id}`", "", "| Field | Control | Required | ID/name | Details |", "| --- | --- | --- | --- | --- |"])
+        for item in items:
+            label, required = field_label(item)
+            if not label:
+                continue
+            control_type, identifier, details = field_control_summary(item)
+            required_text = "required" if required else "optional"
+            lines.append(f"| {label} | {control_type} | {required_text} | {identifier} | {details} |")
+    return lines
+
+
+def summarize_html_file(path: Path, root: Path) -> list[str]:
+    rel = path.resolve().relative_to(root.resolve()).as_posix()
+    text = path.read_text(encoding="utf-8", errors="replace")
+    soup = BeautifulSoup(text, "html.parser")
+    title = collapse_whitespace(soup.title.get_text(" ", strip=True)) if soup.title else ""
+    visible = collapse_whitespace(soup.get_text(" ", strip=True))[:1000]
+    lines = [f"### `{rel}`", ""]
+    if title:
+        lines.append(f"- Title: {title}")
+    if visible:
+        lines.extend(["- Visible text:", "", "```text", visible, "```"])
+    lines.extend(html_form_structure_summary(soup))
+    lines.extend(sketch_meaxure_summary(text))
+    return lines
+
+
+def prototype_note_markdown(page: PageNode, zip_path: Path, extract_dir: Path, extracted: list[Path]) -> str:
+    html_files = sorted(path for path in extracted if path.suffix.lower() in {".html", ".htm"})
+    data_files = sorted(
+        path
+        for path in extracted
+        if path.suffix.lower() in {".json", ".js", ".css", ".md", ".txt", ".csv", ".yaml", ".yml"}
+    )
+    lines = [
+        f"# Prototype Evidence: {zip_path.name}",
+        "",
+        f"- Source attachment: `{zip_path.name}`",
+        f"- Page ID: `{page.page_id}`",
+        f"- Page title: {page.title}",
+        "",
+        "## HTML entry points",
+        "",
+    ]
+    if html_files:
+        for html_file in html_files:
+            lines.extend(summarize_html_file(html_file, extract_dir))
+            lines.append("")
+    else:
+        lines.append("- No HTML entry points detected.")
+
+    lines.extend(["", "## Supporting files", ""])
+    if data_files:
+        for data_file in data_files[:50]:
+            rel = data_file.resolve().relative_to(extract_dir.resolve()).as_posix()
+            lines.append(f"### `{rel}`")
+            if data_file.suffix.lower() in {".md", ".txt", ".csv", ".yaml", ".yml", ".json"}:
+                excerpt = data_file.read_text(encoding="utf-8", errors="replace").strip()[:1000]
+                if excerpt:
+                    fence = "json" if data_file.suffix.lower() == ".json" else "text"
+                    lines.extend(["", *fenced_code_block(excerpt, fence), ""])
+                    continue
+            lines.append("")
+    else:
+        lines.append("- No supporting text-like files detected.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def prototype_evidence_markdown(page: PageNode, page_dir: Path, session: Optional[requests.Session]) -> str:
+    names = extract_attachment_names_by_extension(page.storage_html or page.html, (".zip",))
+    if not names or session is None:
+        return ""
+
+    site_base = f"{urlparse(page.url).scheme}://{urlparse(page.url).netloc}"
+    assets_dir = page_dir / "assets"
+    sections: list[str] = []
+    for filename in names:
+        downloaded = download_attachment(session, site_base, page, filename, assets_dir)
+        if downloaded is None:
+            continue
+        zip_path, _download_url = downloaded
+        prototype_name = Path(zip_path.stem).stem or "prototype"
+        extract_dir = assets_dir / "prototypes" / sanitize_filename(prototype_name)
+        try:
+            extracted = safe_extract_zip(zip_path, extract_dir)
+        except zipfile.BadZipFile:
+            continue
+        has_text_evidence = any(
+            path.suffix.lower() in {".html", ".htm", ".json", ".js", ".css", ".md", ".txt", ".csv", ".yaml", ".yml"}
+            for path in extracted
+        )
+        if not has_text_evidence:
+            continue
+        evidence_path = zip_path.with_suffix(zip_path.suffix + ".prototype.md")
+        evidence_path.write_text(prototype_note_markdown(page, zip_path, extract_dir, extracted), encoding="utf-8")
+        rel_zip = f"assets/{zip_path.name}"
+        rel_evidence = f"assets/{evidence_path.name}"
+        sections.extend(
+            [
+                f"### {zip_path.name}",
+                "",
+                f"- 附件: [`{rel_zip}`]({rel_zip})",
+                f"- 原型证据: [`{rel_evidence}`]({rel_evidence})",
+                "",
+            ]
+        )
+    if not sections:
+        return ""
+    return "## Prototype Attachments\n\n" + "\n".join(sections).rstrip()
+
+
 def drawio_evidence_markdown(page: PageNode, page_dir: Path, session: Optional[requests.Session]) -> str:
     names = extract_drawio_attachment_names(page.storage_html or page.html)
     if not names or session is None:
@@ -1924,6 +2299,9 @@ def write_export(
         drawio_markdown = drawio_evidence_markdown(page, page_dir, session)
         if drawio_markdown:
             markdown = markdown.rstrip() + "\n\n" + drawio_markdown
+        prototype_markdown = prototype_evidence_markdown(page, page_dir, session)
+        if prototype_markdown:
+            markdown = markdown.rstrip() + "\n\n" + prototype_markdown
         write_page(page_path, page, markdown)
         manifest.append(
                 {

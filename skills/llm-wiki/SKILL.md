@@ -185,6 +185,8 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - 不把 `staging/image-notes/` 当默认主链路
 - 代码也按文本证据处理，先使用 AST/路由/API/调用关系/技术设计文档，不默认进入截图或视觉资产
 
+文本优先包含由导出器确定性生成的附件文本证据：Cwiki 页面中的 `.zip` 附件会作为可能的 HTML 原型下载、解压并生成 `raw/<page>/assets/*.prototype.md`。普通 `init` / `fast` / `update` 应把这些 sidecar Markdown 当作母 wiki 的来源证据一起 summary 和 AI-native 精修；原始 zip 和解压出的静态资源本身只作为可追溯来源，不直接升级为系统事实。
+
 文本层完成后可以进入阶段 H，但只处理高价值图片证据。图片 note 必须结合图片在 `raw/**/index.md` 中的前后文，不做裸图 OCR。低价值页面走查、重复 UI 截图、装饰图默认跳过。
 
 **重要：文本优先不等于静默跳过图片。** 当项目的 `raw/` 中存在图片资产、截图、图表或附件图片时，`init` / `fast` / `update` / `doctor` 在收尾或诊断里必须明确说明：

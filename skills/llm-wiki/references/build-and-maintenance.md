@@ -104,6 +104,7 @@ uv run python tools/anchor_check.py
 - **`export_obsidian_wiki.py`**：入口脚本（Cookie、`--project-dir`、`--levels`、`--update`）。
 - **`export_confluence_tree.py`**：REST API 拉取页面树、本地化 wiki 域内图片、写 Markdown。
 - 页面证据落在 **`raw/<pageId>-<slug>/index.md`**（及 `assets/`）；导出状态与 manifest 默认在 **`staging/wiki-export/`**，与 `rss_sync.py` 的通用 RSS 快照不同用途——前者拉完整 wiki 页面内容，后者只做 feed 条目镜像。
+- Cwiki `.zip` 附件会按可能的 HTML 原型处理：zip 本体保存在 `assets/`，解压内容保存在 `assets/prototypes/<name>/`，可读摘要写入 `assets/<name>.zip.prototype.md` 并回链到页面正文。
 - 项目级上游配置落在 **`upstream/wiki-sources.json`**。0-1 从 Cwiki URL 导出成功后必须写入该文件；`tools/update_wiki.py` 会优先读取它并在确定性构建前自动运行 Cwiki `--update`。
 - 日期筛选统一写在 `filters.updated_since`，例如 `"filters": {"updated_since": "2025-10-01"}`。历史顶层 `updated_since` 只作为兼容输入。
 - 旧项目如果只有 `staging/wiki-export/export-state.json` 或历史 `raw/export-state.json`，`tools/update_wiki.py` 会自动迁移生成 `upstream/wiki-sources.json`，再按该配置刷新 Cwiki raw 页面。
