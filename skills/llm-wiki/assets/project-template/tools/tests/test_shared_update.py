@@ -407,6 +407,19 @@ class SharedUpdateTests(unittest.TestCase):
             git(project, "commit", "-m", f"Update {project.name} knowledge base", "-m", "Actor: local-skill")
             self.assertFalse(shared.recognized_update_commits_only(project, "origin/main"))
 
+    def test_recognized_update_commits_reject_rename_from_excluded_diff(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            (project / ".env").write_text("TOKEN=x\n", encoding="utf-8")
+            git(project, "add", "-f", ".env")
+            git(project, "commit", "-m", "seed env")
+            git(project, "push")
+            git(project, "mv", ".env", "wiki/env.md")
+            git(project, "commit", "-m", f"Update {project.name} knowledge base", "-m", "Actor: local-skill")
+
+            self.assertFalse(shared.recognized_update_commits_only(project, "origin/main"))
+
     def test_publish_no_changes_returns_no_changes(self):
         shared = load_shared_update()
         with tempfile.TemporaryDirectory() as tmp:

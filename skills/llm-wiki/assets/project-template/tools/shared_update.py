@@ -214,6 +214,29 @@ def read_divergence(project: Path, upstream: str) -> tuple[int, int]:
     return int(parts[0]), int(parts[1])
 
 
+def diff_touched_paths(project: Path, upstream: str) -> list[str] | None:
+    diff = run_git(["diff", "--name-status", "-z", f"{upstream}..HEAD"], cwd=project)
+    if diff.returncode != 0:
+        return None
+    parts = [part for part in diff.stdout.split("\0") if part]
+    paths: list[str] = []
+    index = 0
+    while index < len(parts):
+        status = parts[index]
+        index += 1
+        if status.startswith(("R", "C")):
+            if index + 1 >= len(parts):
+                return None
+            paths.extend([parts[index], parts[index + 1]])
+            index += 2
+        else:
+            if index >= len(parts):
+                return None
+            paths.append(parts[index])
+            index += 1
+    return paths
+
+
 def recognized_update_commits_only(project: Path, upstream: str) -> bool:
     subject = f"Update {project.name} knowledge base"
     commit_list = run_git(["rev-list", f"{upstream}..HEAD"], cwd=project)
@@ -232,10 +255,9 @@ def recognized_update_commits_only(project: Path, upstream: str) -> bool:
         body = "\n".join(lines[1:])
         if "Actor: local-skill" not in body and "Actor: gateway" not in body:
             return False
-    diff = run_git(["diff", "--name-only", f"{upstream}..HEAD"], cwd=project)
-    if diff.returncode != 0:
+    paths = diff_touched_paths(project, upstream)
+    if paths is None:
         return False
-    paths = [line for line in diff.stdout.splitlines() if line]
     return bool(paths) and all(is_publish_allowed(path) for path in paths)
 
 
