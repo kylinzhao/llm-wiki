@@ -52,6 +52,63 @@ class SharedUpdateTests(unittest.TestCase):
         self.assertEqual(shared.classify_git_permission("remote: You are not allowed", "push"), "write_permission")
         self.assertEqual(shared.classify_git_permission("fatal: not possible to fast-forward", "pull"), "none")
 
+    def test_evidence_cache_hygiene_requires_raw_ignored(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            git(project, "init", "-b", "main")
+
+            result = shared.check_evidence_cache_hygiene(project)
+
+            self.assertEqual(result.status, "evidence_cache_ignore_failed")
+            self.assertIn("raw/", result.message)
+            self.assertIn("gitignore", result.message.lower())
+
+    def test_evidence_cache_hygiene_rejects_tracked_raw(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            git(project, "init", "-b", "main")
+            git(project, "config", "user.name", "Codex")
+            git(project, "config", "user.email", "codex@example.com")
+            (project / ".gitignore").write_text("raw/\nraw-code/\n", encoding="utf-8")
+            (project / "raw").mkdir()
+            (project / "raw" / "page.md").write_text("# page\n", encoding="utf-8")
+            git(project, "add", "-f", "raw/page.md")
+            git(project, "commit", "-m", "track raw")
+
+            result = shared.check_evidence_cache_hygiene(project)
+
+            self.assertEqual(result.status, "evidence_cache_tracked_failed")
+            self.assertIn("raw/page.md", result.message)
+
+    def test_evidence_cache_hygiene_checks_raw_code_when_declared(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            git(project, "init", "-b", "main")
+            (project / ".gitignore").write_text("raw/\n", encoding="utf-8")
+            (project / "upstream").mkdir()
+            (project / "upstream" / "code-sources.json").write_text('{"version":1,"sources":[]}\n', encoding="utf-8")
+
+            result = shared.check_evidence_cache_hygiene(project)
+
+            self.assertEqual(result.status, "evidence_cache_ignore_failed")
+            self.assertIn("raw-code/", result.message)
+
+    def test_evidence_cache_hygiene_checks_raw_code_when_wiki_code_exists(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            git(project, "init", "-b", "main")
+            (project / ".gitignore").write_text("raw/\n", encoding="utf-8")
+            (project / "wiki" / "code" / "modules").mkdir(parents=True)
+
+            result = shared.check_evidence_cache_hygiene(project)
+
+            self.assertEqual(result.status, "evidence_cache_ignore_failed")
+            self.assertIn("raw-code/", result.message)
+
 
 if __name__ == "__main__":
     unittest.main()
