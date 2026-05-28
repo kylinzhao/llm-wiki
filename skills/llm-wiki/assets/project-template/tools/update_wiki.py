@@ -667,8 +667,14 @@ def legacy_managed_code_sync_specs(project: Path) -> tuple[list[dict[str, object
 
 
 def run_code_sync(project: Path, shared_mode: bool = False) -> int:
-    manifest_path = project / "upstream" / "code-sources.json"
-    if manifest_path.is_file():
+    manifest_backed = any(
+        [
+            (project / "upstream" / "code-sources.json").is_file(),
+            (project / "wiki" / "code").exists(),
+            (project / "staging" / "code-graph").exists(),
+        ]
+    )
+    if manifest_backed:
         try:
             specs = declared_code_sync_specs(project, shared_mode=shared_mode)
         except RawCodeManagerError as exc:
