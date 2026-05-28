@@ -212,6 +212,30 @@ class SharedUpdateTests(unittest.TestCase):
             self.assertEqual(result.status, "offer_local_mode")
             self.assertIn("是否切换到本机模式", result.message)
 
+    def test_shared_mode_non_git_interactive_offers_local_mode_before_hygiene(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            result = shared.shared_preflight(Path(tmp), no_auto_raw_sync=False, interactive=True)
+
+        self.assertEqual(result.status, "offer_local_mode")
+        self.assertIn("是否切换到本机模式", result.message)
+
+    def test_shared_mode_dirty_worktree_blocks_before_pull(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            (project / "wiki" / "page.md").write_text("# dirty\n", encoding="utf-8")
+            calls = []
+
+            def fake_git(args, cwd):
+                calls.append(args[0])
+                return shared.GitResult(0, "", "")
+
+            result = shared.shared_preflight(project, False, False, git_runner=fake_git, divergence_reader=lambda cwd, upstream: (0, 1))
+
+        self.assertEqual(result.status, "dirty_worktree_blocked")
+        self.assertNotIn("pull", calls)
+
     def test_shared_mode_rejects_skip_flags(self):
         shared = load_shared_update()
         with tempfile.TemporaryDirectory() as tmp:
@@ -282,6 +306,106 @@ class SharedUpdateTests(unittest.TestCase):
             result = shared.shared_preflight(project, False, False, git_runner=fake_git, divergence_reader=lambda cwd, upstream: (0, 1))
             self.assertEqual(result.status, "shared_sync_failed")
             self.assertNotIn("是否切换到本机模式", result.message)
+
+    def test_shared_mode_ahead_unrecognized_commits_stop(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            result = shared.shared_preflight(
+                project,
+                no_auto_raw_sync=False,
+                interactive=False,
+                git_runner=lambda args, cwd: shared.GitResult(0, "", ""),
+                divergence_reader=lambda cwd, upstream: (1, 0),
+                ahead_is_recognized=lambda cwd, upstream: False,
+            )
+            self.assertEqual(result.status, "ahead_unrecognized_commits")
+
+    def test_recognized_update_commits_require_actor_and_allowlisted_diff(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            (project / "wiki" / "page.md").write_text("# changed\n", encoding="utf-8")
+            git(project, "add", "wiki/page.md")
+            git(project, "commit", "-m", f"Update {project.name} knowledge base", "-m", "Actor: local-skill")
+            self.assertTrue(shared.recognized_update_commits_only(project, "origin/main"))
+
+    def test_recognized_update_commits_reject_mixed_stack_missing_actor(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            for page, body in [("a.md", "Actor: local-skill"), ("b.md", "")]:
+                (project / "wiki" / page).write_text("# changed\n", encoding="utf-8")
+                git(project, "add", "wiki/" + page)
+                git(project, "commit", "-m", f"Update {project.name} knowledge base", "-m", body)
+            self.assertFalse(shared.recognized_update_commits_only(project, "origin/main"))
+
+    def test_recognized_ahead_push_non_permission_failure_uses_generic_message(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+
+            def fake_git(args, cwd):
+                if args[0] == "push":
+                    return shared.GitResult(1, "", "fatal: remote end hung up unexpectedly")
+                return shared.GitResult(0, "", "")
+
+            result = shared.shared_preflight(
+                project,
+                False,
+                False,
+                git_runner=fake_git,
+                divergence_reader=lambda cwd, upstream: (1, 0),
+                ahead_is_recognized=lambda cwd, upstream: True,
+            )
+            self.assertEqual(result.status, "unpublished_local_baseline")
+            self.assertNotIn("写入权限", result.message)
+
+    def test_shared_mode_blocks_remaining_divergence_after_recognized_push(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            states = iter([(1, 0), (1, 1)])
+            result = shared.shared_preflight(
+                project,
+                no_auto_raw_sync=False,
+                interactive=False,
+                git_runner=lambda args, cwd: shared.GitResult(0, "", ""),
+                divergence_reader=lambda cwd, upstream: next(states),
+                ahead_is_recognized=lambda cwd, upstream: True,
+            )
+            self.assertEqual(result.status, "shared_sync_failed")
+
+    def test_recognized_ahead_recovery_pulls_when_post_push_is_behind(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            calls = []
+            states = iter([(1, 0), (0, 1)])
+
+            def fake_git(args, cwd):
+                calls.append(args[0])
+                return shared.GitResult(0, "", "")
+
+            result = shared.shared_preflight(
+                project,
+                False,
+                False,
+                git_runner=fake_git,
+                divergence_reader=lambda cwd, upstream: next(states),
+                ahead_is_recognized=lambda cwd, upstream: True,
+            )
+            self.assertEqual(result.status, "ok")
+            self.assertIn("pull", calls)
+
+    def test_recognized_update_commits_reject_excluded_diff(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            (project / ".env").write_text("TOKEN=x\n", encoding="utf-8")
+            git(project, "add", "-f", ".env")
+            git(project, "commit", "-m", f"Update {project.name} knowledge base", "-m", "Actor: local-skill")
+            self.assertFalse(shared.recognized_update_commits_only(project, "origin/main"))
 
 
 if __name__ == "__main__":

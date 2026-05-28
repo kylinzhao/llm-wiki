@@ -196,6 +196,31 @@ def read_divergence(project: Path, upstream: str) -> tuple[int, int]:
     return int(parts[0]), int(parts[1])
 
 
+def recognized_update_commits_only(project: Path, upstream: str) -> bool:
+    subject = f"Update {project.name} knowledge base"
+    commit_list = run_git(["rev-list", f"{upstream}..HEAD"], cwd=project)
+    if commit_list.returncode != 0:
+        return False
+    commits = [line for line in commit_list.stdout.splitlines() if line]
+    if not commits:
+        return False
+    for commit in commits:
+        message = run_git(["show", "-s", "--format=%B", commit], cwd=project)
+        if message.returncode != 0:
+            return False
+        lines = message.stdout.splitlines()
+        if not lines or lines[0].strip() != subject:
+            return False
+        body = "\n".join(lines[1:])
+        if "Actor: local-skill" not in body and "Actor: gateway" not in body:
+            return False
+    diff = run_git(["diff", "--name-only", f"{upstream}..HEAD"], cwd=project)
+    if diff.returncode != 0:
+        return False
+    paths = [line for line in diff.stdout.splitlines() if line]
+    return bool(paths) and all(is_publish_allowed(path) for path in paths)
+
+
 def local_mode_offer(message: str) -> PreflightResult:
     return PreflightResult("offer_local_mode", message + " 是否切换到本机模式继续？")
 
@@ -217,17 +242,18 @@ def shared_preflight(
     interactive: bool,
     git_runner=run_git,
     divergence_reader=read_divergence,
+    ahead_is_recognized=recognized_update_commits_only,
 ) -> PreflightResult:
     if no_auto_raw_sync:
         return PreflightResult("shared_sync_failed", "共享模式不能跳过 raw/raw-code 同步。请取消跳过参数，或显式使用本机模式。")
 
-    hygiene = check_evidence_cache_hygiene(project)
-    if hygiene.status != "ok":
-        return hygiene
-
     if not is_git_repo(project):
         message = "共享模式需要 KB 目录是 git 仓库。"
         return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
+
+    hygiene = check_evidence_cache_hygiene(project)
+    if hygiene.status != "ok":
+        return hygiene
 
     upstream, upstream_result = current_upstream(project)
     if not upstream:
@@ -236,6 +262,9 @@ def shared_preflight(
         if classify_git_permission(detail, "pull") == "read_permission":
             message = "无法读取 KB 仓库上游。请先获取 KB 仓库权限（读取权限）后重试。"
         return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
+
+    if git_status_dirty(project):
+        return PreflightResult("dirty_worktree_blocked", "共享模式要求 git 工作区干净，请先提交、暂存或清理本地改动。")
 
     fetch = git_runner(["fetch", "--prune", "origin"], project)
     if fetch.returncode != 0:
@@ -262,9 +291,29 @@ def shared_preflight(
             return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
 
     if ahead:
-        return PreflightResult("ahead_unrecognized_commits", "存在尚未发布的本地提交，当前步骤暂不自动恢复。")
-
-    if git_status_dirty(project):
-        return PreflightResult("dirty_worktree_blocked", "共享模式要求 git 工作区干净，请先提交、暂存或清理本地改动。")
+        if not ahead_is_recognized(project, upstream):
+            return PreflightResult("ahead_unrecognized_commits", "存在尚未发布且无法识别的本地提交，请人工处理后重试。")
+        push = git_runner(["push"], project)
+        if push.returncode != 0:
+            detail = push.stderr.strip()
+            if classify_git_permission(detail, "push") == "write_permission":
+                return PreflightResult("unpublished_local_baseline", "无法发布共享 KB 基线。请先获取 KB 仓库写入权限后重试。详情：" + detail)
+            return PreflightResult("unpublished_local_baseline", "本地共享 KB 基线尚未发布，自动 push 失败。请检查远端状态后重试。详情：" + detail)
+        fetch_after_push = git_runner(["fetch", "--prune", "origin"], project)
+        if fetch_after_push.returncode != 0:
+            detail = fetch_after_push.stderr.strip()
+            return PreflightResult("shared_sync_failed", "共享 KB 发布后重新同步失败。详情：" + detail)
+        ahead, behind = divergence_reader(project, upstream)
+        if ahead and behind:
+            return PreflightResult("shared_sync_failed", "共享 KB 发布后仍然分叉，请人工处理后重试。")
+        if ahead:
+            return PreflightResult("unpublished_local_baseline", "本地共享 KB 基线仍未发布，请人工检查远端状态。")
+        if behind:
+            pull = git_runner(["pull", "--ff-only"], project)
+            if pull.returncode != 0:
+                detail = pull.stderr.strip()
+                if classify_git_permission(detail, "pull") == "read_permission":
+                    return PreflightResult("shared_sync_failed", "无法读取 KB 仓库。请先获取 KB 仓库权限（读取权限）后重试。详情：" + detail)
+                return PreflightResult("shared_sync_failed", "共享 KB pull 失败。详情：" + detail)
 
     return PreflightResult("ok")
