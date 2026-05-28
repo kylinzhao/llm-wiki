@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import subprocess
 import sys
 import tempfile
@@ -196,6 +197,33 @@ class ManagedRawCodeTests(unittest.TestCase):
             manifest = manager.read_code_sources_manifest(project)
             self.assertEqual(len(manifest["sources"]), 1)
             self.assertEqual(manifest["sources"][0]["origin_ref"], "release/1")
+
+    def test_upsert_code_source_reports_malformed_manifest_as_config_error(self):
+        manager = load_raw_code_manager()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "upstream").mkdir()
+            (project / "upstream" / "code-sources.json").write_text(
+                json.dumps({"version": 1, "sources": [{"repo_url": "git@example.com:team/demo.git"}]}) + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(manager.RawCodeManagerError) as ctx:
+                manager.upsert_code_source(
+                    project,
+                    {
+                        "codebase_id": "demo",
+                        "repo_url": "git@example.com:team/demo.git",
+                        "origin_ref": "main",
+                        "default_branch": "main",
+                        "target_dir": "raw-code/demo",
+                        "enabled": True,
+                        "managed": True,
+                        "sync": {"mode": "ff-only"},
+                    },
+                )
+
+            self.assertEqual(ctx.exception.code, "code_source_config_failed")
 
     def test_validate_code_sources_rejects_invalid_entries(self):
         manager = load_raw_code_manager()

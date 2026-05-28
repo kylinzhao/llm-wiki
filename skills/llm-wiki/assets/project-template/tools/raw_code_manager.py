@@ -49,15 +49,16 @@ def write_code_sources_manifest(project: Path, manifest: dict[str, object]) -> P
 
 def upsert_code_source(project: Path, entry: dict[str, object]) -> Path:
     manifest = read_code_sources_manifest(project)
+    entry_id = entry.get("codebase_id")
     sources = [
         source
         for source in manifest.get("sources", [])
-        if isinstance(source, dict) and source.get("codebase_id") != entry["codebase_id"]
+        if not isinstance(source, dict) or source.get("codebase_id") != entry_id
     ]
     sources.append(entry)
-    updated = {"version": 1, "sources": sorted(sources, key=lambda item: str(item["codebase_id"]))}
-    validate_code_sources_manifest(updated, shared_mode=False, project=project)
-    return write_code_sources_manifest(project, updated)
+    updated = {"version": 1, "sources": sources}
+    normalized = validate_code_sources_manifest(updated, shared_mode=False, project=project)
+    return write_code_sources_manifest(project, {"version": 1, "sources": normalized})
 
 
 def is_local_repo_url(value: str) -> bool:
