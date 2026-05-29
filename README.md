@@ -182,6 +182,8 @@ qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
 | `$llm-wiki-image` | `llm-wiki image` | 文本层完成后补充高价值图片、截图、图表或附件证据；默认不批量分析低价值截图。 |
 | `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧的 `llm-wiki review-requirement` 调用；实际转向 `$requirement-review` 做 evidence-first 需求评审。 |
 
+`llm-wiki maintain-all` 使用本机 `~/.llm-wiki/projects.json` registry。常用操作包括 `--discover <dir>` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，以及用户确认后的 `--apply` 批量执行完整 backfill/update 维护；默认不加 `--apply` 时只输出 dry-run 计划。
+
 ## 独立需求评审 Skill
 
 `$requirement-review` 是独立 skill，可脱离 `$llm-wiki` 使用。它用于评审 PRD、Cwiki 页面、Markdown 需求、图片、zip/HTML 原型和前端交互说明。
