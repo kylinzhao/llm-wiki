@@ -87,6 +87,10 @@ def main() -> None:
         assert_contains(text, f'"raw_hash": "{new_hash}"')
         assert_contains(text, '"ai_refinement_state": "done"')
 
+        retrieval_playbook = (project / "docs" / "retrieval-playbook.md").read_text(encoding="utf-8")
+        assert_contains(retrieval_playbook, "## 语言要求")
+        assert_contains(retrieval_playbook, "默认使用中文")
+
         drift = json.loads((project / "staging" / "source-drift.json").read_text(encoding="utf-8"))
         if drift["stale_sources"]:
             raise AssertionError(f"expected no stale sources after source backfill: {drift['stale_sources']}")

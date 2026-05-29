@@ -36,6 +36,10 @@ https://git.guazi-corp.com/c2b-fe/llm-wiki
 
 它面向的不是“只会查”的场景，而是“把一个项目从原始文档变成可用知识库”的全链路工作。对于已经建好的 wiki，查询也统一通过 `llm-wiki` 完成。
 
+## 语言要求
+
+使用 `llm-wiki` 及其相关短入口时，面向用户的回答、诊断、审查报告和最终总结默认使用中文；由 agent 生成或改写的 `wiki/`、`docs/`、`staging/` Markdown 知识文档也默认使用中文。代码标识符、命令、路径、API 名称、配置键、英文专有名词和原始证据引用可保留原文，并用中文解释。
+
 ## 项目原理
 
 LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
@@ -93,7 +97,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/update_installed_skill.py" --source "$PWD" --client auto --backup
 ```
 
-更新来源优先由本地 bundle checkout 的 git upstream 决定；若无法推断本地 checkout，updater 会从公司 GitLab 默认地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` 下载到 `~/.cache/llm-wiki-skill/llm-wiki`，再从该 cache 安装。可用 `--git-url` / `LLM_WIKI_SKILL_GIT_URL` 覆盖下载地址，用 `--cache-dir` / `LLM_WIKI_SKILL_CACHE_DIR` 覆盖 cache 目录。仓库里可能还有 GitHub mirror remote，但不作为默认更新源。
+更新来源优先由本地 bundle checkout 的 git upstream 决定；若无法推断本地 checkout，updater 会从公司 GitLab 默认地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` 下载到 `~/.cache/llm-wiki-skill/llm-wiki`，再从该 cache 安装。可用 `--git-url` / `LLM_WIKI_SKILL_GIT_URL` 覆盖下载地址，用 `--cache-dir` / `LLM_WIKI_SKILL_CACHE_DIR` 覆盖 cache 目录。仓库里可能还有 GitHub mirror remote，但不作为默认更新源。若下载私有 GitLab 仓库时缺少凭据，Personal Access Token 创建地址是 `https://git.guazi-corp.com/profile/personal_access_tokens`，所需 scope 为 `read_repository`。
 
 如果 skill 是通过 `--link` 从本仓库安装的，也可以省略 `--source`，脚本会尝试从当前 skill 路径推断 bundle checkout 并执行 `git pull --ff-only` 后重新安装。
 

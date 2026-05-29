@@ -12,6 +12,7 @@ from pathlib import Path
 SCRIPT_PATH = Path(__file__).resolve()
 SKILL_ROOT = SCRIPT_PATH.parents[1]
 DEFAULT_GIT_URL = "https://git.guazi-corp.com/c2b-fe/llm-wiki.git"
+GITLAB_PAT_URL = "https://git.guazi-corp.com/profile/personal_access_tokens"
 
 
 def is_bundle_root(path: Path) -> bool:
@@ -27,6 +28,17 @@ def run_checked(command: list[str], cwd: Path) -> None:
     code = run(command, cwd)
     if code != 0:
         raise SystemExit(code)
+
+
+def gitlab_auth_help(git_url: str) -> str:
+    return (
+        f"Could not clone llm-wiki skill source from {git_url}.\n"
+        "If this is a private Guazi GitLab repository, create a Personal Access Token at:\n"
+        f"  {GITLAB_PAT_URL}\n"
+        "Required scope: read_repository.\n"
+        "Then retry after configuring Git credentials, or pass --source /path/to/llm-wiki-skill "
+        "to install from a local checkout."
+    )
 
 
 def default_bundle_root() -> Path | None:
@@ -96,7 +108,9 @@ def cached_git_bundle_root(git_url: str, cache_dir: str | None) -> Path:
         return root
 
     root.parent.mkdir(parents=True, exist_ok=True)
-    run_checked(["git", "clone", git_url, str(root)], root.parent)
+    code = run(["git", "clone", git_url, str(root)], root.parent)
+    if code != 0:
+        raise SystemExit(gitlab_auth_help(git_url))
     return root
 
 

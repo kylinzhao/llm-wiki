@@ -7,6 +7,8 @@ description: LLM Wiki 需求评审兼容入口。用于用户仍以 llm-wiki 方
 
 这是兼容入口。真正的需求评审能力已独立到 `$requirement-review`。
 
+语言要求：本兼容入口的用户回答必须默认使用中文；如果把评审结果写入 LLM Wiki 文档，也必须使用中文，除非用户明确要求其他语言。
+
 1. 读取 **requirement-review** skill 包根目录下的 `SKILL.md`（路径由环境解析，勿写死本机绝对路径）。
 2. 读取同包内 `references/review-protocol.md` 和 `references/output-template.md`。
 3. 按评审模式读取同包内参考文档：

@@ -325,7 +325,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --client auto --backup
 ```
 
-更新来源优先使用本地 `llm-wiki-skill` bundle checkout 的 git upstream。若无法从安装目录、环境变量或当前工作目录推断本地 checkout，updater 会从公司 GitLab 默认地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` 下载到 `~/.cache/llm-wiki-skill/llm-wiki`，再从该 cache 安装。可用 `--git-url` / `LLM_WIKI_SKILL_GIT_URL` 覆盖下载地址，用 `--cache-dir` / `LLM_WIKI_SKILL_CACHE_DIR` 覆盖 cache 目录；GitHub remote 只作为额外远端，除非显式指定，不默认使用。
+更新来源优先使用本地 `llm-wiki-skill` bundle checkout 的 git upstream。若无法从安装目录、环境变量或当前工作目录推断本地 checkout，updater 会从公司 GitLab 默认地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` 下载到 `~/.cache/llm-wiki-skill/llm-wiki`，再从该 cache 安装。可用 `--git-url` / `LLM_WIKI_SKILL_GIT_URL` 覆盖下载地址，用 `--cache-dir` / `LLM_WIKI_SKILL_CACHE_DIR` 覆盖 cache 目录；GitHub remote 只作为额外远端，除非显式指定，不默认使用。若下载私有 GitLab 仓库时缺少凭据，Personal Access Token 创建地址是 `https://git.guazi-corp.com/profile/personal_access_tokens`，所需 scope 为 `read_repository`。
 
 如果要强制使用指定的本地 bundle 仓库路径：
 
@@ -342,6 +342,10 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --source /path/
 - `health.py`：检查结构是否健康
 - `build_graph.py`：把 wikilink 连成图谱
 - `anchor_check.py`：检查 traceability 中的代码锚点是否存在
+
+## 语言要求
+
+使用 `llm-wiki` 及其相关短入口时，面向用户的回答、诊断、审查报告和最终总结默认使用中文；由 agent 生成或改写的 `wiki/`、`docs/`、`staging/` Markdown 知识文档也默认使用中文。代码标识符、命令、路径、API 名称、配置键、英文专有名词和原始证据引用可保留原文，并用中文解释。
 
 如果 `raw-code/` 存在且需要代码图谱增强，可运行：
 

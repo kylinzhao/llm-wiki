@@ -111,7 +111,11 @@ test_force_replaces_existing_skill() {
 
   assert_file "$home/skills/llm-wiki/SKILL.md"
   assert_file "$home/skills/llm-wiki/VERSION"
+  assert_contains "## 语言要求" "$home/skills/llm-wiki/SKILL.md"
+  assert_contains "必须默认使用中文" "$home/skills/llm-wiki/SKILL.md"
+  assert_contains "Markdown 知识文档必须使用中文" "$home/skills/llm-wiki/SKILL.md"
   assert_file "$home/skills/llm-wiki-backfill/SKILL.md"
+  assert_contains "语言要求" "$home/skills/llm-wiki-backfill/SKILL.md"
   assert_no_path "$home/skills/llm-wiki/local.txt"
   assert_contains "version: 1.0.0" "$home/skills/llm-wiki/VERSION"
   assert_contains "engine_version: engine-v1.0.0" "$home/skills/llm-wiki/VERSION"
@@ -139,6 +143,25 @@ test_qoder_client_installs_to_qoder_home() {
   assert_contains "Installed llm-wiki skills into:" "$TMP_DIR/qoder.out"
 }
 
+test_update_script_gitlab_auth_help() {
+  python3 - "$ROOT_DIR" <<'PY'
+import importlib.util
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+script = root / "skills" / "llm-wiki" / "scripts" / "update_installed_skill.py"
+spec = importlib.util.spec_from_file_location("update_installed_skill", script)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+help_text = module.gitlab_auth_help("https://git.guazi-corp.com/c2b-fe/llm-wiki.git")
+assert "https://git.guazi-corp.com/profile/personal_access_tokens" in help_text
+assert "/-/user_settings/personal_access_tokens" not in help_text
+assert "read_repository" in help_text
+PY
+}
+
 test_default_refuses_existing_skill
 test_dry_run_does_not_write
 test_backup_preserves_existing_skill
@@ -146,6 +169,7 @@ test_force_replaces_existing_skill
 test_claude_client_installs_to_claude_home
 test_cursor_client_installs_to_cursor_home
 test_qoder_client_installs_to_qoder_home
+test_update_script_gitlab_auth_help
 python3 "$ROOT_DIR/tests/build_wiki_test.py"
 
 echo "install tests passed"

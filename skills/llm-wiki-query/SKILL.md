@@ -7,6 +7,8 @@ description: LLM Wiki 证据型查询入口。用于按意图回答业务、产�
 
 这是 `$llm-wiki query` 的短入口。
 
+语言要求：本短入口的用户回答和生成/改写的 LLM Wiki Markdown 文档必须默认使用中文，除非用户明确要求其他语言。
+
 1. 读取 **llm-wiki** skill 包根目录下的 `SKILL.md`（路径由当前环境的 skill 安装位置解析，勿写死本机绝对路径）。
 2. 读取同包内 `references/commands.md`。
 3. 将 `$llm-wiki-query` 后面的用户文本作为问题和 `llm-wiki query` 参数。
