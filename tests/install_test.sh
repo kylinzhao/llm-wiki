@@ -146,5 +146,6 @@ test_force_replaces_existing_skill
 test_claude_client_installs_to_claude_home
 test_cursor_client_installs_to_cursor_home
 test_qoder_client_installs_to_qoder_home
+python3 "$ROOT_DIR/tests/build_wiki_test.py"
 
 echo "install tests passed"

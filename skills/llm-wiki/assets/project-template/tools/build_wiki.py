@@ -296,11 +296,28 @@ def replace_or_insert_section(text: str, heading: str, block: str, *, before_hea
     return text.rstrip() + "\n\n" + replacement
 
 
+def refresh_source_header(text: str, source: dict[str, object]) -> str:
+    text = re.sub(
+        r"(?m)^- (?:Raw path|原始路径): `[^`]+`",
+        f"- Raw path: `{source['raw_path']}`",
+        text,
+        count=1,
+    )
+    text = re.sub(
+        r"(?m)^- SHA-256: `?[a-f0-9]{64}`?",
+        f"- SHA-256: `{source['sha256']}`",
+        text,
+        count=1,
+    )
+    return text
+
+
 def backfill_source_page(path: Path, source: dict[str, object], project: Path) -> None:
     if not path.is_file():
         return
     text = path.read_text(encoding="utf-8", errors="replace")
     cjira = source_cjira_record(source, project)
+    text = refresh_source_header(text, source)
     text = replace_or_insert_section(text, "Delivery Tracking", delivery_tracking_block(cjira), before_headings=("Summary", "摘要"))
     metadata = source_metadata_payload(source, cjira, source_page_metadata(path))
     text = replace_or_insert_section(text, "Source Metadata", source_metadata_block(metadata))
@@ -755,6 +772,7 @@ def main_for_project(project: Path) -> int:
             existing_sha = str(source["sha256"])
         if page.is_file():
             backfill_source_page(page, source, project)
+            existing_sha = source_page_sha(page)
         if (
             not created
             and not hash_matches(existing_sha, str(source["sha256"]))
