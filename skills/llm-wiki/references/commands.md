@@ -12,6 +12,7 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki version` | User asks for the llm-wiki skill / bundle version, current version, skill version, or engine version | Installed skill bundle version from `VERSION` |
 | `llm-wiki update` | Existing KB needs resume, refinement, traceability refresh, source/code updates, or validation after changes | Impact-scoped update, validation, and maintenance report |
 | `llm-wiki backfill` | Existing KB was built with older skill versions and needs historical evidence re-scanned | Deterministic evidence backfill, then refinement absorption through update semantics |
+| `llm-wiki maintain-all` | User wants to discover, list, prune, or batch-maintain local registered KB projects | Dry-run plan by default; optional apply runs full backfill/update maintenance per KB |
 | `llm-wiki update-skill` | User explicitly asks to update the llm-wiki skill bundle itself, not the current KB content | Pull/reinstall the installed skill bundle, then optionally refresh project tooling |
 | `llm-wiki add-wiki` | Add another document/wiki directory or wiki URL as business or requirement evidence | Imported raw evidence, source provenance, RSS/update status, and affected wiki updates |
 | `llm-wiki add-code` | Add or refresh implementation evidence, code wiki, capabilities, and traceability | raw-code codebase plus code wiki and mappings |
@@ -319,6 +320,51 @@ Final report:
 - health / graph / G+ quality results
 - blockers and remaining missing evidence
 
+## `llm-wiki maintain-all`
+
+Purpose: maintain local registered LLM Wiki KB projects in batches without silently modifying every KB after a skill upgrade.
+
+Registry:
+
+- Local KBs are tracked in `~/.llm-wiki/projects.json`.
+- Project template install, project-local update, and project-local backfill register the current KB best-effort.
+- The registry stores paths and maintenance status only; it must not store credentials, cookies, tokens, or KB evidence content.
+
+Common commands:
+
+```bash
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --discover /Users/zhaoliang/guazi/work
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --list
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --prune-missing
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --apply
+```
+
+Behavior:
+
+1. Default invocation is dry-run only. It prints which active KBs would be maintained, which KBs are skipped, and which commands would run.
+2. `--discover <dir>` scans for KBs and adds them to the registry before planning.
+3. `--list` prints current registry rows.
+4. `--prune-missing` immediately removes registry entries whose paths no longer exist. Ordinary reconcile removes entries automatically after `missing_count >= 3`.
+5. `--apply` is required before any KB files are modified.
+6. Apply runs the full backfill maintenance flow for each planned KB:
+   - refresh engine-owned tools and agent rules
+   - run `uv run python tools/backfill.py`, falling back to `python3 tools/backfill.py` only when needed
+   - when backfill reports `refinement_absorption_required=true`, run project update to absorb evidence and complete health/graph closure
+7. A failed KB does not stop later KBs. The batch report records success, skip, and failure details.
+
+Safety boundaries:
+
+- Do not run `--apply` against real KBs unless the user explicitly asks to execute.
+- Do not add `--no-auto-raw-sync` to bypass Cwiki auth. Auth failures are per-KB blockers.
+- Dirty KB git worktrees are skipped with `dirty_project_worktree` by default.
+- Broken managed `raw-code/` checkouts remain hard failures under normal update rules.
+- The command does not commit or push KB changes.
+
+Reports:
+
+- Batch reports are written under `~/.llm-wiki/maintenance-runs/<run_id>.json` and `.md`.
+- Final user reporting must include counts for successes, skipped projects, failures, pruned missing entries, and report paths.
+
 ## `llm-wiki update-skill`
 
 Purpose: update the installed llm-wiki skill bundle itself. Use only when the user explicitly asks to update the skill, skill bundle, installed skill, or global llm-wiki tooling.
@@ -348,7 +394,19 @@ Default behavior:
 
 3. The updater runs `git pull --ff-only` in the bundle checkout when it is a git worktree, then runs `install.sh` with backup semantics.
 4. Do not use `--force` unless the user explicitly accepts discarding the previous installed copy.
-5. After updating the installed skill, if the current directory is an LLM Wiki KB project and the user wants project tooling refreshed too, run:
+5. After updating the installed skill, existing KB projects keep their project-local tools until refreshed. To preview batch refresh/backfill for registered KBs, run:
+
+   ```bash
+   python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py"
+   ```
+
+   To discover historical KBs first:
+
+   ```bash
+   python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --discover /Users/zhaoliang/guazi/work
+   ```
+
+6. If the current directory is an LLM Wiki KB project and the user wants only this project refreshed, run:
 
    ```bash
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD" --engine-only --refresh-agent-rules

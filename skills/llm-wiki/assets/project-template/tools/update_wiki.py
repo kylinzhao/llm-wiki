@@ -20,6 +20,7 @@ import yaml
 from agent_rules import refresh_agent_rules
 from graphify_code import decide_graphify_action
 from gplus_quality import inspect_gplus_quality
+from project_registry import best_effort_register_current_project
 from raw_code_manager import read_codebase_metadata
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
@@ -802,6 +803,7 @@ def main() -> int:
     args = parser.parse_args()
 
     project = Path(args.project).resolve()
+    best_effort_register_current_project(project)
     if not args.no_agent_rules_refresh:
         print(f"agent_rules={refresh_agent_rules(project)}")
 

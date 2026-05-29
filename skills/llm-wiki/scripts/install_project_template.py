@@ -5,7 +5,11 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from project_registry import register_project
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -218,6 +222,11 @@ def main() -> int:
     copied, skipped = copy_tree(TEMPLATE_ROOT, project, args.force, args.engine_only)
     merged_deps = merge_pyproject_dependencies(project) if args.engine_only else []
     agent_rules_status = refresh_agent_rules(project) if args.refresh_agent_rules else None
+    try:
+        register_project(project)
+        registry_status = "registered"
+    except Exception as exc:
+        registry_status = f"warning:{exc}"
     # build_wiki.py requires raw/; the template does not ship evidence files (often gitignored).
     (project / "raw").mkdir(parents=True, exist_ok=True)
 
@@ -236,6 +245,7 @@ def main() -> int:
             print(f"  ~ {item}")
     if agent_rules_status:
         print(f"agent_rules={agent_rules_status}")
+    print(f"registry={registry_status}")
     print("next_commands:")
     print("  llm-wiki update")
     print("  # optional after the text layer is healthy and high-value image evidence exists:")
