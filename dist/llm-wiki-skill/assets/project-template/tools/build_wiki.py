@@ -15,6 +15,8 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+from cjira_registry import classify_page, update_registry_for_sources
+from drawio_diagram import drawio_to_mermaid
 from wiki_preflight import raw_evidence_preflight_failed
 
 TEXT_EXTENSIONS = {
@@ -29,6 +31,8 @@ TEXT_EXTENSIONS = {
     ".yaml",
     ".yml",
     ".xml",
+    ".drawio",
+    ".dio",
 }
 
 REQUIRED_DIRS = [
@@ -95,6 +99,8 @@ def discover_sources(raw_dir: Path) -> list[dict[str, object]]:
         if path.suffix.lower() not in TEXT_EXTENSIONS:
             continue
         rel = path.relative_to(raw_dir)
+        if "assets" in rel.parts and "prototypes" in rel.parts and path.suffix.lower() not in {".md", ".markdown"}:
+            continue
         base = slugify(str(rel.with_suffix("")).replace("/", "-"))
         slug = base
         counter = 2
@@ -136,7 +142,34 @@ def read_json(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def source_page(source: dict[str, object]) -> str:
+def source_cjira_record(source: dict[str, object], project: Path) -> dict[str, object]:
+    raw_path = str(source["raw_path"])
+    raw_file = project / raw_path
+    text = raw_file.read_text(encoding="utf-8", errors="replace") if raw_file.is_file() else ""
+    record = classify_page(str(source["title"]), raw_path, text)
+    page_id_match = re.search(r"^page_id:\s*['\"]?(.*?)['\"]?\s*$", text, re.M)
+    record["page_id"] = page_id_match.group(1).strip() if page_id_match else ""
+    return record
+
+
+def source_page(source: dict[str, object], project: Path) -> str:
+    cjira = source_cjira_record(source, project)
+    source_metadata = {
+        "page_kind": "source",
+        "schema_version": "source-v2",
+        "source_slug": source["slug"],
+        "page_id": cjira["page_id"],
+        "raw_rel": source["raw_path"],
+        "raw_hash": source["sha256"],
+        "primary_cjira": cjira["primary_cjira"],
+        "supporting_cjira": cjira["supporting_cjira"],
+        "primary_cjira_status": cjira["primary_cjira_status"],
+        "last_checked_at": cjira["last_checked_at"],
+        "cjira_confidence": cjira["confidence"],
+        "ai_refinement_state": "pending",
+    }
+    supporting = ", ".join(f"`{key}`" for key in cjira["supporting_cjira"]) or "`none`"
+    drawio_block = drawio_source_block(project / str(source["raw_path"]))
     return f"""# {source['title']}
 
 > 确定性种子页。Codex 需要基于原始证据补全摘要、关键事实和 AI 原生精修内容。
@@ -148,6 +181,14 @@ def source_page(source: dict[str, object]) -> str:
 - 大小: `{source['size_bytes']}` bytes
 - 修改时间: `{source['mtime']}`
 
+## Delivery Tracking
+
+- Primary Jira: `{cjira['primary_cjira'] or 'none'}`
+- Supporting Jira: {supporting}
+- Jira Status: `{cjira['primary_cjira_status']}`
+- Last Checked: `{cjira['last_checked_at']}`
+- Confidence: `{cjira['confidence']}`
+
 ## 摘要
 
 待完成 AI 原生摘要。
@@ -155,6 +196,8 @@ def source_page(source: dict[str, object]) -> str:
 ## 关键事实
 
 - 待从来源证据中提取。
+
+{drawio_block}
 
 ## 业务链接
 
@@ -165,7 +208,120 @@ def source_page(source: dict[str, object]) -> str:
 ## 证据说明
 
 本页作为来源证据节点使用。不要把原始材料中的敏感值复制到 wiki 正文。
+
+## Source Metadata
+```json
+{json.dumps(source_metadata, ensure_ascii=False, indent=2)}
+```
 """
+
+
+def drawio_source_block(path: Path) -> str:
+    if path.suffix.lower() not in {".drawio", ".dio", ".xml"}:
+        return ""
+    if not path.is_file():
+        return ""
+    diagrams = drawio_to_mermaid(path.read_text(encoding="utf-8", errors="replace"), fallback_name=path.stem)
+    if not diagrams:
+        return ""
+    lines = ["## Draw.io Diagrams", ""]
+    for diagram in diagrams:
+        lines.extend(
+            [
+                f"### {diagram.name}",
+                "",
+                f"- Nodes: `{diagram.node_count}`",
+                f"- Edges: `{diagram.edge_count}`",
+                "",
+                "```mermaid",
+                diagram.mermaid,
+                "```",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip()
+
+
+def delivery_tracking_block(cjira: dict[str, object]) -> str:
+    supporting = ", ".join(f"`{key}`" for key in cjira["supporting_cjira"]) or "`none`"
+    return (
+        "## Delivery Tracking\n\n"
+        f"- Primary Jira: `{cjira['primary_cjira'] or 'none'}`\n"
+        f"- Supporting Jira: {supporting}\n"
+        f"- Jira Status: `{cjira['primary_cjira_status']}`\n"
+        f"- Last Checked: `{cjira['last_checked_at']}`\n"
+        f"- Confidence: `{cjira['confidence']}`\n"
+    )
+
+
+def source_metadata_payload(
+    source: dict[str, object],
+    cjira: dict[str, object],
+    existing: dict[str, object] | None = None,
+) -> dict[str, object]:
+    metadata = dict(existing or {})
+    metadata.update(
+        {
+            "page_kind": "source",
+            "schema_version": "source-v2",
+            "source_slug": source["slug"],
+            "page_id": cjira["page_id"],
+            "raw_rel": source["raw_path"],
+            "raw_hash": source["sha256"],
+            "primary_cjira": cjira["primary_cjira"],
+            "supporting_cjira": cjira["supporting_cjira"],
+            "primary_cjira_status": cjira["primary_cjira_status"],
+            "last_checked_at": cjira["last_checked_at"],
+            "cjira_confidence": cjira["confidence"],
+            "ai_refinement_state": metadata.get("ai_refinement_state", "pending"),
+        }
+    )
+    return metadata
+
+
+def source_metadata_block(metadata: dict[str, object]) -> str:
+    return "## Source Metadata\n```json\n" + json.dumps(metadata, ensure_ascii=False, indent=2) + "\n```\n"
+
+
+def replace_or_insert_section(text: str, heading: str, block: str, *, before_headings: tuple[str, ...] = ()) -> str:
+    pattern = re.compile(rf"(?ms)^## {re.escape(heading)}\n.*?(?=^## |\Z)")
+    replacement = block.rstrip() + "\n\n"
+    if pattern.search(text):
+        return pattern.sub(replacement, text, count=1)
+    for marker in before_headings:
+        needle = f"## {marker}"
+        idx = text.find(needle)
+        if idx != -1:
+            return text[:idx].rstrip() + "\n\n" + replacement + text[idx:]
+    return text.rstrip() + "\n\n" + replacement
+
+
+def refresh_source_header(text: str, source: dict[str, object]) -> str:
+    text = re.sub(
+        r"(?m)^- (?:Raw path|原始路径): `[^`]+`",
+        f"- Raw path: `{source['raw_path']}`",
+        text,
+        count=1,
+    )
+    text = re.sub(
+        r"(?m)^- SHA-256: `?[a-f0-9]{64}`?",
+        f"- SHA-256: `{source['sha256']}`",
+        text,
+        count=1,
+    )
+    return text
+
+
+def backfill_source_page(path: Path, source: dict[str, object], project: Path) -> None:
+    if not path.is_file():
+        return
+    text = path.read_text(encoding="utf-8", errors="replace")
+    cjira = source_cjira_record(source, project)
+    text = refresh_source_header(text, source)
+    text = replace_or_insert_section(text, "Delivery Tracking", delivery_tracking_block(cjira), before_headings=("Summary", "摘要"))
+    metadata = source_metadata_payload(source, cjira, source_page_metadata(path))
+    text = replace_or_insert_section(text, "Source Metadata", source_metadata_block(metadata))
+    path.write_text(text, encoding="utf-8")
 
 
 def index_page(sources: list[dict[str, object]], codebases: list[str]) -> str:
@@ -280,13 +436,57 @@ def create_docs(project: Path) -> None:
         project / "docs" / "retrieval-playbook.md",
         """# 检索手册
 
-1. 先读取 `BUSINESS_CONTEXT.md`。它是 init/fast/update 的硬性前置，不能是模板 TODO 占位。
-2. 判断问题类型。
-3. 先查 `wiki/overview.md`，再查相关分层页面。
-4. 通过 `wiki/concepts/` 和 `wiki/entities/` 扩展检索。
-5. 使用 `wiki/sources/` 作为需求证据。
-6. 只有回答代码实现证据时才使用 `wiki/code/`。
-7. 明确区分需求证据、代码证据、推断和缺失证据。
+本文件是查询路由说明书，不是业务证据本身。回答业务、产品、需求、术语、实现状态或代码追踪问题时，先用它决定检索路径，再引用 `wiki/` 或 `raw/` 中的证据。
+
+## 基线步骤
+
+1. 先读取 `BUSINESS_CONTEXT.md`。它是业务语义基线，也是 init/fast/update 的硬性前置，不能是模板 TODO 占位。
+2. 判断查询意图，不要直接从模型记忆、单个 `rg` 命中或孤立代码片段下结论。
+3. 先查 `wiki/overview.md`，确认站点范围、主链路和已知缺口。
+4. 按查询意图进入对应专项目录层。
+5. 用 `wiki/concepts/` 和 `wiki/entities/` 做通用扩展层，扩展主题、实体、别名和相关来源。
+6. 回到 `wiki/sources/` 找直接需求/业务证据；必要时再回查 `raw/`。
+7. 只有当问题涉及实现、架构、接口、调用链、落地状态、测试追踪，或用户明确要求 `query-plus` 时，才进入 `wiki/code/`。
+8. 明确区分需求证据、代码证据、推断和缺失证据。
+
+## 查询意图路由
+
+| 查询意图 | 优先检索路径 |
+| --- | --- |
+| 业务知识 / 产品规则 / 需求口径 / 术语解释 | `BUSINESS_CONTEXT.md` -> `wiki/overview.md` -> 专项目录层 -> `wiki/concepts/` / `wiki/entities/` -> `wiki/sources/` -> 必要时 `raw/` |
+| 问题 / 风险 / 冲突 / 未决项 | `wiki/conflicts/` -> `wiki/evidence/` -> `wiki/proposals/` -> `wiki/sources/` |
+| 证据 / 结果 / 实验 / 复盘 / 数据结论 | `wiki/evidence/` -> `wiki/sources/` -> 必要时 `raw/` |
+| 方案 / 规划 / 草案 / 设计 | `wiki/proposals/` -> `wiki/sources/` |
+| 接口 / 字段 / 规则 / 参数 / 字典 | `wiki/reference/` -> `wiki/truth/` -> `wiki/sources/` |
+| 当前事实 / 稳定状态 / 明确说明 | `wiki/truth/` -> `wiki/reference/` -> `wiki/sources/` |
+| SOP / 活动执行 / 流程落地 / 运营动作 | `wiki/operations/` -> `wiki/sources/` |
+| 代码实现 / 架构 / 调用链 / 源码位置 | `wiki/code/traceability/` -> `wiki/code/capabilities/` -> `wiki/code/codebases/` -> `wiki/concepts/` / `wiki/entities/` -> `wiki/sources/` |
+| 业务逻辑是否已实现 / 需求落在哪里 / 线上行为和代码是否一致 | `BUSINESS_CONTEXT.md` -> `wiki/concepts/` / `wiki/entities/` -> `wiki/sources/` -> `wiki/code/traceability/` -> `wiki/code/capabilities/` -> `wiki/code/codebases/` |
+
+## 通用扩展层
+
+`wiki/concepts/` 和 `wiki/entities/` 不是最终证据层，而是跨来源的导航和归一化层。
+
+- `wiki/concepts/` 用于按主题扩展相关需求、规则、方案、风险和证据。
+- `wiki/entities/` 用于统一业务对象、角色、系统、页面、状态、历史别名和冲突叫法。
+- 当用户问题里的词和 `BUSINESS_CONTEXT.md` 或来源页口径不一致时，先按规范概念/实体归一，再回到 `wiki/sources/` 找证据。
+
+## 专项目录层
+
+`wiki/evidence/`、`wiki/operations/`、`wiki/proposals/`、`wiki/reference/`、`wiki/truth/`、`wiki/conflicts/` 是按问题类型组织的投影视图。它们用于缩小范围和发现候选证据，但结论仍应回到 `wiki/sources/` 或 `raw/` 核验。
+
+不要把 `wiki/concepts/` / `wiki/entities/` 和这些专项目录层理解成互斥关系：前者负责扩展和归一，后者负责按意图定位事实视图。
+
+## 代码证据边界
+
+- 不要把 `wiki/code/` 作为业务规则的主证据。
+- 不要把“代码里有接口/类/任务”直接写成“业务一定生效”。
+- 当业务证据不足时，说清楚证据不足；不要用代码实现补成需求口径。
+- 当回答涉及代码时，必须说明使用了哪些 codebase、哪些 `wiki/code/` 页面、哪些结论来自需求文档、哪些来自代码实现、哪些只是推断。
+
+## 维护说明
+
+本文件由 `tools/build_wiki.py` 为新 KB 生成。已有 KB 的本文件不会被 `update` 静默覆盖；如果需要升级旧 KB 的查询路由，请显式执行迁移或人工确认后再替换。
 """,
     )
     write_if_missing(
@@ -304,7 +504,7 @@ uv run python tools/build_graph.py
 uv run python tools/anchor_check.py
 ```
 
-摘要、实体归一、来源精修、能力判断和追踪推理由 Codex 原生完成。
+摘要、实体归一、来源精修和能力判断由 agent / reviewer 完成；追踪矩阵的模型步骤必须按 `docs/traceability-contract.md` 输出 proposals，再由确定性工具合并 state 并渲染 Markdown。
 本地脚本只负责扫描、生成种子页、校验和构建图谱文件。
 """,
     )
@@ -340,7 +540,7 @@ uv run python tools/update_wiki.py
 uv run python tools/update_wiki.py --graphify
 ```
 
-确定性种子页生成后，使用 Codex 完成来源摘要、分层页面、概念、实体、能力页和追踪证据强度判断。
+确定性种子页生成后，使用 agent / reviewer 完成来源摘要、分层页面、概念、实体和能力页。追踪证据强度只能在有可审计需求证据和代码锚点时提升。
 """,
     )
 
@@ -529,6 +729,8 @@ def update_status(
     }
     write(project / "staging" / "refinement-status.md", "# Refinement Status\n\n```json\n" + json.dumps(status, ensure_ascii=False, indent=2) + "\n```\n")
     write(project / "staging" / "source-manifest.json", json.dumps({"generated_at": utc_now(), "sources": sources}, ensure_ascii=False, indent=2) + "\n")
+    status["cjira_registry"] = update_registry_for_sources(project, sources, refresh_status=False)
+    write(project / "staging" / "refinement-status.md", "# Refinement Status\n\n```json\n" + json.dumps(status, ensure_ascii=False, indent=2) + "\n```\n")
     write(
         project / "staging" / "source-drift.json",
         json.dumps(
@@ -564,10 +766,13 @@ def main_for_project(project: Path) -> int:
         page = project / "wiki" / "sources" / f"{source['slug']}.md"
         maybe_migrate_legacy_source_page(source, page)
         existing_sha = source_page_sha(page)
-        created = write_if_missing(page, source_page(source))
+        created = write_if_missing(page, source_page(source, project))
         if not created and not hash_matches(existing_sha, str(source["sha256"])) and is_refreshable_seed_source_page(page):
-            write(page, source_page(source))
+            write(page, source_page(source, project))
             existing_sha = str(source["sha256"])
+        if page.is_file():
+            backfill_source_page(page, source, project)
+            existing_sha = source_page_sha(page)
         if (
             not created
             and not hash_matches(existing_sha, str(source["sha256"]))
