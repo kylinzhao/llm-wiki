@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -235,3 +236,82 @@ def run_apply(
     payload["json_report"] = str(json_report)
     payload["markdown_report"] = str(markdown_report)
     return payload
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Maintain registered local LLM Wiki KB projects.")
+    parser.add_argument("--registry", help="Override registry path for tests or advanced local use.")
+    parser.add_argument("--discover", action="append", default=[], help="Discover KB projects under this directory.")
+    parser.add_argument("--list", action="store_true", help="List registered KB projects.")
+    parser.add_argument(
+        "--prune-missing",
+        action="store_true",
+        help="Immediately remove registry entries whose paths no longer exist.",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply the planned maintenance. Without this flag, only prints a dry-run plan.",
+    )
+    parser.add_argument("--project", action="append", default=[], help="Only include this absolute KB path.")
+    parser.add_argument("--name", action="append", default=[], help="Only include projects with this registered name.")
+    return parser.parse_args(argv)
+
+
+def print_rows(rows: list[dict[str, str]]) -> None:
+    print("status\tmissing\tlast_success\tpath\tlast_error")
+    for row in rows:
+        print(
+            f"{row['status']}\t{row['missing_count']}\t{row['last_success_at']}\t"
+            f"{row['path']}\t{row['last_error']}"
+        )
+
+
+def print_plan(plan: dict[str, Any]) -> None:
+    print("Dry-run plan")
+    for item in plan.get("planned") or []:
+        print(f"PLAN {item['project']}")
+        for command in item.get("commands") or []:
+            print(f"  + {command}")
+    for item in plan.get("skipped") or []:
+        print(f"SKIP {item['project']} reason={item['reason']}")
+    for item in plan.get("removed") or []:
+        print(f"REMOVED {item.get('path')}")
+
+
+def print_apply_summary(summary: dict[str, Any]) -> None:
+    print("Apply summary")
+    print(f"successes={summary['successes']}")
+    print(f"failures={summary['failures']}")
+    print(f"skipped={summary['skipped_count']}")
+    print(f"json_report={summary['json_report']}")
+    print(f"markdown_report={summary['markdown_report']}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    registry_path = Path(args.registry).expanduser().resolve() if args.registry else None
+
+    for root in args.discover:
+        for project in project_registry.discover_projects(Path(root).expanduser()):
+            project_registry.register_project(project, registry_path=registry_path)
+
+    if args.prune_missing:
+        removed = project_registry.prune_missing(registry_path=registry_path)
+        print(f"pruned={len(removed)}")
+        return 0
+
+    if args.list:
+        project_registry.reconcile_registry(registry_path=registry_path)
+        print_rows(project_registry.registry_rows(registry_path=registry_path))
+        return 0
+
+    plan = build_plan(registry_path=registry_path, projects=args.project, names=args.name)
+    print_plan(plan)
+    if args.apply:
+        print_apply_summary(run_apply(plan, registry_path=registry_path))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

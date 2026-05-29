@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -6,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
@@ -176,6 +178,75 @@ class MaintainAllTest(unittest.TestCase):
             self.assertEqual(by_path[str(failing.resolve())]["status"], "failed")
             self.assertEqual(by_path[str(failing.resolve())]["last_error"], "backfill")
             self.assertIn(str(success), install_log.read_text(encoding="utf-8"))
+
+    def test_main_discovers_lists_prunes_filters_and_applies(self):
+        maintain_all = load_script_module("maintain_all")
+        registry = load_script_module("project_registry")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = root / "projects.json"
+            active = make_kb(root / "active")
+            other = make_kb(root / "other")
+
+            stdout = io.StringIO()
+            with mock.patch.object(sys, "stdout", stdout):
+                code = maintain_all.main(["--registry", str(registry_path), "--discover", str(root), "--name", "active"])
+
+            self.assertEqual(code, 0)
+            self.assertIn("Dry-run plan", stdout.getvalue())
+            self.assertIn(str(active.resolve()), stdout.getvalue())
+            self.assertNotIn(str(other.resolve()), stdout.getvalue())
+
+            stdout = io.StringIO()
+            with mock.patch.object(sys, "stdout", stdout):
+                code = maintain_all.main(["--registry", str(registry_path), "--list"])
+            self.assertEqual(code, 0)
+            self.assertIn("active", stdout.getvalue())
+            self.assertIn(str(active.resolve()), stdout.getvalue())
+
+            applied = {}
+
+            def fake_run_apply(plan, *, registry_path=None, runs_dir=None, now=None):
+                applied["plan"] = plan
+                return {
+                    "successes": 1,
+                    "failures": 0,
+                    "skipped_count": 0,
+                    "json_report": str(root / "run.json"),
+                    "markdown_report": str(root / "run.md"),
+                    "results": [],
+                }
+
+            stdout = io.StringIO()
+            with mock.patch.object(maintain_all, "run_apply", side_effect=fake_run_apply), mock.patch.object(sys, "stdout", stdout):
+                code = maintain_all.main(
+                    ["--registry", str(registry_path), "--project", str(active.resolve()), "--apply"]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual([item["project"] for item in applied["plan"]["planned"]], [str(active.resolve())])
+            self.assertIn("Apply summary", stdout.getvalue())
+
+            missing = root / "missing"
+            registry.save_registry(
+                {
+                    "version": 1,
+                    "projects": [
+                        {
+                            "path": str(missing),
+                            "name": "missing",
+                            "status": "missing",
+                            "missing_count": 1,
+                        }
+                    ],
+                },
+                registry_path,
+            )
+            stdout = io.StringIO()
+            with mock.patch.object(sys, "stdout", stdout):
+                code = maintain_all.main(["--registry", str(registry_path), "--prune-missing"])
+            self.assertEqual(code, 0)
+            self.assertIn("pruned=1", stdout.getvalue())
+            self.assertEqual(registry.load_registry(registry_path)["projects"], [])
 
 
 if __name__ == "__main__":
