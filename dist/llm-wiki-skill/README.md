@@ -16,6 +16,16 @@
 它面向的不是“只会查”的场景，而是“把一个项目从原始文档变成可用知识库”的全链路工作。
 对于已经建好的 wiki，查询也统一通过 `llm-wiki` 完成，不再维护单独的 query-only skill。
 
+## 版本
+
+- `version`: `1.0.1`
+- `engine_version`: `engine-v1.0.1`
+
+### Engine 发行记录
+
+- **`engine-v1.0.1`**：修复项目模板 health/graph 对 Markdown 代码片段中 `[[...]]` 路径的误判，修复 `tools/health.py` 普通 CLI 输出统计变量错误，并避免已有本机 SSO 自动鉴权时误打印 Cwiki 缺鉴权提示。
+- **`engine-v1.0.0`**：冻结 `kb.manifest.yaml` 字段、`config/rss-feeds.yaml` 形状、`tools/rss_sync.py` 抓取与限速语义，以及 `tools/update_wiki.py` 优先的确定性更新链。
+
 ## 2. 适用场景
 
 ### 快速命令
