@@ -11,6 +11,8 @@ from pathlib import Path
 
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
+FENCED_CODE_RE = re.compile(r"(^|\n)(```|~~~).*?(?:\n\2|$)", re.DOTALL)
+INLINE_CODE_RE = re.compile(r"(?<!`)`(?!`)[^`\n]*`")
 
 
 def utc_now() -> str:
@@ -32,6 +34,11 @@ def node_aliases(node_id: str) -> set[str]:
     if node_id.startswith("sources/") and node_id.endswith("-index"):
         aliases.add(node_id[: -len("-index")])
     return aliases
+
+
+def strip_markdown_code(text: str) -> str:
+    text = FENCED_CODE_RE.sub(lambda match: match.group(1), text)
+    return INLINE_CODE_RE.sub("", text)
 
 
 def main() -> int:
@@ -61,7 +68,7 @@ def main() -> int:
 
     for page in pages:
         source = page.relative_to(wiki).with_suffix("").as_posix()
-        text = page.read_text(encoding="utf-8", errors="replace")
+        text = strip_markdown_code(page.read_text(encoding="utf-8", errors="replace"))
         for target in WIKILINK_RE.findall(text):
             normalized = target.strip().removesuffix(".md")
             edges.append(

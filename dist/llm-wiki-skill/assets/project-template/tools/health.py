@@ -30,7 +30,10 @@ REQUIRED_PATHS = [
 ]
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
+FENCED_CODE_RE = re.compile(r"(^|\n)(```|~~~).*?(?:\n\2|$)", re.DOTALL)
+INLINE_CODE_RE = re.compile(r"(?<!`)`(?!`)[^`\n]*`")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+DIAGRAM_EXTENSIONS = {".drawio", ".dio"}
 IMAGE_VALUE_KEYWORDS = {
     "流程": 5,
     "流程图": 8,
@@ -91,12 +94,17 @@ def build_page_index(pages: list[Path], project: Path) -> set[str]:
     return names
 
 
+def strip_markdown_code(text: str) -> str:
+    text = FENCED_CODE_RE.sub(lambda match: match.group(1), text)
+    return INLINE_CODE_RE.sub("", text)
+
+
 def find_broken_links(project: Path, pages: list[Path]) -> list[dict[str, str]]:
     names = build_page_index(pages, project)
     broken: list[dict[str, str]] = []
     wiki = project / "wiki"
     for page in pages:
-        text = page.read_text(encoding="utf-8", errors="replace")
+        text = strip_markdown_code(page.read_text(encoding="utf-8", errors="replace"))
         rel = page.relative_to(wiki).as_posix()
         for target in WIKILINK_RE.findall(text):
             normalized = target.strip().removesuffix(".md")
@@ -114,6 +122,52 @@ def count_raw_images(project: Path) -> int:
         for path in raw.rglob("*")
         if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
     )
+
+
+def count_raw_diagrams(project: Path) -> int:
+    raw = project / "raw"
+    if not raw.is_dir():
+        return 0
+    return sum(
+        1
+        for path in raw.rglob("*")
+        if path.is_file() and path.suffix.lower() in DIAGRAM_EXTENSIONS
+    )
+
+
+def drawio_repair_status(project: Path) -> dict[str, object]:
+    root = project / "raw"
+    drawio_files = [
+        path
+        for path in root.rglob("*")
+        if root.is_dir()
+        and path.is_file()
+        and path.suffix.lower() in DIAGRAM_EXTENSIONS
+    ]
+    missing = [
+        path.relative_to(project).as_posix()
+        for path in drawio_files
+        if not path.with_suffix(path.suffix + ".md").is_file()
+    ]
+    report = {}
+    report_path = project / "staging" / "drawio" / "latest.json"
+    if report_path.is_file():
+        try:
+            payload = json.loads(report_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+        report = payload if isinstance(payload, dict) else {}
+    return {
+        "drawio_count": len(drawio_files),
+        "missing_evidence_count": len(missing),
+        "missing_evidence": missing[:50],
+        "last_report": {
+            "generated_at": report.get("generated_at", ""),
+            "converted_count": report.get("converted_count", 0),
+            "unparsed_count": report.get("unparsed_count", 0),
+            "changed_count": report.get("changed_count", 0),
+        },
+    }
 
 
 def count_image_notes(project: Path) -> int:
@@ -165,7 +219,7 @@ def image_refinement_candidates(project: Path, limit: int = 20) -> list[dict]:
         images = [
             path
             for path in page_dir.rglob("*")
-            if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+            if path.is_file() and path.suffix.lower() in (IMAGE_EXTENSIONS | DIAGRAM_EXTENSIONS)
         ]
         if not images:
             continue
@@ -214,8 +268,9 @@ def code_intelligence_status(project: Path) -> dict[str, object]:
     root = project / "staging" / "code-graph"
     detected: list[str] = []
     fallback_only: list[str] = []
+    details: dict[str, dict[str, object]] = {}
     if not root.is_dir():
-        return {"detected_codebases": detected, "fallback_only_codebases": fallback_only}
+        return {"detected_codebases": detected, "fallback_only_codebases": fallback_only, "details": details}
     for summary_path in sorted(root.glob("*/upstream-summary.json")):
         try:
             payload = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -225,11 +280,18 @@ def code_intelligence_status(project: Path) -> dict[str, object]:
             continue
         codebase_id = str(payload.get("codebase_id") or summary_path.parent.name)
         upstream_type = str(payload.get("upstream_type") or "none")
+        details[codebase_id] = {
+            "upstream_wiki_present": upstream_type != "none",
+            "upstream_type": upstream_type,
+            "upstream_adapter_status": str(payload.get("adapter_status") or "skipped"),
+            "upstream_source_map_entries": int(payload.get("source_map_entries") or 0),
+            "upstream_warning_count": int(payload.get("warning_count") or 0),
+        }
         if upstream_type == "none":
             fallback_only.append(codebase_id)
         else:
             detected.append(codebase_id)
-    return {"detected_codebases": detected, "fallback_only_codebases": fallback_only}
+    return {"detected_codebases": detected, "fallback_only_codebases": fallback_only, "details": details}
 
 
 def business_context_status(project: Path) -> dict[str, object]:
@@ -264,6 +326,42 @@ def business_context_status(project: Path) -> dict[str, object]:
         "has_valid_business_context": True,
         "business_context_status": "ok",
         "business_context_message": "",
+    }
+
+
+def cjira_registry_status(project: Path) -> dict[str, object]:
+    root = project / "staging" / "cjira-registry"
+
+    def load_records(path: Path) -> list[dict[str, object]]:
+        if not path.is_file():
+            return []
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return []
+        records = payload.get("records") if isinstance(payload, dict) else []
+        return [item for item in records if isinstance(item, dict)]
+
+    active_records = load_records(root / "active.json")
+    archive_records = load_records(root / "archive.json")
+    try:
+        cache_payload = json.loads((root / "cache.json").read_text(encoding="utf-8")) if (root / "cache.json").is_file() else {}
+    except json.JSONDecodeError:
+        cache_payload = {}
+    if not isinstance(cache_payload, dict):
+        cache_payload = {}
+
+    all_records = [*active_records, *archive_records]
+    return {
+        "active_pages": len(active_records),
+        "archived_pages": len(archive_records),
+        "idea_pages": sum(1 for item in all_records if item.get("doc_status") == "idea"),
+        "in_progress_pages": sum(1 for item in all_records if item.get("doc_status") == "in_progress"),
+        "frozen_pages": sum(1 for item in all_records if item.get("doc_status") == "frozen"),
+        "low_confidence_pages": sum(1 for item in all_records if item.get("confidence") == "low"),
+        "stale_status_pages": sum(
+            1 for item in cache_payload.values() if isinstance(item, dict) and item.get("fetch_failed") is True
+        ),
     }
 
 
@@ -303,14 +401,20 @@ def build_report(project: Path) -> dict[str, object]:
         evidence_gaps.append(raw_code_gap_message)
 
     raw_image_count = count_raw_images(project)
+    raw_diagram_count = count_raw_diagrams(project)
+    drawio_status = drawio_repair_status(project)
     image_note_count = count_image_notes(project)
     image_candidates = image_refinement_candidates(project)
     status_doc = refinement_status(project)
     image_evidence_status = str(status_doc.get("image_evidence_status", "")).strip() or "unknown"
     image_evidence_gaps: list[str] = []
-    if raw_image_count and image_note_count == 0 and image_evidence_status not in {"complete", "not_applicable", "skipped_by_user"}:
+    if (raw_image_count or raw_diagram_count) and image_note_count == 0 and image_evidence_status not in {"complete", "not_applicable", "skipped_by_user"}:
         image_evidence_gaps.append(
-            "raw/ contains image assets but no staging/image-notes/ were found; after text/G+ completion, review high-value image evidence with `llm-wiki image`."
+            "raw/ contains image or draw.io diagram assets but no staging/image-notes/ were found; after text/G+ completion, review high-value visual evidence with `llm-wiki image`."
+        )
+    if drawio_status["missing_evidence_count"]:
+        image_evidence_gaps.append(
+            f"raw/ contains {drawio_status['missing_evidence_count']} draw.io diagram(s) without generated .drawio.md text evidence; run `llm-wiki update` to repair draw.io evidence."
         )
 
     if expects_raw and has_raw_dir and has_raw_files:
@@ -344,6 +448,8 @@ def build_report(project: Path) -> dict[str, object]:
         recommended_actions.append(
             "Run `llm-wiki image` for selective high-value image evidence after confirming the text layer is complete; do not batch-analyze low-value screenshots by default."
         )
+    if drawio_status["missing_evidence_count"]:
+        recommended_actions.insert(0, "Run `llm-wiki update` to generate missing draw.io Mermaid text evidence before semantic refinement.")
     if not business_context["has_valid_business_context"]:
         recommended_actions.insert(
             0,
@@ -351,6 +457,11 @@ def build_report(project: Path) -> dict[str, object]:
         )
 
     code_intelligence = code_intelligence_status(project)
+    cjira_registry = cjira_registry_status(project)
+    if cjira_registry["stale_status_pages"]:
+        recommended_actions.append(
+            "Refresh active cjira statuses with `llm-wiki update`; if Jira auth is missing, configure local SSO/Jira auth first."
+        )
     wiki_built = (project / "wiki" / "index.md").is_file()
     query_may_work_without_full_evidence = wiki_built and bool(evidence_gaps)
 
@@ -383,10 +494,13 @@ def build_report(project: Path) -> dict[str, object]:
         "code_evidence_mode": code_evidence_mode,
         "evidence_gaps": evidence_gaps,
         "raw_image_assets": raw_image_count,
+        "raw_drawio_assets": raw_diagram_count,
+        "drawio_repair": drawio_status,
         "image_notes": image_note_count,
         "image_evidence_status": image_evidence_status,
         "image_evidence_gaps": image_evidence_gaps,
         "image_refinement_candidates": image_candidates,
+        "cjira_registry": cjira_registry,
         "code_intelligence": code_intelligence,
         "recommended_actions": recommended_actions,
         "query_may_work_without_full_evidence": query_may_work_without_full_evidence,
@@ -412,7 +526,12 @@ def main() -> int:
     else:
         verdict = "pass" if report["ok"] else "fail"
         print(f"health={verdict}")
-        print(f"missing={len(missing)} empty={len(empty_pages)} broken_links={len(broken_links)}")
+        print(
+            "missing="
+            f"{len(report['missing_required_paths'])} "
+            f"empty={len(report['empty_pages'])} "
+            f"broken_links={len(report['broken_wikilinks'])}"
+        )
         print(f"report={out}")
 
     return 0 if report["ok"] else 1

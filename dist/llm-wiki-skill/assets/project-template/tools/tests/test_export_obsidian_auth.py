@@ -131,6 +131,18 @@ class ExportObsidianAuthTest(unittest.TestCase):
         self.assertTrue(args.auto_cookie_from_sso)
         self.assertEqual(args.jira_token, "jira-token-123")
 
+    def test_noninteractive_auto_sso_does_not_print_missing_auth_instructions(self):
+        export_obsidian = load_export_obsidian()
+        args = export_obsidian.parse_args(["--update", "--project-dir", "/tmp/kb"])
+        args.auto_cookie_from_sso = True
+        stderr = io.StringIO()
+
+        with mock.patch.object(sys, "stderr", stderr):
+            env_updates = export_obsidian.maybe_prompt_for_auth(args)
+
+        self.assertEqual(env_updates, {})
+        self.assertNotIn("Cwiki sync needs authentication", stderr.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

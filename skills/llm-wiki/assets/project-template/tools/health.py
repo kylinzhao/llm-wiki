@@ -30,6 +30,8 @@ REQUIRED_PATHS = [
 ]
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
+FENCED_CODE_RE = re.compile(r"(^|\n)(```|~~~).*?(?:\n\2|$)", re.DOTALL)
+INLINE_CODE_RE = re.compile(r"(?<!`)`(?!`)[^`\n]*`")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 DIAGRAM_EXTENSIONS = {".drawio", ".dio"}
 IMAGE_VALUE_KEYWORDS = {
@@ -92,12 +94,17 @@ def build_page_index(pages: list[Path], project: Path) -> set[str]:
     return names
 
 
+def strip_markdown_code(text: str) -> str:
+    text = FENCED_CODE_RE.sub(lambda match: match.group(1), text)
+    return INLINE_CODE_RE.sub("", text)
+
+
 def find_broken_links(project: Path, pages: list[Path]) -> list[dict[str, str]]:
     names = build_page_index(pages, project)
     broken: list[dict[str, str]] = []
     wiki = project / "wiki"
     for page in pages:
-        text = page.read_text(encoding="utf-8", errors="replace")
+        text = strip_markdown_code(page.read_text(encoding="utf-8", errors="replace"))
         rel = page.relative_to(wiki).as_posix()
         for target in WIKILINK_RE.findall(text):
             normalized = target.strip().removesuffix(".md")
@@ -519,7 +526,12 @@ def main() -> int:
     else:
         verdict = "pass" if report["ok"] else "fail"
         print(f"health={verdict}")
-        print(f"missing={len(missing)} empty={len(empty_pages)} broken_links={len(broken_links)}")
+        print(
+            "missing="
+            f"{len(report['missing_required_paths'])} "
+            f"empty={len(report['empty_pages'])} "
+            f"broken_links={len(report['broken_wikilinks'])}"
+        )
         print(f"report={out}")
 
     return 0 if report["ok"] else 1
