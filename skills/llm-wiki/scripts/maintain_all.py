@@ -50,6 +50,98 @@ def run_command(command: list[str], cwd: Path) -> tuple[int, str]:
     return result.returncode, result.stdout
 
 
+def git_output(project: Path, *args: str) -> tuple[int, str]:
+    return run_command(["git", *args], project)
+
+
+def git_has_path(project: Path) -> bool:
+    return (project / ".git").exists()
+
+
+def git_check_ignore(project: Path, path: str) -> bool:
+    code, _ = git_output(project, "check-ignore", "-q", path)
+    return code == 0
+
+
+def git_ls_files(project: Path, path: str) -> list[str]:
+    code, output = git_output(project, "ls-files", path)
+    return output.splitlines() if code == 0 else []
+
+
+def parse_simple_yaml(path: Path) -> dict[str, str]:
+    data: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if ":" not in line or line.lstrip().startswith("#"):
+            continue
+        key, value = line.split(":", 1)
+        data[key.strip()] = value.strip().strip("'\"")
+    return data
+
+
+def inspect_project_preflight(project: Path) -> dict[str, Any]:
+    blockers: list[str] = []
+    repairable: list[str] = []
+    warnings: list[str] = []
+
+    if not (project / "raw").is_dir():
+        blockers.append("missing_raw")
+    if not (project / "wiki").is_dir():
+        blockers.append("missing_wiki")
+    if not (project / "tools" / "update_wiki.py").is_file():
+        blockers.append("missing_tools_update_wiki")
+
+    if git_has_path(project):
+        status = git_ls_files(project, "raw")
+        if status:
+            blockers.append("raw_tracked_by_git")
+        tracked_raw_code = git_ls_files(project, "raw-code")
+        if tracked_raw_code:
+            blockers.append("raw_code_tracked_by_git")
+        if not git_check_ignore(project, "raw"):
+            warnings.append("raw_not_ignored")
+        if (project / "raw-code").exists() and not git_check_ignore(project, "raw-code"):
+            warnings.append("raw_code_not_ignored")
+        code, upstream = git_output(project, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+        if code != 0 or not upstream.strip():
+            blockers.append("missing_git_upstream")
+        else:
+            code, counts = git_output(project, "rev-list", "--left-right", "--count", f"{upstream.strip()}...HEAD")
+            if code == 0:
+                behind, ahead = [int(part) for part in counts.split()[:2]]
+                if behind:
+                    blockers.append(f"behind_upstream:{behind}")
+                if ahead:
+                    blockers.append(f"ahead_upstream:{ahead}")
+
+    raw_code = project / "raw-code"
+    if raw_code.is_dir():
+        manifest = project / "upstream" / "code-sources.json"
+        if not manifest.is_file():
+            repairable.append("missing_code_sources_manifest")
+        for child in sorted(raw_code.iterdir()):
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            metadata_path = child / ".llm-wiki-codebase.yaml"
+            if not metadata_path.is_file():
+                blockers.append(f"raw-code/{child.name}:missing_metadata")
+                continue
+            metadata = parse_simple_yaml(metadata_path)
+            code, status = git_output(child, "status", "--porcelain")
+            if code != 0:
+                blockers.append(f"raw-code/{child.name}:invalid_git_checkout")
+            elif status.strip():
+                blockers.append(f"raw-code/{child.name}:dirty")
+            repo_url = metadata.get("repo_url", "")
+            if repo_url.startswith("/") or repo_url.startswith("./") or repo_url.startswith("../"):
+                code, remote = git_output(child, "remote", "get-url", "origin")
+                if code == 0 and remote.strip():
+                    repairable.append(f"raw-code/{child.name}:local_repo_url_can_use_origin")
+                else:
+                    blockers.append(f"raw-code/{child.name}:local_repo_url_without_origin")
+
+    return {"blockers": blockers, "repairable": repairable, "warnings": warnings}
+
+
 def build_plan(
     *,
     registry_path: Path | None = None,
@@ -77,10 +169,23 @@ def build_plan(
         if project_registry.git_worktree_dirty(Path(path)):
             skipped.append({"project": path, "status": "skipped", "reason": "dirty_project_worktree"})
             continue
+        preflight = inspect_project_preflight(Path(path))
+        hard_blockers = list(preflight.get("blockers") or [])
+        if hard_blockers:
+            skipped.append(
+                {
+                    "project": path,
+                    "status": "skipped",
+                    "reason": "preflight_blocked",
+                    "preflight": preflight,
+                }
+            )
+            continue
         planned.append(
             {
                 "project": path,
                 "status": "planned",
+                "preflight": preflight,
                 "commands": [
                     f"python3 {SKILL_ROOT / 'scripts' / 'install_project_template.py'} --project {path} --engine-only --refresh-agent-rules",
                     "uv run python tools/backfill.py",
@@ -271,10 +376,20 @@ def print_plan(plan: dict[str, Any]) -> None:
     print("Dry-run plan")
     for item in plan.get("planned") or []:
         print(f"PLAN {item['project']}")
+        preflight = item.get("preflight") or {}
+        if preflight.get("repairable"):
+            print("  repairable=" + ",".join(preflight["repairable"]))
+        if preflight.get("warnings"):
+            print("  warnings=" + ",".join(preflight["warnings"]))
         for command in item.get("commands") or []:
             print(f"  + {command}")
     for item in plan.get("skipped") or []:
         print(f"SKIP {item['project']} reason={item['reason']}")
+        preflight = item.get("preflight") or {}
+        if preflight.get("blockers"):
+            print("  blockers=" + ",".join(preflight["blockers"]))
+        if preflight.get("repairable"):
+            print("  repairable=" + ",".join(preflight["repairable"]))
     for item in plan.get("removed") or []:
         print(f"REMOVED {item.get('path')}")
 

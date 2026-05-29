@@ -365,6 +365,20 @@ class ManagedRawCodeTests(unittest.TestCase):
 
         self.assertEqual([source["codebase_id"] for source in sources], ["alpha", "zeta"])
 
+    def test_codebase_ids_ignore_capability_and_traceability_page_stems(self):
+        manager = load_raw_code_manager()
+        ids = manager.codebase_ids_from_code_paths(
+            [
+                "wiki/code/capabilities/activity-coupon-marketing.md",
+                "wiki/code/traceability/activity-coupon-marketing.md",
+                "wiki/code/codebases/csp-rn-dcn/index.md",
+                "wiki/code/business-implementation-map.md",
+            ],
+            {"csp-rn-dcn", "dcn-center"},
+        )
+
+        self.assertEqual(ids, {"csp-rn-dcn"})
+
 
 if __name__ == "__main__":
     unittest.main()

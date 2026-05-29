@@ -388,13 +388,25 @@ class UpdateFailureReportTest(unittest.TestCase):
         update_wiki = load_update_wiki()
         root, source, project = make_source_repo_and_kb()
         self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)], check=False))
-        commit_code_page(project, "demo", relative_path="wiki/code/capabilities/demo.md")
+        commit_code_page(project, "demo", relative_path="wiki/code/codebases/demo/index.md")
 
         with capture_stderr() as stderr:
             result = update_wiki.run_code_sync(project, shared_mode=False)
 
         self.assertEqual(result, 2)
         self.assertIn("缺少代码证据源", stderr.getvalue())
+
+    def test_run_code_sync_ignores_capability_page_stem_without_manifest_source(self):
+        update_wiki = load_update_wiki()
+        root, source, project = make_source_repo_and_kb()
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)], check=False))
+        commit_code_page(project, "demo", relative_path="wiki/code/capabilities/activity-coupon-marketing.md")
+
+        with capture_stderr() as stderr:
+            result = update_wiki.run_code_sync(project, shared_mode=False)
+
+        self.assertEqual(result, 0)
+        self.assertNotIn("缺少代码证据源", stderr.getvalue())
 
     def test_run_code_sync_reports_permission_pull_failure_in_chinese(self):
         update_wiki = load_update_wiki()

@@ -17,6 +17,15 @@ from cjira_registry import discover_project_sources, read_registry, update_regis
 from drawio_repair import build_report as build_drawio_report
 from drawio_repair import write_report as write_drawio_report
 from project_registry import best_effort_register_current_project
+from raw_code_manager import (
+    RawCodeManagerError,
+    is_local_repo_url,
+    read_code_sources_manifest,
+    read_codebase_metadata,
+    run_git,
+    validate_code_sources_manifest,
+    write_code_sources_manifest,
+)
 
 
 BackfillPass = Callable[[Path], dict[str, object]]
@@ -170,8 +179,77 @@ def pass_wiki_export_state(project: Path) -> dict[str, object]:
     }
 
 
+def pass_code_sources(project: Path) -> dict[str, object]:
+    raw_code = project / "raw-code"
+    if not raw_code.is_dir():
+        return {
+            "status": "skipped",
+            "reason": "missing_raw_code",
+            "changed_count": 0,
+            "codebase_count": 0,
+            "affected_files": [],
+        }
+
+    sources: list[dict[str, object]] = []
+    blocked: list[dict[str, str]] = []
+    for entry in sorted(raw_code.iterdir()):
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+        metadata = read_codebase_metadata(entry)
+        if not metadata:
+            blocked.append({"codebase_id": entry.name, "reason": "missing_llm_wiki_codebase_metadata"})
+            continue
+        codebase_id = str(metadata.get("codebase_id") or entry.name)
+        repo_url = str(metadata.get("repo_url") or "")
+        if is_local_repo_url(repo_url):
+            remote = run_git(["remote", "get-url", "origin"], cwd=entry)
+            if remote.returncode == 0 and remote.stdout.strip():
+                repo_url = remote.stdout.strip()
+            else:
+                blocked.append({"codebase_id": entry.name, "reason": "local_repo_url_without_origin_remote"})
+                continue
+        sources.append(
+            {
+                "codebase_id": codebase_id,
+                "repo_url": repo_url,
+                "origin_ref": str(metadata.get("origin_ref") or metadata.get("default_branch") or ""),
+                "default_branch": str(metadata.get("default_branch") or metadata.get("origin_ref") or ""),
+                "target_dir": f"raw-code/{codebase_id}",
+                "enabled": True,
+                "managed": True,
+                "sync": {"mode": "ff-only"},
+            }
+        )
+
+    try:
+        normalized = validate_code_sources_manifest({"version": 1, "sources": sources}, shared_mode=True, project=project)
+    except RawCodeManagerError as exc:
+        return {
+            "status": "failed",
+            "changed_count": 0,
+            "codebase_count": len(sources),
+            "blocked": blocked,
+            "error": str(exc),
+        }
+
+    before = read_code_sources_manifest(project)
+    after = {"version": 1, "sources": normalized}
+    changed = before != after
+    if changed:
+        write_code_sources_manifest(project, after)
+
+    return {
+        "status": "ok",
+        "changed_count": 1 if changed else 0,
+        "codebase_count": len(normalized),
+        "blocked": blocked,
+        "affected_files": ["upstream/code-sources.json"] if changed else [],
+    }
+
+
 BACKFILL_PASSES: tuple[tuple[str, BackfillPass], ...] = (
     ("wiki_export_state", pass_wiki_export_state),
+    ("code_sources", pass_code_sources),
     ("drawio", pass_drawio),
     ("source_metadata", pass_source_metadata),
     ("cjira", pass_cjira),

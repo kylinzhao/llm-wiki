@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -119,6 +120,63 @@ class BackfillTest(unittest.TestCase):
                 "staging/wiki-export-state/export-state.json",
                 report["passes"]["wiki_export_state"]["affected_files"],
             )
+
+    def test_backfill_writes_code_sources_from_existing_managed_raw_code_metadata(self):
+        backfill = load_backfill()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            codebase = project / "raw-code" / "csp-rn-dcn"
+            codebase.mkdir(parents=True)
+            (codebase / ".llm-wiki-codebase.yaml").write_text(
+                "codebase_id: csp-rn-dcn\n"
+                "managed: true\n"
+                "repo_url: https://git.guazi-corp.com/c2b-fe/csp-rn-dcn\n"
+                "origin_ref: master\n"
+                "default_branch: master\n"
+                "managed_path: raw-code/csp-rn-dcn\n"
+                "created_by: llm-wiki-add-code\n",
+                encoding="utf-8",
+            )
+
+            report = backfill.run_backfill(project)
+
+            self.assertEqual(report["status"], "ok")
+            self.assertEqual(report["passes"]["code_sources"]["changed_count"], 1)
+            manifest = json.loads((project / "upstream" / "code-sources.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["version"], 1)
+            self.assertEqual(manifest["sources"][0]["codebase_id"], "csp-rn-dcn")
+            self.assertEqual(manifest["sources"][0]["target_dir"], "raw-code/csp-rn-dcn")
+            self.assertEqual(manifest["sources"][0]["sync"], {"mode": "ff-only"})
+            self.assertIn("upstream/code-sources.json", report["refinement_scope"]["files"])
+
+    def test_backfill_replaces_local_code_source_metadata_with_origin_remote(self):
+        backfill = load_backfill()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            codebase = project / "raw-code" / "global-bd"
+            codebase.mkdir(parents=True)
+            subprocess.run(["git", "init", "-b", "master"], cwd=codebase, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(
+                ["git", "remote", "add", "origin", "https://git.guazi-corp.com/oversea/global-bd"],
+                cwd=codebase,
+                check=True,
+            )
+            (codebase / ".llm-wiki-codebase.yaml").write_text(
+                "codebase_id: global-bd\n"
+                "managed: true\n"
+                f"repo_url: {codebase}\n"
+                "origin_ref: master\n"
+                "default_branch: master\n"
+                f"managed_path: {codebase}\n"
+                "created_by: llm-wiki-add-code\n",
+                encoding="utf-8",
+            )
+
+            report = backfill.run_backfill(project)
+
+            self.assertEqual(report["status"], "ok")
+            manifest = json.loads((project / "upstream" / "code-sources.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["sources"][0]["repo_url"], "https://git.guazi-corp.com/oversea/global-bd")
 
 
 if __name__ == "__main__":

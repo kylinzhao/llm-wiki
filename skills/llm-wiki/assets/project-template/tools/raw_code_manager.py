@@ -345,8 +345,6 @@ def codebase_ids_from_code_paths(paths: list[str], declared_ids: set[str]) -> se
         matched = declared_ids & candidates
         if matched:
             ids.update(matched)
-        elif stem:
-            ids.add(stem)
     return ids
 
 
