@@ -58,7 +58,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 
 ## Engine 发行（`engine-v*`）
 
-- **`engine-v0.1.0`**：冻结 `kb.manifest.yaml` 字段、`config/rss-feeds.yaml` 形状、`tools/rss_sync.py` 抓取与限速语义，以及 **`tools/update_wiki.py`** 优先的确定性更新链。详见仓库根目录 **`INSTRUCTION_AND_RELEASE_PLAN.md`**。对外 Git tag：`engine-v0.1.0`（在 `llm-wiki-skill` 仓库创建）。
+- **`engine-v1.0.0`**：冻结 `kb.manifest.yaml` 字段、`config/rss-feeds.yaml` 形状、`tools/rss_sync.py` 抓取与限速语义，以及 **`tools/update_wiki.py`** 优先的确定性更新链。详见仓库根目录 **`INSTRUCTION_AND_RELEASE_PLAN.md`**。对外 Git tag：`engine-v1.0.0`（在 `llm-wiki-skill` 仓库创建）。
 
 ## Bundle 内容
 

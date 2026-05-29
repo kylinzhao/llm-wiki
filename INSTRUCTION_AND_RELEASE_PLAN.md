@@ -137,9 +137,9 @@ llm-wiki-skill/
 
 安装脚本默认安全优先：如果目标 skill 已存在，会拒绝覆盖。使用 `--dry-run` 预览，使用 `--backup` 备份旧目录后安装，只有明确传 `--force` 才会删除旧目录。
 
-## engine-v0.1.0（发布切片）
+## engine-v1.0.0（发布切片）
 
-**标签：** Git tag `engine-v0.1.0` 打在 `llm-wiki-skill` 仓库；对应 **manifest + RSS + 确定性更新链** 契约冻结。
+**标签：** Git tag `engine-v1.0.0` 打在 `llm-wiki-skill` 仓库；对应 **manifest + RSS + 确定性更新链** 契约冻结。
 
 **包含：**
 
@@ -150,7 +150,7 @@ llm-wiki-skill/
 **`kb.manifest.yaml` 示例（冻结字段）：**
 
 ```yaml
-engine_version: "engine-v0.1.0"
+engine_version: "engine-v1.0.0"
 
 capabilities:
   - wiki.query

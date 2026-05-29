@@ -104,8 +104,11 @@ test_force_replaces_existing_skill() {
   run_install "$home" --copy --force >"$TMP_DIR/force.out"
 
   assert_file "$home/skills/llm-wiki/SKILL.md"
+  assert_file "$home/skills/llm-wiki/VERSION"
   assert_file "$home/skills/llm-wiki-backfill/SKILL.md"
   assert_no_path "$home/skills/llm-wiki/local.txt"
+  assert_contains "version: 1.0.0" "$home/skills/llm-wiki/VERSION"
+  assert_contains "engine_version: engine-v1.0.0" "$home/skills/llm-wiki/VERSION"
   assert_contains "replaced llm-wiki" "$TMP_DIR/force.out"
 }
 
