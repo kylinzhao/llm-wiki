@@ -425,7 +425,7 @@ def parse_args() -> argparse.Namespace:
         default="",
         help=(
             "Directory for export-state.json, progress/*.json, and manifest-*.json. "
-            "When omitted and --output-dir ends with raw/, defaults to <project>/staging/wiki-export."
+            "When omitted and --output-dir ends with raw/, defaults to <project>/staging/wiki-export-state."
         ),
     )
     parser.add_argument(
@@ -1111,13 +1111,13 @@ def resolve_metadata_dir(output_dir: Path, metadata_dir_arg: str) -> Path:
     """Where export-state, manifests, and crawl progress live.
 
     For LLM Wiki projects, ``output_dir`` is typically ``.../raw``; metadata then defaults to
-    ``.../staging/wiki-export`` so ``raw/`` only contains page folders and assets.
+    ``.../staging/wiki-export-state`` so ``raw/`` only contains page folders and assets.
     """
     text = (metadata_dir_arg or "").strip()
     if text:
         return Path(text).expanduser().resolve()
     if output_dir.name == "raw":
-        return (output_dir.parent / "staging" / "wiki-export").resolve()
+        return (output_dir.parent / "staging" / "wiki-export-state").resolve()
     return output_dir.resolve()
 
 

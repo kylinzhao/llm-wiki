@@ -1,7 +1,12 @@
 raw/
+raw/progress/
+raw/export-state.json
+raw/.obsidian-wiki-export/
+raw/rss/
+raw/staging/rss/
+raw-code/
 .DS_Store
 **/.DS_Store
 __pycache__/
 .pytest_cache/
 graphify-out/
-

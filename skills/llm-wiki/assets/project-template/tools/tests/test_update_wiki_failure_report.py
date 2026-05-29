@@ -251,10 +251,66 @@ class UpdateFailureReportTest(unittest.TestCase):
 
             self.assertEqual(config["sources"][0]["page_id"], "638576143")
             self.assertEqual(config["sources"][0]["depth"], 3)
+            self.assertEqual(config["sources"][0]["metadata_dir"], "staging/wiki-export-state")
             self.assertEqual(len(commands), 1)
             self.assertIn("--update", commands[0])
             self.assertIn("--rss-include-new", commands[0])
+            self.assertIn(str(project / "staging" / "wiki-export-state"), commands[0])
             self.assertIn("638576143=https://cwiki.guazi.com/spaces/createrssfeed.action?x=1", commands[0])
+
+    def test_upstream_wiki_sources_normalizes_metadata_dir(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source = {
+                "type": "confluence",
+                "page_id": "123",
+                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=123",
+                "depth": 2,
+            }
+
+            update_wiki.write_upstream_wiki_sources(project, [source])
+
+            payload = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["sources"][0]["metadata_dir"], "staging/wiki-export-state")
+
+    def test_upstream_wiki_sources_converts_project_absolute_metadata_dir(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source = {
+                "type": "confluence",
+                "page_id": "123",
+                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=123",
+                "depth": 2,
+                "metadata_dir": str(project / "staging" / "wiki-export-state"),
+            }
+
+            update_wiki.write_upstream_wiki_sources(project, [source])
+
+            payload = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["sources"][0]["metadata_dir"], "staging/wiki-export-state")
+
+    def test_upstream_wiki_sources_rejects_external_absolute_metadata_dir(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source = {
+                "type": "confluence",
+                "page_id": "123",
+                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=123",
+                "depth": 2,
+                "metadata_dir": "/tmp/outside-wiki-export-state",
+            }
+
+            with self.assertRaises(ValueError):
+                update_wiki.write_upstream_wiki_sources(project, [source])
 
     def test_confluence_sync_uses_normal_export_when_progress_state_is_missing(self):
         import tempfile
@@ -358,10 +414,10 @@ class UpdateFailureReportTest(unittest.TestCase):
             config = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
 
             self.assertEqual(config["sources"][0]["page_id"], "642319072")
-            self.assertEqual(config["sources"][0]["metadata_dir"], "raw")
+            self.assertEqual(config["sources"][0]["metadata_dir"], "staging/wiki-export-state")
             self.assertEqual(config["sources"][0]["source_id"], "cwiki-642319072")
             self.assertEqual(config["sources"][0]["relationship"]["role"], "primary")
-            self.assertIn(str(project / "raw"), commands[0])
+            self.assertIn(str(project / "staging" / "wiki-export-state"), commands[0])
 
     def test_cwiki_rss_with_source_url_migrates_to_confluence_source(self):
         import tempfile
