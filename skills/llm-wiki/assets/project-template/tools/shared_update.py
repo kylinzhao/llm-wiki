@@ -65,14 +65,10 @@ INCLUDE_PATTERNS = (
     "docs/query-acceptance.md",
     "docs/*quality-audit*.md",
     "docs/*tooling*.md",
-    "staging/update/latest.*",
-    "staging/refinement-status.md",
-    "staging/refinement-plan.json",
-    "staging/source-manifest.json",
-    "staging/code-graph/**",
-    "staging/traceability/**",
+    "staging/**",
     "graph/**",
     "index/**",
+    "tools/**",
 )
 EXCLUDE_PATTERNS = (
     "raw/**",
