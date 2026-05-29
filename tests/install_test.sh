@@ -82,6 +82,7 @@ test_dry_run_does_not_write() {
   assert_contains "dry-run" "$TMP_DIR/dry-run.out"
   assert_contains "would copy llm-wiki" "$TMP_DIR/dry-run.out"
   assert_contains "would copy llm-wiki-backfill" "$TMP_DIR/dry-run.out"
+  assert_contains "would copy llm-wiki-maintain-all" "$TMP_DIR/dry-run.out"
 }
 
 test_backup_preserves_existing_skill() {
@@ -115,6 +116,7 @@ test_force_replaces_existing_skill() {
   assert_contains "必须默认使用中文" "$home/skills/llm-wiki/SKILL.md"
   assert_contains "Markdown 知识文档必须使用中文" "$home/skills/llm-wiki/SKILL.md"
   assert_file "$home/skills/llm-wiki-backfill/SKILL.md"
+  assert_file "$home/skills/llm-wiki-maintain-all/SKILL.md"
   assert_contains "语言要求" "$home/skills/llm-wiki-backfill/SKILL.md"
   assert_no_path "$home/skills/llm-wiki/local.txt"
   assert_contains "version: 1.0.0" "$home/skills/llm-wiki/VERSION"

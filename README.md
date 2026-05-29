@@ -173,6 +173,7 @@ qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
 | `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断 wiki 健康度、质量问题、缺口、过期页面和下一步动作；集合原 audit 能力。 |
 | `$llm-wiki-update` | `llm-wiki update` | `raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 页面或源码变化后的影响范围更新；也负责续跑、精修、代码 wiki、traceability 和收口检查；自动维护 `AGENTS.md` 查询路由规则。 |
 | `$llm-wiki-backfill` | `llm-wiki backfill` | 存量 KB 历史证据补全；重新扫描历史 raw/wiki/staging，补齐新版确定性派生能力，并继续进入 source/G+ 精修吸收。 |
+| `$llm-wiki-maintain-all` | `llm-wiki maintain-all` | 维护本机已注册 KB registry；默认 dry-run，可发现、列出、清理 missing 项，并在确认后批量执行完整 backfill/update 维护。 |
 | `$llm-wiki-update-skill` | `llm-wiki update-skill` | 显式更新本机安装的 llm-wiki skill bundle、模板脚本和命令协议；不更新当前 KB 内容。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 把另一个文档库、wiki 导出、Markdown 目录、Confluence 导出、文档目录或 wiki URL 加入 `raw/` 原始证据层。 |
 | `$llm-wiki-add-code` | `llm-wiki add-code` | 把另一个本地仓库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout，并构建代码 wiki、能力页和必要 traceability。缺少仓库权限时必须立即终止。 |
