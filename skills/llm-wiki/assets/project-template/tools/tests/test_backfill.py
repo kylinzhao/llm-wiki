@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 TOOLS_DIR = Path(__file__).resolve().parents[1]
@@ -29,6 +30,15 @@ DRAWIO_XML = """<mxfile><diagram name="流程"><mxGraphModel><root>
 
 
 class BackfillTest(unittest.TestCase):
+    def test_run_backfill_registers_current_project_best_effort(self):
+        backfill = load_backfill()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            with mock.patch.object(backfill, "best_effort_register_current_project", create=True) as register:
+                backfill.run_backfill(project)
+
+            register.assert_called_once_with(project.resolve())
+
     def test_backfill_repairs_historical_evidence_and_requests_refinement_absorption(self):
         backfill = load_backfill()
         with tempfile.TemporaryDirectory() as tmp:

@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -99,6 +100,13 @@ def register_project(
     payload["projects"] = sorted(projects, key=lambda item: str(item.get("path") or ""))
     save_registry(payload, registry_path)
     return existing
+
+
+def best_effort_register_current_project(project: Path) -> None:
+    try:
+        register_project(project)
+    except Exception as exc:
+        print(f"registry_warning={exc}", file=sys.stderr)
 
 
 def discover_projects(root: Path) -> list[Path]:
