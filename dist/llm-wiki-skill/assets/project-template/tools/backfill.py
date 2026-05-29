@@ -16,6 +16,7 @@ from build_wiki import backfill_source_page, discover_sources
 from cjira_registry import discover_project_sources, read_registry, update_registry_for_sources
 from drawio_repair import build_report as build_drawio_report
 from drawio_repair import write_report as write_drawio_report
+from project_registry import best_effort_register_current_project
 
 
 BackfillPass = Callable[[Path], dict[str, object]]
@@ -248,6 +249,7 @@ def write_markdown_report(project: Path, report: dict[str, object]) -> None:
 
 def run_backfill(project: Path) -> dict[str, object]:
     project = project.resolve()
+    best_effort_register_current_project(project)
     passes: dict[str, dict[str, object]] = {}
     for name, runner in BACKFILL_PASSES:
         try:

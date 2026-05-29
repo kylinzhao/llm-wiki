@@ -26,6 +26,7 @@
 - `用 $llm-wiki doctor 看看整个站点健康度、缺口和下一步建议。`
 - `用 $llm-wiki update 响应这次文档和代码变更，只更新受影响页面；如果项目已配置 RSS/feed 或接入了 raw-code codebase，就先默认刷新它们；结束前自动检查收口。`
 - `用 $llm-wiki-backfill 补齐老知识库的历史 draw.io、Jira/Cjira、source metadata 等证据，并继续精修吸收。`
+- `用 $llm-wiki-maintain-all 发现并维护本机已注册的多个 KB，先 dry-run 再确认 apply。`
 - `用 $llm-wiki update-skill 更新本机安装的 llm-wiki skill bundle。`
 - `用 $llm-wiki review-requirement 帮我 review 这个 Cwiki 需求，并输出评论稿。`
 - `用 $llm-wiki update 补某个业务能力的需求到代码追踪矩阵。`
@@ -41,6 +42,7 @@
 | `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断项目健康度、质量问题、缺口和下一步；集合原 audit 能力。 |
 | `$llm-wiki-update` | `llm-wiki update` | 输入、wiki 或源码变化后的影响范围更新；也负责续跑、精修、代码 wiki、traceability 和收口检查；会自动维护 `AGENTS.md` 查询路由规则。 |
 | `$llm-wiki-backfill` | `llm-wiki backfill` | 存量 KB 历史证据补全；重新扫描历史 raw/wiki/staging，补齐新版确定性派生能力，并继续进入 source/G+ 精修吸收。 |
+| `$llm-wiki-maintain-all` | `llm-wiki maintain-all` | 维护本机已注册 KB registry；默认 dry-run，可发现、列出、清理 missing 项，并在确认后批量执行完整 backfill/update 维护。 |
 | `$llm-wiki-update-skill` | `llm-wiki update-skill` | 显式更新本机安装的 llm-wiki skill bundle；不更新当前 KB 内容。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 接入新的文档/wiki 来源到 `raw/`。 |
 | `$llm-wiki-add-code` | `llm-wiki add-code` | 接入新的源码库到 `raw-code/`，并构建代码 wiki、能力页和必要 traceability。 |
@@ -48,6 +50,8 @@
 | `$llm-wiki-query-plus` | `llm-wiki query-plus` | 同时回答业务/需求口径与代码实现证据，适合需要更详尽联动分析的问题。 |
 | `$llm-wiki-image` | `llm-wiki image` | 补充高价值图片证据。 |
 | `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧调用；实际转向 `$requirement-review`。 |
+
+`llm-wiki maintain-all` 使用本机 `~/.llm-wiki/projects.json` registry。常用操作包括 `--discover <dir>` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，以及用户确认后的 `--apply` 批量执行完整 backfill/update 维护；默认不加 `--apply` 时只输出 dry-run 计划。
 
 这些 wrapper 只负责路由。完整规则仍以 `SKILL.md` 和 [commands.md](./references/commands.md) 为准。
 

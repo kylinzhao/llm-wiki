@@ -198,7 +198,15 @@ def main() -> int:
     if not args.backup and not args.force:
         install_command.append("--backup")
 
-    return run(install_command, bundle_root)
+    code = run(install_command, bundle_root)
+    if code == 0:
+        print(
+            "Installed llm-wiki skill updated. Existing KB projects keep their project-local tools until refreshed."
+        )
+        print(
+            "Run `llm-wiki maintain-all` / `$llm-wiki-maintain-all` to preview batch backfill/update for registered KBs."
+        )
+    return code
 
 
 if __name__ == "__main__":

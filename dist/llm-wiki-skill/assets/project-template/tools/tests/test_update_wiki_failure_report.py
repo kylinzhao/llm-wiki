@@ -3,6 +3,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 TOOLS_DIR = Path(__file__).resolve().parents[1]
@@ -18,6 +19,28 @@ def load_update_wiki():
 
 
 class UpdateFailureReportTest(unittest.TestCase):
+    def test_main_registers_current_project_best_effort(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            with mock.patch.object(update_wiki, "best_effort_register_current_project", create=True) as register, mock.patch.object(
+                update_wiki, "prepare_raw_evidence", return_value=(0, None)
+            ), mock.patch.object(update_wiki, "raw_evidence_preflight_failed", return_value=None), mock.patch.object(
+                update_wiki, "run_drawio_repair", return_value=0
+            ), mock.patch.object(update_wiki, "run_code_sync", return_value=0), mock.patch.object(
+                update_wiki, "deterministic_steps", return_value=[]
+            ), mock.patch.object(update_wiki, "write_success_report"):
+                original_argv = sys.argv
+                try:
+                    sys.argv = ["update_wiki.py", "--project", str(project), "--no-agent-rules-refresh"]
+                    self.assertEqual(update_wiki.main(), 0)
+                finally:
+                    sys.argv = original_argv
+
+            register.assert_called_once_with(project.resolve())
+
     def test_run_code_sync_blocks_legacy_unmanaged_raw_code_directory(self):
         import tempfile
 
