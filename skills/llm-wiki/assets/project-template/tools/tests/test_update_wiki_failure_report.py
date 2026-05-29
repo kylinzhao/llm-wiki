@@ -214,6 +214,28 @@ def run_code_page_without_source(update_wiki):
 
 
 class UpdateFailureReportTest(unittest.TestCase):
+    def test_main_registers_current_project_best_effort(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            with mock.patch.object(update_wiki, "best_effort_register_current_project", create=True) as register, mock.patch.object(
+                update_wiki, "prepare_raw_evidence", return_value=(0, None)
+            ), mock.patch.object(update_wiki, "raw_evidence_preflight_failed", return_value=None), mock.patch.object(
+                update_wiki, "run_drawio_repair", return_value=0
+            ), mock.patch.object(update_wiki, "run_code_sync", return_value=0), mock.patch.object(
+                update_wiki, "deterministic_steps", return_value=[]
+            ), mock.patch.object(update_wiki, "write_success_report"):
+                original_argv = sys.argv
+                try:
+                    sys.argv = ["update_wiki.py", "--project", str(project), "--no-agent-rules-refresh"]
+                    self.assertEqual(update_wiki.main(), 0)
+                finally:
+                    sys.argv = original_argv
+
+            register.assert_called_once_with(project.resolve())
+
     def test_run_code_sync_blocks_legacy_unmanaged_raw_code_directory(self):
         import tempfile
 
@@ -530,6 +552,31 @@ class UpdateFailureReportTest(unittest.TestCase):
             self.assertEqual(latest["skipped_steps"], ["raw_sync"])
             self.assertIn("Status: `ok`", (report_dir / "latest.md").read_text(encoding="utf-8"))
 
+    def test_success_report_records_graphify_decisions(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+
+            update_wiki.write_success_report(
+                project,
+                graphify_decisions=[
+                    {
+                        "codebase_id": "demo",
+                        "decision": "skipped_upstream_sufficient",
+                        "should_run": False,
+                        "reason": "upstream docs/wiki and scan anchors are sufficient",
+                    }
+                ],
+            )
+
+            latest = json.loads((project / "staging" / "update" / "latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(latest["graphify_decisions"][0]["decision"], "skipped_upstream_sufficient")
+            latest_md = (project / "staging" / "update" / "latest.md").read_text(encoding="utf-8")
+            self.assertIn("## Graphify Decisions", latest_md)
+            self.assertIn("skipped_upstream_sufficient", latest_md)
+
     def test_rss_sync_enabled_defaults_on_and_respects_false_manifest_flag(self):
         import tempfile
 
@@ -607,10 +654,66 @@ class UpdateFailureReportTest(unittest.TestCase):
 
             self.assertEqual(config["sources"][0]["page_id"], "638576143")
             self.assertEqual(config["sources"][0]["depth"], 3)
+            self.assertEqual(config["sources"][0]["metadata_dir"], "staging/wiki-export-state")
             self.assertEqual(len(commands), 1)
             self.assertIn("--update", commands[0])
             self.assertIn("--rss-include-new", commands[0])
+            self.assertIn(str(project / "staging" / "wiki-export-state"), commands[0])
             self.assertIn("638576143=https://cwiki.guazi.com/spaces/createrssfeed.action?x=1", commands[0])
+
+    def test_upstream_wiki_sources_normalizes_metadata_dir(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source = {
+                "type": "confluence",
+                "page_id": "123",
+                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=123",
+                "depth": 2,
+            }
+
+            update_wiki.write_upstream_wiki_sources(project, [source])
+
+            payload = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["sources"][0]["metadata_dir"], "staging/wiki-export-state")
+
+    def test_upstream_wiki_sources_converts_project_absolute_metadata_dir(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source = {
+                "type": "confluence",
+                "page_id": "123",
+                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=123",
+                "depth": 2,
+                "metadata_dir": str(project / "staging" / "wiki-export-state"),
+            }
+
+            update_wiki.write_upstream_wiki_sources(project, [source])
+
+            payload = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["sources"][0]["metadata_dir"], "staging/wiki-export-state")
+
+    def test_upstream_wiki_sources_rejects_external_absolute_metadata_dir(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source = {
+                "type": "confluence",
+                "page_id": "123",
+                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=123",
+                "depth": 2,
+                "metadata_dir": "/tmp/outside-wiki-export-state",
+            }
+
+            with self.assertRaises(ValueError):
+                update_wiki.write_upstream_wiki_sources(project, [source])
 
     def test_confluence_sync_uses_normal_export_when_progress_state_is_missing(self):
         import tempfile
@@ -714,10 +817,10 @@ class UpdateFailureReportTest(unittest.TestCase):
             config = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))
 
             self.assertEqual(config["sources"][0]["page_id"], "642319072")
-            self.assertEqual(config["sources"][0]["metadata_dir"], "raw")
+            self.assertEqual(config["sources"][0]["metadata_dir"], "staging/wiki-export-state")
             self.assertEqual(config["sources"][0]["source_id"], "cwiki-642319072")
             self.assertEqual(config["sources"][0]["relationship"]["role"], "primary")
-            self.assertIn(str(project / "raw"), commands[0])
+            self.assertIn(str(project / "staging" / "wiki-export-state"), commands[0])
 
     def test_cwiki_rss_with_source_url_migrates_to_confluence_source(self):
         import tempfile

@@ -22,7 +22,7 @@ DEPRECATED_SKILLS=(
 usage() {
   cat <<'EOF' >&2
 Usage: install.sh [--copy|--link] [--dry-run] [--force|--backup]
-                  [--client auto|codex|claude|cursor|all]
+                  [--client auto|codex|claude|cursor|qoder|all]
                   [--dest <skills_dir>]
                   [--backup-dir <dir>]
 
@@ -34,6 +34,7 @@ Client default destinations:
   codex  -> ${CODEX_HOME:-$HOME/.codex}/skills
   claude -> ${CLAUDE_HOME:-$HOME/.claude}/skills
   cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
+  qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
 
 Backup default destination (when --backup):
   ${LLM_WIKI_SKILL_BACKUP_DIR:-$HOME/.llm-wiki-skill-backups}
@@ -62,6 +63,9 @@ default_dest_for_client() {
     cursor)
       printf '%s\n' "${CURSOR_HOME:-$HOME/.cursor}/skills"
       ;;
+    qoder)
+      printf '%s\n' "${QODER_HOME:-$HOME/.qoder}/skills"
+      ;;
     *)
       echo "Unsupported client: $client" >&2
       exit 2
@@ -76,14 +80,15 @@ resolve_clients() {
       [[ -n "${CODEX_HOME:-}" || -d "$HOME/.codex" ]] && clients+=("codex")
       [[ -n "${CLAUDE_HOME:-}" || -d "$HOME/.claude" ]] && clients+=("claude")
       [[ -n "${CURSOR_HOME:-}" || -d "$HOME/.cursor" ]] && clients+=("cursor")
+      [[ -n "${QODER_HOME:-}" || -d "$HOME/.qoder" ]] && clients+=("qoder")
       if ((${#clients[@]} == 0)); then
         clients=("codex")
       fi
       ;;
     all)
-      clients=("codex" "claude" "cursor")
+      clients=("codex" "claude" "cursor" "qoder")
       ;;
-    codex|claude|cursor)
+    codex|claude|cursor|qoder)
       clients=("$CLIENT")
       ;;
     *)

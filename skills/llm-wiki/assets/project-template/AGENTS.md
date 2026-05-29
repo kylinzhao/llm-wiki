@@ -21,11 +21,18 @@ before answering from general model memory.
 - Do not answer business facts from memory when relevant wiki evidence exists.
   Cite the supporting wiki/source pages and call out evidence gaps.
 
+## Language Requirements
+
+- Use Chinese for user-facing LLM Wiki answers, diagnostics, review reports, and final summaries by default.
+- Generate or rewrite Markdown knowledge documents in `wiki/`, `docs/`, and `staging/` in Chinese by default.
+- Keep code identifiers, commands, paths, API names, config keys, English proper nouns, and verbatim evidence excerpts in their original form when needed; explain them in Chinese.
+- Use another language only when the user explicitly asks for it.
+
 ## Evidence Boundaries
 
 - `raw/` is immutable source evidence. Read it; do not edit it.
 - `raw-code/` is immutable code evidence. Read it; do not edit it.
-- Do not commit `raw/` unless the owner explicitly asks for that.
+- Keep `raw/` uncommitted. Gateway publish sync commits canonical staging state and generated wiki artifacts, while raw evidence is refreshed locally through wiki export/sync.
 - Do not write secrets, cookies, tokens, private keys, or full sensitive config values into `wiki/`.
 
 ## Build Commands

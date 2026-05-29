@@ -30,6 +30,8 @@ REQUIRED_PATHS = [
 ]
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
+FENCED_CODE_RE = re.compile(r"(^|\n)(```|~~~).*?(?:\n\2|$)", re.DOTALL)
+INLINE_CODE_RE = re.compile(r"(?<!`)`(?!`)[^`\n]*`")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 DIAGRAM_EXTENSIONS = {".drawio", ".dio"}
 IMAGE_VALUE_KEYWORDS = {
@@ -92,12 +94,17 @@ def build_page_index(pages: list[Path], project: Path) -> set[str]:
     return names
 
 
+def strip_markdown_code(text: str) -> str:
+    text = FENCED_CODE_RE.sub(lambda match: match.group(1), text)
+    return INLINE_CODE_RE.sub("", text)
+
+
 def find_broken_links(project: Path, pages: list[Path]) -> list[dict[str, str]]:
     names = build_page_index(pages, project)
     broken: list[dict[str, str]] = []
     wiki = project / "wiki"
     for page in pages:
-        text = page.read_text(encoding="utf-8", errors="replace")
+        text = strip_markdown_code(page.read_text(encoding="utf-8", errors="replace"))
         rel = page.relative_to(wiki).as_posix()
         for target in WIKILINK_RE.findall(text):
             normalized = target.strip().removesuffix(".md")
@@ -261,8 +268,9 @@ def code_intelligence_status(project: Path) -> dict[str, object]:
     root = project / "staging" / "code-graph"
     detected: list[str] = []
     fallback_only: list[str] = []
+    details: dict[str, dict[str, object]] = {}
     if not root.is_dir():
-        return {"detected_codebases": detected, "fallback_only_codebases": fallback_only}
+        return {"detected_codebases": detected, "fallback_only_codebases": fallback_only, "details": details}
     for summary_path in sorted(root.glob("*/upstream-summary.json")):
         try:
             payload = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -272,11 +280,18 @@ def code_intelligence_status(project: Path) -> dict[str, object]:
             continue
         codebase_id = str(payload.get("codebase_id") or summary_path.parent.name)
         upstream_type = str(payload.get("upstream_type") or "none")
+        details[codebase_id] = {
+            "upstream_wiki_present": upstream_type != "none",
+            "upstream_type": upstream_type,
+            "upstream_adapter_status": str(payload.get("adapter_status") or "skipped"),
+            "upstream_source_map_entries": int(payload.get("source_map_entries") or 0),
+            "upstream_warning_count": int(payload.get("warning_count") or 0),
+        }
         if upstream_type == "none":
             fallback_only.append(codebase_id)
         else:
             detected.append(codebase_id)
-    return {"detected_codebases": detected, "fallback_only_codebases": fallback_only}
+    return {"detected_codebases": detected, "fallback_only_codebases": fallback_only, "details": details}
 
 
 def business_context_status(project: Path) -> dict[str, object]:
@@ -511,7 +526,12 @@ def main() -> int:
     else:
         verdict = "pass" if report["ok"] else "fail"
         print(f"health={verdict}")
-        print(f"missing={len(missing)} empty={len(empty_pages)} broken_links={len(broken_links)}")
+        print(
+            "missing="
+            f"{len(report['missing_required_paths'])} "
+            f"empty={len(report['empty_pages'])} "
+            f"broken_links={len(report['broken_wikilinks'])}"
+        )
         print(f"report={out}")
 
     return 0 if report["ok"] else 1

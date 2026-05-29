@@ -39,6 +39,12 @@ class SourceV2BuildWikiTest(unittest.TestCase):
         self.assertIn("待基于", overview)
         self.assertIn("# 检索手册", playbook)
         self.assertIn("先读取 `BUSINESS_CONTEXT.md`", playbook)
+        self.assertIn("## 查询意图路由", playbook)
+        self.assertIn("通用扩展层", playbook)
+        self.assertIn("专项目录层", playbook)
+        self.assertIn("`wiki/concepts/` 和 `wiki/entities/` 不是最终证据层", playbook)
+        self.assertIn("不要把 `wiki/code/` 作为业务规则的主证据", playbook)
+        self.assertIn("已有 KB 的本文件不会被 `update` 静默覆盖", playbook)
         self.assertIn("## 来源", source)
         self.assertIn("待完成 AI 原生摘要", source)
 
@@ -283,6 +289,33 @@ Operational RSS metadata.
             self.assertIn("## Delivery Tracking", source_text)
             self.assertIn("- Primary Jira: `PSP-40038`", source_text)
             self.assertIn('"primary_cjira": "PSP-40038"', source_text)
+
+    def test_generated_prototype_notes_are_sources_but_extracted_assets_are_not(self):
+        import tempfile
+
+        build_wiki = load_build_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            page = tmp_path / "raw" / "669314782-保证金需求" / "index.md"
+            assets = page.parent / "assets"
+            prototype_dir = assets / "prototypes" / "prototype"
+            prototype_dir.mkdir(parents=True)
+            page.write_text(
+                "# 保证金需求\n\n"
+                "## Prototype Attachments\n\n"
+                "- 原型证据: [`assets/prototype.zip.prototype.md`](assets/prototype.zip.prototype.md)\n",
+                encoding="utf-8",
+            )
+            (assets / "prototype.zip").write_bytes(b"binary")
+            (assets / "prototype.zip.prototype.md").write_text("# Prototype Evidence\n\n确认提交\n", encoding="utf-8")
+            (prototype_dir / "index.html").write_text("<html><body>extracted duplicate</body></html>", encoding="utf-8")
+
+            build_wiki.main_for_project(tmp_path)
+
+            sources = sorted(path.name for path in (tmp_path / "wiki" / "sources").glob("*.md"))
+
+        self.assertIn("669314782-保证金需求-assets-prototype.zip.prototype.md", sources)
+        self.assertNotIn("669314782-保证金需求-assets-prototypes-prototype-index.md", sources)
 
 
 if __name__ == "__main__":

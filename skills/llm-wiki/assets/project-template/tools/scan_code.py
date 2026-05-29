@@ -10,6 +10,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from code_candidates import build_code_candidates
+from code_freshness import compute_freshness
 from code_intelligence import collect_upstream_summary, resolve_code_intelligence
 from wiki_preflight import raw_code_evidence_preflight_failed, wiki_expects_raw_code
 
@@ -186,9 +188,12 @@ def codebase_page(
 - Type: `{upstream_type}`
 - Discovery mode: `{upstream_summary.get('discovery_mode', 'unknown')}`
 - Root: `{upstream_summary.get('root', '')}`
+- Preferred entry: `{upstream_summary.get('preferred_entry', upstream_summary.get('index_path', ''))}`
+- Adapter status: `{upstream_summary.get('adapter_status', 'unknown')}`
 - Topics: {upstream_summary.get('topic_count', 0)}
 - Concepts: {upstream_summary.get('concept_count', 0)}
 - Source map entries: {upstream_summary.get('source_map_entries', 0)}
+- Adapter warnings: {upstream_summary.get('warning_count', 0)}
 
 This upstream wiki is a derived hint. Direct code anchors are still required before claiming implementation certainty.
 """
@@ -228,6 +233,7 @@ def scan_codebase(project: Path, root: Path) -> dict[str, object]:
     upstream_summary = collect_upstream_summary(project, codebase, upstream)
 
     out_dir = project / "staging" / "code-graph" / codebase
+    freshness = compute_freshness(project, codebase, root, files, facts)
     write(
         out_dir / "manifest.json",
         json.dumps(
@@ -255,16 +261,21 @@ def scan_codebase(project: Path, root: Path) -> dict[str, object]:
     ]
     write(out_dir / "endpoint-map.json", json.dumps(endpoint_rows, ensure_ascii=False, indent=2) + "\n")
     write(out_dir / "upstream-summary.json", json.dumps(upstream_summary, ensure_ascii=False, indent=2) + "\n")
+    write(out_dir / "freshness.json", json.dumps(freshness, ensure_ascii=False, indent=2) + "\n")
     write(
         project / "wiki" / "code" / "codebases" / codebase / "index.md",
         codebase_page(codebase, stack, facts, upstream_summary),
     )
+    candidate_summary = build_code_candidates(project, codebase)
     return {
         "codebase_id": codebase,
         "stack": stack,
         "file_count": len(files),
         "endpoint_candidates": len(endpoint_rows),
         "upstream_type": upstream_summary.get("upstream_type", "none"),
+        "structural_change_level": freshness.get("structural_change_level", "none"),
+        "anchor_candidates": candidate_summary.get("anchor_candidate_count", 0),
+        "capability_candidates": candidate_summary.get("capability_candidate_count", 0),
     }
 
 

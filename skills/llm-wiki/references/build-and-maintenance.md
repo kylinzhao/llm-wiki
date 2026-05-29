@@ -103,10 +103,11 @@ uv run python tools/anchor_check.py
 
 - **`export_obsidian_wiki.py`**：入口脚本（Cookie、`--project-dir`、`--levels`、`--update`）。
 - **`export_confluence_tree.py`**：REST API 拉取页面树、本地化 wiki 域内图片、写 Markdown。
-- 页面证据落在 **`raw/<pageId>-<slug>/index.md`**（及 `assets/`）；导出状态与 manifest 默认在 **`staging/wiki-export/`**，与 `rss_sync.py` 的通用 RSS 快照不同用途——前者拉完整 wiki 页面内容，后者只做 feed 条目镜像。
+- 页面证据落在 **`raw/<pageId>-<slug>/index.md`**（及 `assets/`）；导出状态与 manifest 默认在 **`staging/wiki-export-state/`**，与 `rss_sync.py` 的通用 RSS 快照不同用途——前者拉完整 wiki 页面内容，后者只做 feed 条目镜像。
+- Cwiki `.zip` 附件会按可能的 HTML 原型处理：zip 本体保存在 `assets/`，解压内容保存在 `assets/prototypes/<name>/`，可读摘要写入 `assets/<name>.zip.prototype.md` 并回链到页面正文。
 - 项目级上游配置落在 **`upstream/wiki-sources.json`**。0-1 从 Cwiki URL 导出成功后必须写入该文件；`tools/update_wiki.py` 会优先读取它并在确定性构建前自动运行 Cwiki `--update`。
 - 日期筛选统一写在 `filters.updated_since`，例如 `"filters": {"updated_since": "2025-10-01"}`。历史顶层 `updated_since` 只作为兼容输入。
-- 旧项目如果只有 `staging/wiki-export/export-state.json` 或历史 `raw/export-state.json`，`tools/update_wiki.py` 会自动迁移生成 `upstream/wiki-sources.json`，再按该配置刷新 Cwiki raw 页面。
+- 旧项目如果只有 legacy `staging/wiki-export/export-state.json` 或历史 `raw/export-state.json`，`tools/update_wiki.py` 会自动迁移生成 `upstream/wiki-sources.json`，再按该配置刷新 Cwiki raw 页面。
 
 ### 代码 wiki 阶段
 
@@ -288,7 +289,8 @@ graphify 是代码图谱增强层，不是业务语义基线。
 
 默认策略：
 
-- 有 `raw-code/` 且用户希望构建代码 wiki 时，优先考虑 graphify
+- 有 `raw-code/` 且用户希望构建代码 wiki 时，先做上游 `docs/wiki` 适配、确定性扫描、freshness 和候选生成；再判断 graphify 是否必要
+- 如果完整 `docs/wiki`、source-map 和 scan anchors 已足够生成候选，graphify 可以正常跳过，并在 update report 中记录 decision
 - 必须先在 `docs/tooling-dependencies.md` 或最终输出中说明依赖：Python 3.10+、`uv` 必需，`graphify` 可选
 - 每个 codebase 单独运行或单独归档输出
 - 输出放在 `staging/code-graph/<codebase_id>/graphify-out/`

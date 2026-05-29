@@ -8,6 +8,15 @@ description: 在项目中从 0-1 初始化、构建、增量维护、查询和�
 这个 skill 面向“文件型 LLM Wiki 项目”的全生命周期，而不只是查询。
 它也是这类项目后续唯一推荐维护和调用的统一入口，不再需要拆分单独的 query-only skill。
 
+## 语言要求
+
+使用 `llm-wiki` 及其所有相关短入口 skill 时，必须默认使用中文：
+
+- 面向用户的过程说明、诊断、查询回答、审查报告和最终输出必须使用中文。
+- 由 agent 生成或改写的 `wiki/`、`docs/`、`staging/` 中的 Markdown 知识文档必须使用中文。
+- 代码标识符、命令、路径、API 名称、配置键、英文专有名词和原始证据引用可保留原文；必要时用中文解释。
+- 只有用户明确要求其他语言，或原始证据/代码片段必须逐字引用时，才允许局部使用非中文。
+
 ## Skill 包路径
 
 文档中的 `README.md`、`references/...`、`scripts/...` 均相对于 **llm-wiki skill 包根目录**（与 `SKILL.md`、`scripts/` 同级的文件夹）。该根目录须从当前环境解析（例如根据已加载的 skill 文件路径、或 Codex/Cursor 等下的实际安装位置），**禁止**写死个人本机绝对路径。
@@ -23,6 +32,15 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_tem
 ```bash
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"
 ```
+
+## 版本查询
+
+当用户通过 `$llm-wiki`、`/llm-wiki`、`$llm-wiki query`、`/llm-wiki query`、`$llm-wiki-query` 或 `/llm-wiki-query` 询问 llm-wiki skill / bundle 的版本、当前版本、skill 版本或 engine 版本时，先读取 **llm-wiki skill 包根目录**下的 `VERSION` 文件并直接回答；不要把这类问题当作当前 KB 项目的业务查询，也不要进入 `BUSINESS_CONTEXT.md`、`wiki/` 或 `raw/` 检索。
+
+如果 `VERSION` 文件缺失但同目录存在 `manifest.json`，可回退读取其中的 `version` 字段；同时说明 `engine_version` 未在该文件中声明。回答时区分：
+
+- `version`：llm-wiki skill bundle 版本。
+- `engine_version`：随 skill 打包的项目模板 / 确定性工具契约版本。
 
 它适用于：
 
@@ -64,9 +82,10 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"
 ```
 
-该模板提供 `tools/build_wiki.py`、`tools/scan_code.py`、`tools/graphify_code.py`、`tools/build_traceability.py`、`tools/health.py`、`tools/build_graph.py`、`tools/anchor_check.py`、项目 `AGENTS.md`、`.gitignore` 和依赖说明。模板脚本只做确定性扫描、脚手架、校验和图谱构建；语义 summary、实体归一、能力判断和证据强度仍由 Codex / subagent 完成。
+该模板提供 `tools/build_wiki.py`、`tools/scan_code.py`、`tools/graphify_code.py`、`tools/build_traceability.py`、`tools/health.py`、`tools/build_graph.py`、`tools/anchor_check.py`、项目 `AGENTS.md`、`.gitignore` 和依赖说明。模板脚本负责确定性扫描、脚手架、校验、图谱构建、代码锚点候选和 traceability state 合并；语义 summary、实体归一和能力判断可由 Codex / subagent 辅助。traceability 的模型步骤必须走 `docs/traceability-contract.md`：当前 agent 或外部 agent worker 都只能输出 `staging/traceability/runs/<run_id>/proposals.json`，由确定性工具合并到 `staging/traceability/state.json` 并渲染 Markdown。
+标准模板现在还会维护 `staging/cjira-registry/active.json`、`archive.json` 和 `cache.json`，用于记录 source page 的 `cjira` / `idea` 状态、刷新 Jira 活跃状态，并在 query / mapping / doctor 中区分 `idea`、`in_progress`、`frozen`。
 
-**内置 Confluence/Cwiki 下载（无需单独安装 obsidian-wiki-export skill）**：模板中包含 `tools/confluence_sync/export_obsidian_wiki.py`。安装模板并 `uv sync` 后，用带 `pageId` 的空间页面 URL 可把 wiki 树落入 **`raw/<pageId>-<slug>/index.md`**（每页目录 + `assets/`），同步元数据（`export-state.json`、`progress/`、`manifest-*.json`）默认写在 **`staging/wiki-export/`**，不把状态文件放进 `raw/`。项目的根 wiki、后续新增 wiki、RSS URL、层级和筛选条件统一落在 **`upstream/wiki-sources.json`**；日期筛选使用对应 source 的 `filters.updated_since`。详见 `references/bootstrapping.md`「从 wiki URL 拉取 raw」。
+**内置 Confluence/Cwiki 下载（无需单独安装 obsidian-wiki-export skill）**：模板中包含 `tools/confluence_sync/export_obsidian_wiki.py`。安装模板并 `uv sync` 后，用带 `pageId` 的空间页面 URL 可把 wiki 树落入 **`raw/<pageId>-<slug>/index.md`**（每页目录 + `assets/`），同步元数据（`export-state.json`、`progress/`、`manifest-*.json`）默认写在 **`staging/wiki-export-state/`**，不把状态文件放进 `raw/`。项目的根 wiki、后续新增 wiki、RSS URL、层级和筛选条件统一落在 **`upstream/wiki-sources.json`**；日期筛选使用对应 source 的 `filters.updated_since`。详见 `references/bootstrapping.md`「从 wiki URL 拉取 raw」。
 
 ## 阅读顺序
 
@@ -126,9 +145,12 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `llm-wiki init`：0-1 初始化，可分阶段汇报。
 - `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，集合原 audit 能力，指出健康度、质量问题、缺口、优化建议和下一步命令。
 - `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新；也负责续跑、source/concept/entity 精修、代码 wiki 和 traceability 收口；结束前自动运行 health/graph/必要 anchor 检查。
+- 对带 `cjira` 或 `【IDEA】` 信号的来源页，`update` 还应刷新 active registry，终态 requirement 归档到 `staging/cjira-registry/archive.json`，并把低置信度主单号或 stale Jira 拉取暴露给 `doctor` / `health`。
+- `llm-wiki backfill`：存量 KB 历史证据补全。先刷新 engine-owned 工具，重新扫描历史 `raw/` / `wiki/sources/` / `staging/`，补齐新版确定性派生能力（draw.io、Cjira/Jira/IDEA、source metadata、agent rules 等），再默认进入 `llm-wiki update` 语义做精修吸收和 G+ 收口。
+- `llm-wiki maintain-all`：维护本机 `~/.llm-wiki/projects.json` KB registry；默认 dry-run，可用 `--discover` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，只有用户明确要求 `--apply` 时才对已注册 KB 批量执行完整 backfill/update 维护。
 - `llm-wiki update-skill`：显式更新已安装的 llm-wiki skill bundle 本体；不要混入普通 KB 内容更新，除非用户明确要求。
 - `llm-wiki add-wiki`：把另一个文档/wiki 目录或 wiki URL 接入当前项目，作为新的 `raw/` 需求/业务证据来源；wiki URL 应在同一个 `upstream/wiki-sources.json` source object 中记录关系、层级、RSS/feed URL 和筛选条件，无法推导 RSS/feed 时要求用户手动提供，否则该来源 RSS 留空且不具备后续自动更新能力。
-- `llm-wiki add-code`：把另一个项目代码库接入当前项目，作为新的 `raw-code/<codebase_id>/` 代码证据来源，并构建代码 wiki、capability 和 traceability。
+- `llm-wiki add-code`：把另一个项目代码库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout，作为唯一受支持的代码证据接入方式，并构建代码 wiki、capability 和 traceability。
 - `llm-wiki query`：按意图分流回答业务或代码问题；业务知识默认不展开大量代码实现证据。
 - `llm-wiki query-plus`：同时拉通业务/需求证据和代码实现证据，输出更详尽的联合答案。
 - `llm-wiki review-requirement`：对新 PRD、Cwiki 页面或需求文档做证据型需求评审，纳入 raw 原文、图片、zip 原型、前端评审和代码能力证据。
@@ -182,6 +204,8 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - 不把 `staging/image-notes/` 当默认主链路
 - 代码也按文本证据处理，先使用 AST/路由/API/调用关系/技术设计文档，不默认进入截图或视觉资产
 
+文本优先包含由导出器确定性生成的附件文本证据：Cwiki 页面中的 `.zip` 附件会作为可能的 HTML 原型下载、解压并生成 `raw/<page>/assets/*.prototype.md`。普通 `init` / `fast` / `update` 应把这些 sidecar Markdown 当作母 wiki 的来源证据一起 summary 和 AI-native 精修；原始 zip 和解压出的静态资源本身只作为可追溯来源，不直接升级为系统事实。
+
 文本层完成后可以进入阶段 H，但只处理高价值图片证据。图片 note 必须结合图片在 `raw/**/index.md` 中的前后文，不做裸图 OCR。低价值页面走查、重复 UI 截图、装饰图默认跳过。
 
 **重要：文本优先不等于静默跳过图片。** 当项目的 `raw/` 中存在图片资产、截图、图表或附件图片时，`init` / `fast` / `update` / `doctor` 在收尾或诊断里必须明确说明：
@@ -231,10 +255,12 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 - 问题类型
 - 是否用了 `BUSINESS_CONTEXT.md`
-- 先查哪一层目录
-- 有没有用 `concepts / entities` 扩展
+- 按查询意图先查了哪些专项目录层：`truth`、`conflicts`、`evidence`、`proposals`、`reference`、`operations`
+- 有没有用 `concepts / entities` 作为通用扩展层做主题、实体、别名和相关来源扩展
 - 最终依据了哪些 `sources`
 - 只有当问题涉及代码、实现状态或使用 `query-plus` 时，才说明使用了哪些 `wiki/code/` 页面、代码库、接口、类或方法；业务知识查询不要为了填格式而展开代码证据
+
+`concepts / entities` 是导航和归一化层，不是最终证据层，也不替代 `evidence / operations / proposals / reference / truth / conflicts`。结论必须回到 `sources`、必要时回到 `raw/` 核验。
 
 ### 8. 规范实体优先
 
@@ -273,7 +299,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 ### 10. 安全与证据边界
 
 - 可以读取 `raw/`，不得修改 `raw/`。
-- `raw/` 不应被提交到 Git；提交前检查它没有被 track 或 staged。
+- 默认不提交 `raw/`；Gateway 发布同步也只提交 canonical staging 状态和生成知识层，`raw/` 由本地 wiki-export/sync 刷新。无论哪种模式，都不得由 agent 直接修改 `raw/` 原文。
 - 不调用本地模型 SDK 做摘要、分类、实体归一或语义判断；这些由 Codex / subagent 完成。
 - 本地脚本只做确定性扫描、health、graph、文件统计和格式检查。
 - 不把 token、cookie、密码、私钥、access key、内部凭据或完整敏感配置值写入 wiki；必要时只写用途并脱敏。

@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -17,9 +18,14 @@ from urllib.parse import urlparse
 
 import yaml
 from agent_rules import refresh_agent_rules
+from graphify_code import decide_graphify_action
 from gplus_quality import inspect_gplus_quality
 from raw_code_manager import RawCodeManagerError, is_permission_error, managed_code_sync_specs as declared_code_sync_specs, read_codebase_metadata
+from project_registry import best_effort_register_current_project
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
+
+
+CANONICAL_WIKI_EXPORT_METADATA_DIR = "staging/wiki-export-state"
 
 
 def utc_now() -> str:
@@ -120,7 +126,11 @@ def write_failure_report(project: Path, failed_step: str, returncode: int, detai
     (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_success_report(project: Path, skipped_steps: list[str] | None = None) -> None:
+def write_success_report(
+    project: Path,
+    skipped_steps: list[str] | None = None,
+    graphify_decisions: list[dict[str, object]] | None = None,
+) -> None:
     report_dir = project / "staging" / "update"
     report_dir.mkdir(parents=True, exist_ok=True)
     health = read_json_if_present(project / "staging" / "health" / "latest.json")
@@ -130,6 +140,7 @@ def write_success_report(project: Path, skipped_steps: list[str] | None = None) 
         "status": "ok",
         "generated_at": utc_now(),
         "skipped_steps": skipped_steps or [],
+        "graphify_decisions": graphify_decisions or [],
         "gplus_quality": gplus_quality,
     }
     (report_dir / "latest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -145,6 +156,15 @@ def write_success_report(project: Path, skipped_steps: list[str] | None = None) 
     if skipped_steps:
         for step in skipped_steps:
             lines.append(f"- `{step}`")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Graphify Decisions", ""])
+    if graphify_decisions:
+        for decision in graphify_decisions:
+            lines.append(
+                f"- `{decision.get('codebase_id', 'unknown')}`: `{decision.get('decision', 'unknown')}` "
+                f"(should_run=`{decision.get('should_run', False)}`) - {decision.get('reason', '')}"
+            )
     else:
         lines.append("- None")
     lines.extend(
@@ -172,6 +192,17 @@ def write_success_report(project: Path, skipped_steps: list[str] | None = None) 
     else:
         lines.append("- No G+ semantic underfit finding from deterministic heuristics.")
     (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def collect_graphify_decisions(project: Path, requested: bool = False) -> list[dict[str, object]]:
+    raw_code = project / "raw-code"
+    if not raw_code.is_dir():
+        return []
+    return [
+        decide_graphify_action(project, path.name, requested=requested)
+        for path in sorted(raw_code.iterdir())
+        if path.is_dir()
+    ]
 
 
 def health_failure_details(project: Path) -> dict[str, object]:
@@ -240,7 +271,7 @@ def legacy_rss_config_sources(project: Path) -> list[dict[str, object]]:
                     "rss_url_is_custom": True,
                     "rss_max_results": int(feed.get("rss_max_results", 200) or 200),
                     "output_dir": "raw",
-                    "metadata_dir": "staging/wiki-export",
+                    "metadata_dir": CANONICAL_WIKI_EXPORT_METADATA_DIR,
                     "migrated_from": relative_path(resolve_rss_config(project), project),
                 }
             )
@@ -360,18 +391,46 @@ def relative_path(path: Path, project: Path) -> str:
         return str(path)
 
 
+def normalize_metadata_dir(value: object, project: Path) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return CANONICAL_WIKI_EXPORT_METADATA_DIR
+    path_value = Path(text)
+    if not path_value.is_absolute():
+        return path_value.as_posix()
+    try:
+        return path_value.resolve().relative_to(project.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError(f"metadata_dir must stay inside project: {text}") from exc
+
+
 def load_upstream_wiki_sources(project: Path) -> dict:
     payload = read_json_if_present(upstream_wiki_sources_path(project))
     return payload if isinstance(payload, dict) else {}
 
 
+def copy_legacy_export_state_to_canonical(project: Path, state_path: Path) -> None:
+    canonical_dir = project / CANONICAL_WIKI_EXPORT_METADATA_DIR
+    if state_path.parent.resolve() == canonical_dir.resolve():
+        return
+    canonical_dir.mkdir(parents=True, exist_ok=True)
+    canonical_state = canonical_dir / "export-state.json"
+    if not canonical_state.exists() and state_path.is_file():
+        shutil.copy2(state_path, canonical_state)
+    legacy_progress = state_path.parent / "progress"
+    canonical_progress = canonical_dir / "progress"
+    if legacy_progress.is_dir() and not canonical_progress.exists():
+        shutil.copytree(legacy_progress, canonical_progress)
+
+
 def write_upstream_wiki_sources(project: Path, sources: list[dict[str, object]]) -> None:
+    normalized_sources = [normalize_upstream_source(dict(source), project) for source in sources]
     write_json(
         upstream_wiki_sources_path(project),
         {
             "version": 1,
             "updated_at": utc_now(),
-            "sources": sources,
+            "sources": normalized_sources,
         },
     )
 
@@ -407,13 +466,19 @@ def has_saved_confluence_progress(metadata_dir: Path, output_dir: Path, page_id:
     return False
 
 
-def normalize_upstream_source(source: dict[str, object], *, default_relationship: str = "additional") -> dict[str, object]:
+def normalize_upstream_source(
+    source: dict[str, object],
+    project: Path,
+    *,
+    default_relationship: str = "additional",
+) -> dict[str, object]:
     normalized = dict(source)
     source_type = str(normalized.get("type") or "").strip()
     if source_type == "confluence":
         page_id = str(normalized.get("page_id") or "").strip()
         if page_id and not str(normalized.get("source_id") or "").strip():
             normalized["source_id"] = f"cwiki-{page_id}"
+        normalized["metadata_dir"] = normalize_metadata_dir(normalized.get("metadata_dir"), project)
     elif source_type == "rss":
         source_id = str(normalized.get("id") or normalized.get("source_id") or "").strip()
         if source_id and not str(normalized.get("source_id") or "").strip():
@@ -441,17 +506,18 @@ def export_state_to_upstream_sources(project: Path) -> list[dict[str, object]]:
         (
             candidate
             for candidate in [
-                project / "staging" / "wiki-export" / "export-state.json",
                 project / "staging" / "wiki-export-state" / "export-state.json",
+                project / "staging" / "wiki-export" / "export-state.json",
                 project / "raw" / "export-state.json",
             ]
             if candidate.is_file()
         ),
-        project / "staging" / "wiki-export" / "export-state.json",
+        project / "staging" / "wiki-export-state" / "export-state.json",
     )
     state = read_json_if_present(state_path)
     if not isinstance(state, dict):
         return []
+    copy_legacy_export_state_to_canonical(project, state_path)
     roots = state.get("roots")
     if not isinstance(roots, list):
         return []
@@ -478,7 +544,7 @@ def export_state_to_upstream_sources(project: Path) -> list[dict[str, object]]:
                 "rss_url_is_custom": bool(root.get("rss_url_is_custom", False)),
                 "rss_max_results": int(root.get("rss_max_results", 200) or 200),
                 "output_dir": "raw",
-                "metadata_dir": relative_path(state_path.parent, project),
+                "metadata_dir": CANONICAL_WIKI_EXPORT_METADATA_DIR,
                 "migrated_from": relative_path(state_path, project),
             }
         )
@@ -490,7 +556,7 @@ def ensure_upstream_wiki_sources(project: Path) -> list[dict[str, object]]:
     existing = config.get("sources")
     sources = (
         [
-            normalize_upstream_source(dict(item), default_relationship="additional")
+            normalize_upstream_source(dict(item), project, default_relationship="additional")
             for item in existing
             if isinstance(item, dict)
         ]
@@ -500,7 +566,7 @@ def ensure_upstream_wiki_sources(project: Path) -> list[dict[str, object]]:
     migrated = export_state_to_upstream_sources(project)
     migrated.extend(legacy_rss_config_sources(project))
     migrated = [
-        normalize_upstream_source(source, default_relationship="primary" if not sources and index == 0 else "additional")
+        normalize_upstream_source(source, project, default_relationship="primary" if not sources and index == 0 else "additional")
         for index, source in enumerate(migrated)
     ]
     if not migrated:
@@ -544,7 +610,7 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         page_id = str(source.get("page_id") or "").strip()
         if not page_id:
             continue
-        metadata_dir_text = str(source.get("metadata_dir") or "staging/wiki-export")
+        metadata_dir_text = str(source.get("metadata_dir") or CANONICAL_WIKI_EXPORT_METADATA_DIR)
         metadata_dir = project / metadata_dir_text if not Path(metadata_dir_text).is_absolute() else Path(metadata_dir_text)
         output_dir_text = str(source.get("output_dir") or "raw")
         output_dir = project / output_dir_text if not Path(output_dir_text).is_absolute() else Path(output_dir_text)
@@ -782,6 +848,7 @@ def main() -> int:
     args = parser.parse_args()
 
     project = Path(args.project).resolve()
+    best_effort_register_current_project(project)
     if not args.no_agent_rules_refresh:
         print(f"agent_rules={refresh_agent_rules(project)}")
 
@@ -836,7 +903,11 @@ def main() -> int:
             if script.name != "health.py":
                 break
     if exit_code == 0:
-        write_success_report(project, skipped_steps=skipped_steps)
+        write_success_report(
+            project,
+            skipped_steps=skipped_steps,
+            graphify_decisions=collect_graphify_decisions(project, requested=bool(args.graphify)),
+        )
     return exit_code
 
 

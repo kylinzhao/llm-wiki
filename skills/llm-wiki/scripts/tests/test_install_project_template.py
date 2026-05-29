@@ -1,6 +1,8 @@
 import importlib.util
 import contextlib
 import io
+import json
+import os
 import sys
 import tempfile
 import unittest
@@ -19,6 +21,31 @@ def load_installer():
 
 
 class InstallProjectTemplateTest(unittest.TestCase):
+    def test_main_registers_project_in_local_registry(self):
+        installer = load_installer()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "project"
+            registry_path = root / "projects.json"
+            stdout = io.StringIO()
+            original_argv = sys.argv
+            old_registry = os.environ.get("LLM_WIKI_PROJECT_REGISTRY")
+            try:
+                os.environ["LLM_WIKI_PROJECT_REGISTRY"] = str(registry_path)
+                sys.argv = [str(SCRIPT), "--project", str(project)]
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(installer.main(), 0)
+            finally:
+                sys.argv = original_argv
+                if old_registry is None:
+                    os.environ.pop("LLM_WIKI_PROJECT_REGISTRY", None)
+                else:
+                    os.environ["LLM_WIKI_PROJECT_REGISTRY"] = old_registry
+
+            payload = json.loads(registry_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["projects"][0]["path"], str(project.resolve()))
+            self.assertIn("registry=registered", stdout.getvalue())
+
     def test_engine_only_overwrites_engine_owned_files_without_force(self):
         installer = load_installer()
         with tempfile.TemporaryDirectory() as tmp:

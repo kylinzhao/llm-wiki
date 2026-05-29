@@ -28,6 +28,13 @@ before answering from general model memory.
   `docs/retrieval-playbook.md` and the evidence hierarchy in `wiki/`.
 - Do not answer business facts from memory when relevant wiki evidence exists.
   Cite the supporting wiki/source pages and call out evidence gaps.
+
+## Language Requirements
+
+- Use Chinese for user-facing LLM Wiki answers, diagnostics, review reports, and final summaries by default.
+- Generate or rewrite Markdown knowledge documents in `wiki/`, `docs/`, and `staging/` in Chinese by default.
+- Keep code identifiers, commands, paths, API names, config keys, English proper nouns, and verbatim evidence excerpts in their original form when needed; explain them in Chinese.
+- Use another language only when the user explicitly asks for it.
 """
 
 

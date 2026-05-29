@@ -13,10 +13,11 @@ https://git.guazi-corp.com/c2b-fe/llm-wiki
 - **Python** 3.10+（与项目模板 `pyproject.toml` 一致）
 - **`uv`**：模板与文档中的构建命令统一为 `uv run python ...`（见 `skills/llm-wiki/assets/project-template/docs/tooling-dependencies.md`）
 - **Unix 环境**：`install.sh` 为 Bash 脚本；Windows 请手动将 `skills/` 下各目录复制到对应 skills 安装路径，或使用 WSL/Git Bash。
-- `install.sh` 支持 `--client codex|claude|cursor|all|auto`：
+- `install.sh` 支持 `--client codex|claude|cursor|qoder|all|auto`：
   - `codex` -> `${CODEX_HOME:-$HOME/.codex}/skills`
   - `claude` -> `${CLAUDE_HOME:-$HOME/.claude}/skills`
   - `cursor` -> `${CURSOR_HOME:-$HOME/.cursor}/skills`
+  - `qoder` -> `${QODER_HOME:-$HOME/.qoder}/skills`
   - `auto`（默认）会按当前机器上已存在的客户端目录自动选择目标；`all` 强制安装到三者。
 - **可选**：`graphify`（仅当需要代码图谱增强时）。**可选**：`local-port-registry` skill——仅在 `requirement-review` 流程里要起本地预览服且担心端口冲突时使用；本 bundle 未内置该 skill。
 
@@ -34,6 +35,10 @@ https://git.guazi-corp.com/c2b-fe/llm-wiki
 - 需求文档与多源码仓库的联合知识层构建
 
 它面向的不是“只会查”的场景，而是“把一个项目从原始文档变成可用知识库”的全链路工作。对于已经建好的 wiki，查询也统一通过 `llm-wiki` 完成。
+
+## 语言要求
+
+使用 `llm-wiki` 及其相关短入口时，面向用户的回答、诊断、审查报告和最终总结默认使用中文；由 agent 生成或改写的 `wiki/`、`docs/`、`staging/` Markdown 知识文档也默认使用中文。代码标识符、命令、路径、API 名称、配置键、英文专有名词和原始证据引用可保留原文，并用中文解释。
 
 ## 项目原理
 
@@ -58,7 +63,20 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 
 ## Engine 发行（`engine-v*`）
 
-- **`engine-v0.1.0`**：冻结 `kb.manifest.yaml` 字段、`config/rss-feeds.yaml` 形状、`tools/rss_sync.py` 抓取与限速语义，以及 **`tools/update_wiki.py`** 优先的确定性更新链。详见仓库根目录 **`INSTRUCTION_AND_RELEASE_PLAN.md`**。对外 Git tag：`engine-v0.1.0`（在 `llm-wiki-skill` 仓库创建）。
+- **`engine-v1.0.2`**：新增发布版本脚本与 GitLab 发布规则，要求每次发布前同步升级 VERSION、manifest 和 README 发行记录。
+- **`engine-v1.0.1`**：修复项目模板健康检查与图谱构建对 Markdown 代码片段中 `[[...]]` 路径的误判，避免 Next.js catch-all 路由等代码路径被当作 broken wikilink；修复 `tools/health.py` 普通 CLI 输出的统计变量错误；当已启用本机 SSO 自动鉴权时，Cwiki 同步不再提前打印缺鉴权提示。
+- **`engine-v1.0.0`**：冻结 `kb.manifest.yaml` 字段、`config/rss-feeds.yaml` 形状、`tools/rss_sync.py` 抓取与限速语义，以及 **`tools/update_wiki.py`** 优先的确定性更新链。详见仓库根目录 **`INSTRUCTION_AND_RELEASE_PLAN.md`**。对外 Git tag：`engine-v1.0.0`（在 `llm-wiki-skill` 仓库创建）。
+
+发布到 GitLab 前必须先升级版本号并写入发行记录，不允许只提交代码。使用：
+
+```bash
+python3 scripts/release_version.py \
+  --version <next-patch-version> \
+  --engine-version engine-v<next-patch-version> \
+  --note "<中文发行说明>"
+```
+
+随后提交版本文件、README 和功能变更，推送 `main` 后打并推送同名 `engine-v*` tag。
 
 ## Bundle 内容
 
@@ -83,6 +101,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 ./install.sh --copy --backup --client codex
 ./install.sh --copy --backup --client claude
 ./install.sh --copy --backup --client cursor
+./install.sh --copy --backup --client qoder
 ```
 
 更新已安装的 bundle 时，可从源码 checkout 运行安装脚本，或使用已安装 skill 内的 updater：
@@ -91,7 +110,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/update_installed_skill.py" --source "$PWD" --client auto --backup
 ```
 
-更新来源由本地 bundle checkout 的 git upstream 决定；内部标准 checkout 的 `main` 跟踪公司 GitLab `origin/main`，`origin` 为 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git`。仓库里可能还有 GitHub mirror remote，但不作为默认更新源。
+更新来源优先由本地 bundle checkout 的 git upstream 决定；若无法推断本地 checkout，updater 会从公司 GitLab 默认地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` 下载到 `~/.cache/llm-wiki-skill/llm-wiki`，再从该 cache 安装。可用 `--git-url` / `LLM_WIKI_SKILL_GIT_URL` 覆盖下载地址，用 `--cache-dir` / `LLM_WIKI_SKILL_CACHE_DIR` 覆盖 cache 目录。仓库里可能还有 GitHub mirror remote，但不作为默认更新源。若下载私有 GitLab 仓库时缺少凭据，Personal Access Token 创建地址是 `https://git.guazi-corp.com/profile/personal_access_tokens`，所需 scope 为 `read_repository`。
 
 如果 skill 是通过 `--link` 从本仓库安装的，也可以省略 `--source`，脚本会尝试从当前 skill 路径推断 bundle checkout 并执行 `git pull --ff-only` 后重新安装。
 
@@ -107,6 +126,8 @@ uv run python tools/update_wiki.py
 ```
 
 当 `config/rss-feeds.yaml` 已配置启用的 feed URL 时，`tools/update_wiki.py` 会默认先执行 RSS 同步，再进入增量更新。代码证据只支持一种接入方式：用 `llm-wiki add-code` 将仓库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout。之后同一次 update 会默认先对这些受管 codebase 执行安全的 `git pull --ff-only`，再继续 code wiki 构建；如果仓库权限缺失、checkout 损坏或 worktree 不干净，update 必须明确失败而不是假装已刷新。
+
+代码库如果自带 `raw-code/<codebase_id>/docs/wiki` 且签名完整，update 会把它作为上游代码导航层，优先结合 `scan_code.py` 生成 compact 候选和 traceability proposal。此时 `graphify` 默认是按需结构增强：只有缺少结构证据、graphify 输出过期、发生结构性代码变更，或用户明确需要调用/依赖关系时才运行；跳过 graphify 是正常健康状态，不能自动宣称 `strong` traceability。
 
 按客户端可直接复制的初始化命令：
 
@@ -140,6 +161,7 @@ python3 "${CURSOR_HOME:-$HOME/.cursor}/skills/llm-wiki/scripts/install_project_t
 codex  -> ${CODEX_HOME:-$HOME/.codex}/skills
 claude -> ${CLAUDE_HOME:-$HOME/.claude}/skills
 cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
+qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
 ```
 
 ## 主入口
@@ -166,13 +188,16 @@ cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
 | `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断 wiki 健康度、质量问题、缺口、过期页面和下一步动作；集合原 audit 能力。 |
 | `$llm-wiki-update` | `llm-wiki update` | `raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 页面或源码变化后的影响范围更新；也负责续跑、精修、代码 wiki、traceability 和收口检查；自动维护 `AGENTS.md` 查询路由规则。 |
 | `$llm-wiki-backfill` | `llm-wiki backfill` | 存量 KB 历史证据补全；重新扫描历史 raw/wiki/staging，补齐新版确定性派生能力，并继续进入 source/G+ 精修吸收。 |
+| `$llm-wiki-maintain-all` | `llm-wiki maintain-all` | 维护本机已注册 KB registry；默认 dry-run，可发现、列出、清理 missing 项，并在确认后批量执行完整 backfill/update 维护。 |
 | `$llm-wiki-update-skill` | `llm-wiki update-skill` | 显式更新本机安装的 llm-wiki skill bundle、模板脚本和命令协议；不更新当前 KB 内容。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 把另一个文档库、wiki 导出、Markdown 目录、Confluence 导出、文档目录或 wiki URL 加入 `raw/` 原始证据层。 |
-| `$llm-wiki-add-code` | `llm-wiki add-code` | 把另一个本地仓库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout，并构建代码 wiki、能力页和必要 traceability。缺少仓库权限时必须立即终止。 |
+| `$llm-wiki-add-code` | `llm-wiki add-code` | 把另一个本地仓库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout，并构建代码 wiki、能力候选和必要 traceability。若存在 `docs/wiki`，优先作为上游导航；graphify 仅按需增强。缺少仓库权限时必须立即终止。 |
 | `$llm-wiki-query` | `llm-wiki query` | 按意图回答业务、产品、需求、实现或代码问题；业务知识默认不展开大量代码证据。 |
 | `$llm-wiki-query-plus` | `llm-wiki query-plus` | 同时回答业务/需求口径与代码实现证据，适合需要更详尽联动分析的问题。 |
 | `$llm-wiki-image` | `llm-wiki image` | 文本层完成后补充高价值图片、截图、图表或附件证据；默认不批量分析低价值截图。 |
 | `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧的 `llm-wiki review-requirement` 调用；实际转向 `$requirement-review` 做 evidence-first 需求评审。 |
+
+`llm-wiki maintain-all` 使用本机 `~/.llm-wiki/projects.json` registry。常用操作包括 `--discover <dir>` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，以及用户确认后的 `--apply` 批量执行完整 backfill/update 维护；默认不加 `--apply` 时只输出 dry-run 计划。
 
 ## 独立需求评审 Skill
 

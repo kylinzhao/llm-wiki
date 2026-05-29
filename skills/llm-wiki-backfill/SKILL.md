@@ -7,6 +7,8 @@ description: LLM Wiki 存量知识库历史证据补全入口。用于老版本 
 
 这是 `$llm-wiki-backfill` 的短入口，语义等价于 `llm-wiki backfill`。
 
+语言要求：本短入口的用户回答和生成/改写的 LLM Wiki Markdown 文档必须默认使用中文，除非用户明确要求其他语言。
+
 ## 目标
 
 用于已经存在的 LLM Wiki 项目，特别是用旧版 skill 构建过、但缺少新版历史证据派生能力的项目。它不是普通增量同步，也不是全量重建；它先对历史证据层做确定性补全，再把新增证据吸收到知识层。
@@ -49,12 +51,14 @@ description: LLM Wiki 存量知识库历史证据补全入口。用于老版本 
 - `source_metadata`：补齐旧 source page 的 Delivery Tracking 与 Source Metadata。
 - `cjira`：扫描历史 raw 中的 Jira/Cjira/IDEA 信号，刷新 `staging/cjira-registry/`。
 - `agent_rules`：补齐老 KB 的 Query Routing 规则。
+- `wiki_export_state`：修复老 KB 的 Cwiki 导出控制状态；把 legacy `raw/export-state.json`、`raw/progress/*.json`、`staging/wiki-export/**` 复制到 canonical `staging/wiki-export-state/`，供 Gateway 临时 worktree 和其他用户本地 update 续跑。
 
 后续凡是“需要重新扫历史文档才能补齐的新确定性能力”，都应新增为 backfill pass，而不是塞进普通 query 或只读 doctor。
 
 ## 边界
 
 - 不重写 `raw/` 原文正文；只允许追加或刷新确定性 evidence 链接区。
+- 不取消 `raw/` 的 Git ignore，也不把 `raw/**` 作为可提交内容；其他用户本地 raw 更新应通过 wiki-export/sync，而不是 Git pull raw 正文。
 - 不把确定性 backfill 当成语义完成。只要新增证据影响 source/G+，必须继续精修吸收。
 - 不把 Jira 鉴权缺失当成 draw.io/source metadata 的阻塞；离线能补的先补。
 - 不建议用户再手动跑一串脚本；本入口应完成 backfill 到 update 收口的连续流程，除非遇到硬阻塞。

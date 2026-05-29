@@ -9,8 +9,10 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki fast` | New project, user wants the standard path completed in one run | Full first-pass wiki, refinement, validation, status |
 | `llm-wiki init` | New project, user wants phased initialization | Skeleton, deterministic build, first-pass plan |
 | `llm-wiki doctor` | User wants site status, diagnosis, quality review, or prioritized recommendations | Findings plus health portrait and next steps |
+| `llm-wiki version` | User asks for the llm-wiki skill / bundle version, current version, skill version, or engine version | Installed skill bundle version from `VERSION` |
 | `llm-wiki update` | Existing KB needs resume, refinement, traceability refresh, source/code updates, or validation after changes | Impact-scoped update, validation, and maintenance report |
 | `llm-wiki backfill` | Existing KB was built with older skill versions and needs historical evidence re-scanned | Deterministic evidence backfill, then refinement absorption through update semantics |
+| `llm-wiki maintain-all` | User wants to discover, list, prune, or batch-maintain local registered KB projects | Dry-run plan by default; optional apply runs full backfill/update maintenance per KB |
 | `llm-wiki update-skill` | User explicitly asks to update the llm-wiki skill bundle itself, not the current KB content | Pull/reinstall the installed skill bundle, then optionally refresh project tooling |
 | `llm-wiki add-wiki` | Add another document/wiki directory or wiki URL as business or requirement evidence | Imported raw evidence, source provenance, RSS/update status, and affected wiki updates |
 | `llm-wiki add-code` | Add or refresh implementation evidence, code wiki, capabilities, and traceability | raw-code codebase plus code wiki and mappings |
@@ -18,6 +20,17 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki query-plus` | Answer with business/requirement evidence and code implementation evidence together | Detailed business+code evidence analysis |
 | `llm-wiki review-requirement` | Review a new PRD, Cwiki page, Markdown requirement, or prototype package against wiki, raw, image, zip, frontend, and code evidence | Findings-first requirement review and Cwiki comment draft |
 | `llm-wiki image` | Add high-value image evidence after text completion | image notes and linked facts |
+
+## Skill Version Queries
+
+When the user asks for the llm-wiki skill / bundle version, current version, skill version, or engine version through `llm-wiki`, `/llm-wiki`, `llm-wiki query`, `/llm-wiki query`, `$llm-wiki-query`, or `/llm-wiki-query`, treat it as a skill metadata request, not as a KB query.
+
+Read `VERSION` from the llm-wiki skill package root and answer from that file:
+
+- `version`: llm-wiki skill bundle version.
+- `engine_version`: bundled project template / deterministic tooling contract version.
+
+If `VERSION` is missing, fall back to `manifest.json` in the same directory when available and report its `version`; state clearly that `engine_version` is not declared in that fallback.
 
 ## Evidence preflight (partial clone / git without raw)
 
@@ -66,15 +79,16 @@ Run order:
 2. Install the bundled project template unless equivalent scripts already exist: after bundle install, use your client's skills root (for example Codex: `python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"`), or use `python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"` when the package lives elsewhere (see main `SKILL.md` "Skill 包路径").
 3. Run deterministic build with `uv run python tools/update_wiki.py`.
    - when the standard template is installed, this command should auto-refresh enabled RSS/feed raw inputs and engine-managed `raw-code/<codebase_id>/` git checkouts before rebuilding deterministic code outputs
-4. If `raw-code/` exists and code graph extraction is useful, run `uv run python tools/graphify_code.py --all`, then rerun `scan_code.py` and `build_traceability.py`.
+4. If `raw-code/` exists, run the code scan and candidate pipeline first. If a complete `raw-code/<codebase_id>/docs/wiki` exists, use it with scan anchors as the preferred first-pass code navigation layer. Run `uv run python tools/graphify_code.py --all` only when structural graph evidence is missing, stale, explicitly requested, or needed for call/dependency questions.
 5. Complete first-pass source summary and AI-native refinement.
 6. Build layered pages, concepts, entities, truth, conflicts, evidence, proposals, reference, operations.
 7. If `raw-code/` exists, refine codebase indexes, capability pages, and traceability evidence strengths.
 8. If implementation review is in scope, create traceability pages for highest-value capabilities.
 9. Run G+ readiness checks when feasible: query acceptance and quality audit. For 0-1 builds this is part of the default path, not an optional follow-up: complete concepts/entities/truth/conflicts/evidence/proposals/reference/operations calibration unless a hard blocker appears or the user explicitly asks to stop after the baseline.
 10. Inventory raw image assets and image-note status. Do not batch-analyze images by default, but if images exist and no image evidence pass is complete, record phase H as pending and recommend `llm-wiki image`.
-11. Run health, graph, and anchor check.
-12. Update `staging/refinement-status.md`.
+11. Include deterministic text sidecars generated from `.zip` prototype attachments in source summary and refinement scope. Treat the sidecar Markdown as source evidence with provenance; do not treat binary zip files or extracted prototype assets as standalone system facts.
+12. Run health, graph, and anchor check.
+13. Update `staging/refinement-status.md`.
 
 Default behavior:
 
@@ -144,7 +158,7 @@ Impact analysis:
 
 - If `raw/` changed: update matching source pages, affected layered pages, concepts, entities, query acceptance, health, graph.
 - If `BUSINESS_CONTEXT.md` changed: update canonical aliases, concepts, entities, conflicts, query playbook, affected answers.
-- If `raw-code/` changed: update affected codebase pages, endpoint maps, capability pages, traceability rows, graphify status if needed.
+- If `raw-code/` changed: update affected codebase pages, endpoint maps, compact upstream artifacts, capability candidates, traceability rows, and graphify status if needed.
 - If `wiki/code/traceability/` changed: verify evidence strength, source anchors, code anchors, and linked capability pages.
 - If docs changed only: update retrieval/build guidance and run link checks.
 - If G+ semantic underfit is reported by `tools/update_wiki.py` or `tools/doctor.py`: do not rebuild `raw/` solely for that reason; run a Codex-native G+ semantic expansion pass over existing source pages.
@@ -186,7 +200,7 @@ Default update order:
    - Read `staging/update/latest.json` `gplus_quality`; if `status=needs_attention`, treat it as an update trigger even when `semantic_update_required=false`.
 9. Refresh affected pages:
    - changed `raw/` pages update matching source pages, layered pages, concepts, entities, query readiness, health, and graph
-   - changed `raw-code/` files update affected codebase pages, endpoint maps, capability pages, traceability rows, and graphify status when needed
+   - changed `raw-code/` files update affected codebase pages, endpoint maps, freshness state, capability/anchor candidates, traceability rows, and graphify status when needed
    - changed `BUSINESS_CONTEXT.md` updates canonical aliases, concepts, entities, conflicts, truth, and retrieval guidance
    - if health or the update report shows remaining `pending` or `stale` source pages, resolve them in the same command when they are in scope or the backlog is small enough to finish safely
    - G+ semantic underfit updates concepts/entities, source Business Links, truth/conflicts/evidence/proposals/operations/reference, query acceptance, and G+ quality audit without rewriting unrelated source summaries
@@ -321,16 +335,63 @@ Final report:
 - health / graph / G+ quality results
 - blockers and remaining missing evidence
 
+## `llm-wiki maintain-all`
+
+Purpose: maintain local registered LLM Wiki KB projects in batches without silently modifying every KB after a skill upgrade.
+
+Registry:
+
+- Local KBs are tracked in `~/.llm-wiki/projects.json`.
+- Project template install, project-local update, and project-local backfill register the current KB best-effort.
+- The registry stores paths and maintenance status only; it must not store credentials, cookies, tokens, or KB evidence content.
+
+Common commands:
+
+```bash
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --discover /Users/zhaoliang/guazi/work
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --list
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --prune-missing
+python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --apply
+```
+
+Behavior:
+
+1. Default invocation is dry-run only. It prints which active KBs would be maintained, which KBs are skipped, and which commands would run.
+2. `--discover <dir>` scans for KBs and adds them to the registry before planning.
+3. `--list` prints current registry rows.
+4. `--prune-missing` immediately removes registry entries whose paths no longer exist. Ordinary reconcile removes entries automatically after `missing_count >= 3`.
+5. `--apply` is required before any KB files are modified.
+6. Apply runs the full backfill maintenance flow for each planned KB:
+   - refresh engine-owned tools and agent rules
+   - run `uv run python tools/backfill.py`, falling back to `python3 tools/backfill.py` only when needed
+   - when backfill reports `refinement_absorption_required=true`, run project update to absorb evidence and complete health/graph closure
+7. A failed KB does not stop later KBs. The batch report records success, skip, and failure details.
+
+Safety boundaries:
+
+- Do not run `--apply` against real KBs unless the user explicitly asks to execute.
+- Do not add `--no-auto-raw-sync` to bypass Cwiki auth. Auth failures are per-KB blockers.
+- Dirty KB git worktrees are skipped with `dirty_project_worktree` by default.
+- Broken managed `raw-code/` checkouts remain hard failures under normal update rules.
+- The command does not commit or push KB changes.
+
+Reports:
+
+- Batch reports are written under `~/.llm-wiki/maintenance-runs/<run_id>.json` and `.md`.
+- Final user reporting must include counts for successes, skipped projects, failures, pruned missing entries, and report paths.
+
 ## `llm-wiki update-skill`
 
 Purpose: update the installed llm-wiki skill bundle itself. Use only when the user explicitly asks to update the skill, skill bundle, installed skill, or global llm-wiki tooling.
 
 Update source:
 
-- The updater does not hard-code a hosted repository URL. It updates from the local llm-wiki-skill bundle checkout, using that checkout's configured git upstream.
-- In the canonical internal checkout, `main` tracks `origin/main`, where `origin` is the GitLab remote `https://git.guazi-corp.com/c2b-fe/llm-wiki.git`.
+- The updater first prefers a local llm-wiki-skill bundle checkout, using that checkout's configured git upstream.
+- If no local checkout can be inferred, the updater may clone the canonical GitLab source `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` into `~/.cache/llm-wiki-skill/llm-wiki`, then install from that cached checkout.
+- Override the fallback Git URL with `--git-url` or `LLM_WIKI_SKILL_GIT_URL`; override the cache parent with `--cache-dir` or `LLM_WIKI_SKILL_CACHE_DIR`.
+- If GitLab credentials are missing, create a Personal Access Token at `https://git.guazi-corp.com/profile/personal_access_tokens` with the `read_repository` scope.
 - A GitHub remote may exist as a mirror, but do not switch to it unless the user explicitly asks or the local checkout is configured that way.
-- If the installed skill was copied and no source checkout can be inferred, ask for `--source /path/to/llm-wiki-skill`.
+- If the installed skill was copied and no source checkout can be inferred, use the GitLab cache fallback unless the user requested offline mode with `--no-download`.
 
 Default behavior:
 
@@ -340,7 +401,7 @@ Default behavior:
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --client auto --backup
    ```
 
-2. If the installed skill was copied and the updater cannot infer the source checkout, ask for or use a known local bundle checkout:
+2. If the installed skill was copied and the updater cannot infer the source checkout, it clones/pulls the GitLab fallback. To force a known local bundle checkout:
 
    ```bash
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --source /path/to/llm-wiki-skill --client auto --backup
@@ -348,7 +409,19 @@ Default behavior:
 
 3. The updater runs `git pull --ff-only` in the bundle checkout when it is a git worktree, then runs `install.sh` with backup semantics.
 4. Do not use `--force` unless the user explicitly accepts discarding the previous installed copy.
-5. After updating the installed skill, if the current directory is an LLM Wiki KB project and the user wants project tooling refreshed too, run:
+5. After updating the installed skill, existing KB projects keep their project-local tools until refreshed. To preview batch refresh/backfill for registered KBs, run:
+
+   ```bash
+   python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py"
+   ```
+
+   To discover historical KBs first:
+
+   ```bash
+   python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --discover /Users/zhaoliang/guazi/work
+   ```
+
+6. If the current directory is an LLM Wiki KB project and the user wants only this project refreshed, run:
 
    ```bash
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD" --engine-only --refresh-agent-rules
@@ -356,7 +429,7 @@ Default behavior:
 
 Stop when:
 
-- No bundle checkout is available and the user has not provided `--source`.
+- No bundle checkout is available, GitLab clone/pull fails, and the user has not provided `--source`.
 - `git pull --ff-only` fails because the bundle checkout has local conflicts or diverged history.
 - installation reports destination conflicts without `--backup` or `--force`.
 
@@ -422,8 +495,9 @@ Default order:
    - this is the only supported onboarding model
    - if repository access is missing, stop immediately and tell the user to obtain permission before retrying
 5. Scan the codebase for README, AGENTS, OpenSpec, API contracts, routes, controllers, services, jobs, messages, data access, and config.
-6. Run graphify if available and useful; otherwise record why it was skipped.
-7. Create or update `wiki/code/codebases/<codebase_id>/` and affected `wiki/code/capabilities/`.
+6. If `docs/wiki` is present, adapt upstream topics, concepts, and source maps before deciding whether graphify is needed.
+7. Run graphify only if available and useful for structure evidence; otherwise record why it was skipped.
+8. Create or update `wiki/code/codebases/<codebase_id>/`, candidate artifacts, and affected `wiki/code/capabilities/`.
 8. If relevant requirements already exist, add or refresh `wiki/code/traceability/` rows with conservative evidence strength.
 9. Run health and graph.
 
@@ -474,6 +548,7 @@ Optional read-only checks:
 - Surface P0/P1/P2 findings directly in `主要问题`; do not require a separate `audit` command.
 - Count image assets under `raw/**/assets/` and image notes under `staging/image-notes/`.
 - When image assets exist without a completed image evidence pass, list prioritized image refinement candidate pages, using signals such as flow diagrams, state screenshots, money/account/risk/permission terms, launch tables, test conclusions, data tables, tracking, and pages already central to overview/concepts/query acceptance.
+- Count generated prototype evidence notes under `raw/**/assets/*.prototype.md`; flag linked zip evidence that has no sidecar note.
 - Count `wiki/code/codebases/*`, `wiki/code/capabilities/*.md`, and `wiki/code/traceability/*.md`.
 - Inspect latest health status.
 - Inspect graph node / edge counts.
@@ -683,7 +758,7 @@ Final report:
 
 Use the same early stages as `fast`, but stop after the initialized baseline and first-pass plan if the user wants phased work.
 
-When the user supplies a **Confluence/Cwiki URL** (`pageId=`) as the evidence source: install the bundled template (includes **`tools/confluence_sync/`**), run **`uv sync`**, then run **`uv run python tools/confluence_sync/export_obsidian_wiki.py`** with `--project-dir` so pages land under **`raw/<pageId>-<slug>/`**. Sync metadata defaults to **`staging/wiki-export/`**, not inside `raw/`. See `references/bootstrapping.md` section「从 wiki URL 拉取 raw」.
+When the user supplies a **Confluence/Cwiki URL** (`pageId=`) as the evidence source: install the bundled template (includes **`tools/confluence_sync/`**), run **`uv sync`**, then run **`uv run python tools/confluence_sync/export_obsidian_wiki.py`** with `--project-dir` so pages land under **`raw/<pageId>-<slug>/`**. Sync metadata defaults to **`staging/wiki-export-state/`**, not inside `raw/`. See `references/bootstrapping.md` section「从 wiki URL 拉取 raw」.
 
 ### `llm-wiki doctor`
 
@@ -695,7 +770,7 @@ Add another document/wiki directory into the project evidence layer. Preserve pr
 
 ### `llm-wiki add-code`
 
-Add another project codebase as `raw-code/<codebase_id>/`. Build codebase pages, endpoint maps, capability links, optional graphify output, and traceability when relevant.
+Add another project codebase as `raw-code/<codebase_id>/`. Build codebase pages, endpoint maps, upstream docs/wiki adapters when present, capability/anchor candidates, optional graphify output, and traceability when relevant.
 
 ### `llm-wiki query`
 

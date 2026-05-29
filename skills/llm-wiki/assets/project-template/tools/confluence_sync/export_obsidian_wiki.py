@@ -182,7 +182,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="",
         help=(
             "Forwarded to export_confluence_tree.py — overrides default metadata location "
-            "(otherwise resolved next to raw/)."
+            "(otherwise defaults to staging/wiki-export-state for project raw/ exports)."
         ),
     )
     parser.add_argument(
@@ -345,6 +345,8 @@ def apply_auth_env_defaults(args: argparse.Namespace, env: dict[str, str]) -> No
 
 def maybe_prompt_for_auth(args: argparse.Namespace) -> dict[str, str]:
     if str(getattr(args, "cookie", "") or "").strip():
+        return {}
+    if getattr(args, "auto_cookie_from_sso", False):
         return {}
     if not command_needs_cookie(args):
         return {}
