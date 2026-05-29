@@ -235,6 +235,8 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 可以使用 `graphify` 作为代码图谱增强层。它用于提取 AST、调用关系、代码结构报告和交互式图谱；`llm-wiki` 仍负责业务语义基线、Markdown 目录协议、跨层链接和可审计回答。
 
+如果 codebase 自带完整 `docs/wiki` 上游代码知识层，应优先将其 topic、concept、source-map 适配为 compact 候选，再结合 `scan_code.py` 的 endpoint、route、symbol 生成 capability / anchor candidates。此时 graphify 是按需结构增强，不是 `add-code` 或 code update 的默认步骤。只有结构证据缺失、结构性变更、旧 graphify 结果过期、或问题需要调用/依赖关系时才运行或建议运行。跳过 graphify 必须记录状态，但不应视为失败。
+
 ### 6. 速度与并发优先
 
 大型 wiki 构建、代码 wiki 构建和质量审查默认应追求吞吐，不应把可并行工作串行化。

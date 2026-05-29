@@ -198,9 +198,81 @@ def load_worker_proposals(project: Path) -> list[dict[str, object]]:
     return proposals
 
 
-def merge_traceability_state(project: Path) -> dict[str, object]:
+def load_candidate_proposals(project: Path, sources: list[object]) -> list[dict[str, object]]:
+    proposals: list[dict[str, object]] = []
+    source = next((item for item in sources if isinstance(item, dict) and item.get("slug")), {})
+    source_ref = f"wiki/sources/{source.get('slug')}.md" if isinstance(source, dict) and source.get("slug") else ""
+    root = project / "staging" / "code-graph"
+    if not root.is_dir():
+        return proposals
+    for path in sorted(root.glob("*/anchor-candidates.json")):
+        payload = read_json(path, {})
+        candidates = payload.get("candidates", []) if isinstance(payload, dict) else []
+        if not isinstance(candidates, list):
+            continue
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            code_anchor = str(candidate.get("code_anchor") or "")
+            if not code_anchor:
+                continue
+            strength = str(candidate.get("evidence_strength") or "candidate")
+            if strength in {"candidate", "file-only"}:
+                strength = "partial"
+            if strength == "strong":
+                strength = "partial"
+            proposals.append(
+                normalize_link(
+                    {
+                        "id": stable_id([source_ref, code_anchor, "candidate"]),
+                        "requirement": source.get("title", "candidate requirement") if isinstance(source, dict) else "candidate requirement",
+                        "source": source_ref,
+                        "code": [code_anchor],
+                        "strength": strength,
+                        "status": "proposed",
+                        "note": "Generated from deterministic code candidate; direct requirement-to-code verification is still required.",
+                    }
+                )
+            )
+    return proposals
+
+
+def code_anchor_path(anchor: object) -> str:
+    value = str(anchor)
+    return value.split("#", 1)[0].split(":", 1)[0]
+
+
+def link_has_missing_code_anchor(project: Path, link: dict[str, object]) -> bool:
+    code = link.get("code", [])
+    if isinstance(code, str):
+        code = [code]
+    if not isinstance(code, list):
+        return False
+    for anchor in code:
+        path = code_anchor_path(anchor)
+        if path.startswith("raw-code/") and not (project / path).exists():
+            return True
+    return False
+
+
+def validate_traceability_links(project: Path, links: list[dict[str, object]]) -> list[dict[str, object]]:
+    validated: list[dict[str, object]] = []
+    for link in links:
+        item = dict(link)
+        if link_has_missing_code_anchor(project, item):
+            item["status"] = "stale"
+            if str(item.get("strength")) == "strong":
+                item["strength"] = "partial"
+            note = str(item.get("note") or "")
+            suffix = "missing code anchor; verify or remove this traceability link."
+            item["note"] = f"{note} {suffix}".strip()
+        validated.append(item)
+    return validated
+
+
+def merge_traceability_state(project: Path, generated_proposals: list[dict[str, object]] | None = None) -> dict[str, object]:
     state = load_traceability_state(project)
-    proposals = load_worker_proposals(project)
+    proposals = [*(generated_proposals or []), *load_worker_proposals(project)]
     existing_by_id = {str(link["id"]): link for link in state["links"] if isinstance(link, dict) and link.get("id")}
     merged_by_id = dict(existing_by_id)
     protected_statuses = {"confirmed", "rejected"}
@@ -217,7 +289,10 @@ def merge_traceability_state(project: Path) -> dict[str, object]:
         else:
             merged_by_id[link_id] = proposal
     state["updated_at"] = utc_now()
-    state["links"] = sorted(merged_by_id.values(), key=lambda item: str(item.get("id", "")))
+    state["links"] = validate_traceability_links(
+        project,
+        sorted(merged_by_id.values(), key=lambda item: str(item.get("id", ""))),
+    )
     write(
         project / "staging" / "traceability" / "state.json",
         json.dumps(state, ensure_ascii=False, indent=2) + "\n",
@@ -310,7 +385,7 @@ def build_traceability(project: Path) -> dict[str, int]:
     traceability_path = project / "wiki" / "code" / "traceability" / "index.md"
     existing = traceability_path.read_text(encoding="utf-8") if traceability_path.is_file() else ""
     verified_traceability = extract_verified_traceability(existing)
-    state = merge_traceability_state(project)
+    state = merge_traceability_state(project, generated_proposals=load_candidate_proposals(project, sources))
     state_sections = render_state_sections(state)
 
     content = f"""# Traceability Matrix

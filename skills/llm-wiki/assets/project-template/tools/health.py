@@ -261,8 +261,9 @@ def code_intelligence_status(project: Path) -> dict[str, object]:
     root = project / "staging" / "code-graph"
     detected: list[str] = []
     fallback_only: list[str] = []
+    details: dict[str, dict[str, object]] = {}
     if not root.is_dir():
-        return {"detected_codebases": detected, "fallback_only_codebases": fallback_only}
+        return {"detected_codebases": detected, "fallback_only_codebases": fallback_only, "details": details}
     for summary_path in sorted(root.glob("*/upstream-summary.json")):
         try:
             payload = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -272,11 +273,18 @@ def code_intelligence_status(project: Path) -> dict[str, object]:
             continue
         codebase_id = str(payload.get("codebase_id") or summary_path.parent.name)
         upstream_type = str(payload.get("upstream_type") or "none")
+        details[codebase_id] = {
+            "upstream_wiki_present": upstream_type != "none",
+            "upstream_type": upstream_type,
+            "upstream_adapter_status": str(payload.get("adapter_status") or "skipped"),
+            "upstream_source_map_entries": int(payload.get("source_map_entries") or 0),
+            "upstream_warning_count": int(payload.get("warning_count") or 0),
+        }
         if upstream_type == "none":
             fallback_only.append(codebase_id)
         else:
             detected.append(codebase_id)
-    return {"detected_codebases": detected, "fallback_only_codebases": fallback_only}
+    return {"detected_codebases": detected, "fallback_only_codebases": fallback_only, "details": details}
 
 
 def business_context_status(project: Path) -> dict[str, object]:

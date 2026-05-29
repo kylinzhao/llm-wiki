@@ -88,6 +88,8 @@ staging/code-graph/
 
 可以使用 graphify 作为代码结构增强层。
 
+如果 `raw-code/<codebase_id>/docs/wiki` 存在且签名完整，优先把它当作上游代码导航层使用：解析 topic、concept、source-map，结合确定性扫描结果生成 `anchor-candidates.json` 和 `capability-candidates.json`。这种情况下 graphify 默认低频按需运行，而不是每次 `add-code` 或 `update` 的固定成本。
+
 推荐用法：
 
 1. 每个 codebase 单独运行 graphify 或单独归档输出
@@ -126,6 +128,15 @@ graphify 适合回答：
 - 模块之间如何调用
 - 哪些概念在代码中聚成一个社区
 - 哪些代码与文档可能相关
+
+graphify 触发条件：
+
+- 没有可用的 `docs/wiki` 或 source-map，且需要结构关系辅助。
+- `freshness.json` 显示 routes / controllers / services / imports 发生结构性变化。
+- 旧 `graphify-out/` 早于当前源码树，且当前查询需要调用链或依赖关系。
+- 用户明确要求分析调用、依赖、热点或聚类。
+
+当 `docs/wiki` 和 scan anchors 已能生成候选时，跳过 graphify 是正常结果；报告里应记录 graphify decision，而不是把它当成缺口。
 
 graphify 不负责：
 
@@ -361,6 +372,7 @@ OpenSpec / 技术设计属于代码侧设计证据，不属于 `raw/` 需求证�
 - jobs / consumers：证明异步入口，不证明上游事件语义完整。
 - API contract / SDK：证明契约形状，不证明服务实现。
 - graphify：证明结构关系线索，不证明业务语义。
+- `docs/wiki`：证明上游整理过的代码导航和候选关系，不证明当前实现一定仍然生效。
 
 冲突处理：
 
@@ -378,6 +390,9 @@ OpenSpec / 技术设计属于代码侧设计证据，不属于 `raw/` 需求证�
 - `scan_scope`
 - `graphify_status`
 - `graphify_output_path`
+- `upstream_adapter_status`
+- `capability_candidate_count`
+- `anchor_candidate_count`
 - `generated_page_paths`
 - `endpoint_map_path`
 - `capability_coverage_status`

@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 import yaml
 from agent_rules import refresh_agent_rules
+from graphify_code import decide_graphify_action
 from gplus_quality import inspect_gplus_quality
 from raw_code_manager import read_codebase_metadata
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
@@ -103,7 +104,11 @@ def write_failure_report(project: Path, failed_step: str, returncode: int, detai
     (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_success_report(project: Path, skipped_steps: list[str] | None = None) -> None:
+def write_success_report(
+    project: Path,
+    skipped_steps: list[str] | None = None,
+    graphify_decisions: list[dict[str, object]] | None = None,
+) -> None:
     report_dir = project / "staging" / "update"
     report_dir.mkdir(parents=True, exist_ok=True)
     health = read_json_if_present(project / "staging" / "health" / "latest.json")
@@ -113,6 +118,7 @@ def write_success_report(project: Path, skipped_steps: list[str] | None = None) 
         "status": "ok",
         "generated_at": utc_now(),
         "skipped_steps": skipped_steps or [],
+        "graphify_decisions": graphify_decisions or [],
         "gplus_quality": gplus_quality,
     }
     (report_dir / "latest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -128,6 +134,15 @@ def write_success_report(project: Path, skipped_steps: list[str] | None = None) 
     if skipped_steps:
         for step in skipped_steps:
             lines.append(f"- `{step}`")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Graphify Decisions", ""])
+    if graphify_decisions:
+        for decision in graphify_decisions:
+            lines.append(
+                f"- `{decision.get('codebase_id', 'unknown')}`: `{decision.get('decision', 'unknown')}` "
+                f"(should_run=`{decision.get('should_run', False)}`) - {decision.get('reason', '')}"
+            )
     else:
         lines.append("- None")
     lines.extend(
@@ -155,6 +170,17 @@ def write_success_report(project: Path, skipped_steps: list[str] | None = None) 
     else:
         lines.append("- No G+ semantic underfit finding from deterministic heuristics.")
     (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def collect_graphify_decisions(project: Path, requested: bool = False) -> list[dict[str, object]]:
+    raw_code = project / "raw-code"
+    if not raw_code.is_dir():
+        return []
+    return [
+        decide_graphify_action(project, path.name, requested=requested)
+        for path in sorted(raw_code.iterdir())
+        if path.is_dir()
+    ]
 
 
 def health_failure_details(project: Path) -> dict[str, object]:
@@ -830,7 +856,11 @@ def main() -> int:
             if script.name != "health.py":
                 break
     if exit_code == 0:
-        write_success_report(project, skipped_steps=skipped_steps)
+        write_success_report(
+            project,
+            skipped_steps=skipped_steps,
+            graphify_decisions=collect_graphify_decisions(project, requested=bool(args.graphify)),
+        )
     return exit_code
 
 

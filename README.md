@@ -114,6 +114,8 @@ uv run python tools/update_wiki.py
 
 当 `config/rss-feeds.yaml` 已配置启用的 feed URL 时，`tools/update_wiki.py` 会默认先执行 RSS 同步，再进入增量更新。代码证据只支持一种接入方式：用 `llm-wiki add-code` 将仓库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout。之后同一次 update 会默认先对这些受管 codebase 执行安全的 `git pull --ff-only`，再继续 code wiki 构建；如果仓库权限缺失、checkout 损坏或 worktree 不干净，update 必须明确失败而不是假装已刷新。
 
+代码库如果自带 `raw-code/<codebase_id>/docs/wiki` 且签名完整，update 会把它作为上游代码导航层，优先结合 `scan_code.py` 生成 compact 候选和 traceability proposal。此时 `graphify` 默认是按需结构增强：只有缺少结构证据、graphify 输出过期、发生结构性代码变更，或用户明确需要调用/依赖关系时才运行；跳过 graphify 是正常健康状态，不能自动宣称 `strong` traceability。
+
 按客户端可直接复制的初始化命令：
 
 ```bash
@@ -175,7 +177,7 @@ qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
 | `$llm-wiki-backfill` | `llm-wiki backfill` | 存量 KB 历史证据补全；重新扫描历史 raw/wiki/staging，补齐新版确定性派生能力，并继续进入 source/G+ 精修吸收。 |
 | `$llm-wiki-update-skill` | `llm-wiki update-skill` | 显式更新本机安装的 llm-wiki skill bundle、模板脚本和命令协议；不更新当前 KB 内容。 |
 | `$llm-wiki-add-wiki` | `llm-wiki add-wiki` | 把另一个文档库、wiki 导出、Markdown 目录、Confluence 导出、文档目录或 wiki URL 加入 `raw/` 原始证据层。 |
-| `$llm-wiki-add-code` | `llm-wiki add-code` | 把另一个本地仓库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout，并构建代码 wiki、能力页和必要 traceability。缺少仓库权限时必须立即终止。 |
+| `$llm-wiki-add-code` | `llm-wiki add-code` | 把另一个本地仓库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout，并构建代码 wiki、能力候选和必要 traceability。若存在 `docs/wiki`，优先作为上游导航；graphify 仅按需增强。缺少仓库权限时必须立即终止。 |
 | `$llm-wiki-query` | `llm-wiki query` | 按意图回答业务、产品、需求、实现或代码问题；业务知识默认不展开大量代码证据。 |
 | `$llm-wiki-query-plus` | `llm-wiki query-plus` | 同时回答业务/需求口径与代码实现证据，适合需要更详尽联动分析的问题。 |
 | `$llm-wiki-image` | `llm-wiki image` | 文本层完成后补充高价值图片、截图、图表或附件证据；默认不批量分析低价值截图。 |

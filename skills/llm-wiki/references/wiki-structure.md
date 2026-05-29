@@ -132,6 +132,13 @@ staging/code-graph/
     graphify-out/
     manifest.json
     endpoint-map.json
+    freshness.json
+    upstream-topics.json
+    upstream-concepts.json
+    upstream-source-map.json
+    anchor-candidates.json
+    capability-candidates.json
+    structure-summary.json
 ```
 
-`graphify-out/` 由 graphify 生成；`manifest.json` 和 `endpoint-map.json` 可以由 Codex 或项目脚本维护，用于记录 codebase 类型、扫描范围、输出路径和跨端 API 映射。
+`graphify-out/` 由 graphify 生成；当 `docs/wiki` 与确定性扫描已经足够产生候选时，graphify 可以正常跳过。`manifest.json`、`endpoint-map.json`、`freshness.json`、upstream 适配文件和 candidates 文件由项目脚本维护，用于记录 codebase 类型、扫描范围、变更范围、上游导航、代码锚点候选和跨端 API 映射。旧项目缺少新增 candidate 文件时仍按 scan-only 路径处理。

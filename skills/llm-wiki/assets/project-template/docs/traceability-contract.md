@@ -17,6 +17,15 @@ staging/traceability/runs/<run_id>/proposals.json
 staging/traceability/state.json
 ```
 
+Deterministic tooling may also create proposals from compact candidate files such as:
+
+```text
+staging/code-graph/<codebase_id>/anchor-candidates.json
+staging/code-graph/<codebase_id>/capability-candidates.json
+```
+
+These deterministic proposals are review inputs. Upstream `docs/wiki` matches and graphify structure hints may produce `partial` or `inferred` links, but must not be promoted to `strong` unless direct requirement anchors and direct code anchors are both verified.
+
 ## Minimal Proposal Format
 
 ```json
@@ -61,6 +70,7 @@ Non-`strong` links are still query-visible, but answers must label them as parti
 ## Merge Rules
 
 - Same `id`: update generated fields, but preserve `status=confirmed` or `status=rejected`.
+- If a confirmed link's code anchor no longer exists, mark it `stale` and downgrade `strong` to `partial` until the anchor is repaired or removed.
 - New `id`: append as a new link.
 - `rejected` links do not appear in proposed query results unless the user asks about rejected or excluded links.
 - The merger renders Markdown from `state.json`; Markdown is not the source of truth.
