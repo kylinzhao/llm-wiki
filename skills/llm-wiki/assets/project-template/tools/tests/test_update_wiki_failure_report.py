@@ -174,6 +174,31 @@ class UpdateFailureReportTest(unittest.TestCase):
             self.assertEqual(latest["skipped_steps"], ["raw_sync"])
             self.assertIn("Status: `ok`", (report_dir / "latest.md").read_text(encoding="utf-8"))
 
+    def test_success_report_records_graphify_decisions(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+
+            update_wiki.write_success_report(
+                project,
+                graphify_decisions=[
+                    {
+                        "codebase_id": "demo",
+                        "decision": "skipped_upstream_sufficient",
+                        "should_run": False,
+                        "reason": "upstream docs/wiki and scan anchors are sufficient",
+                    }
+                ],
+            )
+
+            latest = json.loads((project / "staging" / "update" / "latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(latest["graphify_decisions"][0]["decision"], "skipped_upstream_sufficient")
+            latest_md = (project / "staging" / "update" / "latest.md").read_text(encoding="utf-8")
+            self.assertIn("## Graphify Decisions", latest_md)
+            self.assertIn("skipped_upstream_sufficient", latest_md)
+
     def test_rss_sync_enabled_defaults_on_and_respects_false_manifest_flag(self):
         import tempfile
 

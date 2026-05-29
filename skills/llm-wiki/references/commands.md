@@ -66,7 +66,7 @@ Run order:
 2. Install the bundled project template unless equivalent scripts already exist: after bundle install, use your client's skills root (for example Codex: `python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_template.py" --project "$PWD"`), or use `python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"` when the package lives elsewhere (see main `SKILL.md` "Skill 包路径").
 3. Run deterministic build with `uv run python tools/update_wiki.py`.
    - when the standard template is installed, this command should auto-refresh enabled RSS/feed raw inputs and engine-managed `raw-code/<codebase_id>/` git checkouts before rebuilding deterministic code outputs
-4. If `raw-code/` exists and code graph extraction is useful, run `uv run python tools/graphify_code.py --all`, then rerun `scan_code.py` and `build_traceability.py`.
+4. If `raw-code/` exists, run the code scan and candidate pipeline first. If a complete `raw-code/<codebase_id>/docs/wiki` exists, use it with scan anchors as the preferred first-pass code navigation layer. Run `uv run python tools/graphify_code.py --all` only when structural graph evidence is missing, stale, explicitly requested, or needed for call/dependency questions.
 5. Complete first-pass source summary and AI-native refinement.
 6. Build layered pages, concepts, entities, truth, conflicts, evidence, proposals, reference, operations.
 7. If `raw-code/` exists, refine codebase indexes, capability pages, and traceability evidence strengths.
@@ -135,7 +135,7 @@ Impact analysis:
 
 - If `raw/` changed: update matching source pages, affected layered pages, concepts, entities, query acceptance, health, graph.
 - If `BUSINESS_CONTEXT.md` changed: update canonical aliases, concepts, entities, conflicts, query playbook, affected answers.
-- If `raw-code/` changed: update affected codebase pages, endpoint maps, capability pages, traceability rows, graphify status if needed.
+- If `raw-code/` changed: update affected codebase pages, endpoint maps, compact upstream artifacts, capability candidates, traceability rows, and graphify status if needed.
 - If `wiki/code/traceability/` changed: verify evidence strength, source anchors, code anchors, and linked capability pages.
 - If docs changed only: update retrieval/build guidance and run link checks.
 - If G+ semantic underfit is reported by `tools/update_wiki.py` or `tools/doctor.py`: do not rebuild `raw/` solely for that reason; run a Codex-native G+ semantic expansion pass over existing source pages.
@@ -173,7 +173,7 @@ Default update order:
    - Read `staging/update/latest.json` `gplus_quality`; if `status=needs_attention`, treat it as an update trigger even when `semantic_update_required=false`.
 6. Refresh affected pages:
    - changed `raw/` pages update matching source pages, layered pages, concepts, entities, query readiness, health, and graph
-   - changed `raw-code/` files update affected codebase pages, endpoint maps, capability pages, traceability rows, and graphify status when needed
+   - changed `raw-code/` files update affected codebase pages, endpoint maps, freshness state, capability/anchor candidates, traceability rows, and graphify status when needed
    - changed `BUSINESS_CONTEXT.md` updates canonical aliases, concepts, entities, conflicts, truth, and retrieval guidance
    - if health or the update report shows remaining `pending` or `stale` source pages, resolve them in the same command when they are in scope or the backlog is small enough to finish safely
    - G+ semantic underfit updates concepts/entities, source Business Links, truth/conflicts/evidence/proposals/operations/reference, query acceptance, and G+ quality audit without rewriting unrelated source summaries
@@ -408,8 +408,9 @@ Default order:
    - this is the only supported onboarding model
    - if repository access is missing, stop immediately and tell the user to obtain permission before retrying
 5. Scan the codebase for README, AGENTS, OpenSpec, API contracts, routes, controllers, services, jobs, messages, data access, and config.
-6. Run graphify if available and useful; otherwise record why it was skipped.
-7. Create or update `wiki/code/codebases/<codebase_id>/` and affected `wiki/code/capabilities/`.
+6. If `docs/wiki` is present, adapt upstream topics, concepts, and source maps before deciding whether graphify is needed.
+7. Run graphify only if available and useful for structure evidence; otherwise record why it was skipped.
+8. Create or update `wiki/code/codebases/<codebase_id>/`, candidate artifacts, and affected `wiki/code/capabilities/`.
 8. If relevant requirements already exist, add or refresh `wiki/code/traceability/` rows with conservative evidence strength.
 9. Run health and graph.
 
@@ -682,7 +683,7 @@ Add another document/wiki directory into the project evidence layer. Preserve pr
 
 ### `llm-wiki add-code`
 
-Add another project codebase as `raw-code/<codebase_id>/`. Build codebase pages, endpoint maps, capability links, optional graphify output, and traceability when relevant.
+Add another project codebase as `raw-code/<codebase_id>/`. Build codebase pages, endpoint maps, upstream docs/wiki adapters when present, capability/anchor candidates, optional graphify output, and traceability when relevant.
 
 ### `llm-wiki query`
 
