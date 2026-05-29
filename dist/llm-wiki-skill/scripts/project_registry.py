@@ -15,6 +15,7 @@ from typing import Any
 REGISTRY_VERSION = 1
 SKIP_DIR_NAMES = {
     ".git",
+    ".data",
     ".venv",
     "node_modules",
     "raw",

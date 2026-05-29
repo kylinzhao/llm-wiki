@@ -70,6 +70,11 @@ class ProjectRegistryTest(unittest.TestCase):
             (ignored / "kb.manifest.yaml").write_text("version: 1\n", encoding="utf-8")
             (ignored / "tools" / "update_wiki.py").write_text("# update\n", encoding="utf-8")
 
+            e2e = root / "agent-gateway" / ".data" / "kb-e2e" / "stable" / "tmp-kb"
+            (e2e / "tools").mkdir(parents=True)
+            (e2e / "kb.manifest.yaml").write_text("version: 1\n", encoding="utf-8")
+            (e2e / "tools" / "update_wiki.py").write_text("# update\n", encoding="utf-8")
+
             found = registry.discover_projects(root)
 
             self.assertEqual(found, sorted([strong.resolve(), legacy.resolve()]))
