@@ -63,8 +63,20 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 
 ## Engine 发行（`engine-v*`）
 
+- **`engine-v1.0.2`**：新增发布版本脚本与 GitLab 发布规则，要求每次发布前同步升级 VERSION、manifest 和 README 发行记录。
 - **`engine-v1.0.1`**：修复项目模板健康检查与图谱构建对 Markdown 代码片段中 `[[...]]` 路径的误判，避免 Next.js catch-all 路由等代码路径被当作 broken wikilink；修复 `tools/health.py` 普通 CLI 输出的统计变量错误；当已启用本机 SSO 自动鉴权时，Cwiki 同步不再提前打印缺鉴权提示。
 - **`engine-v1.0.0`**：冻结 `kb.manifest.yaml` 字段、`config/rss-feeds.yaml` 形状、`tools/rss_sync.py` 抓取与限速语义，以及 **`tools/update_wiki.py`** 优先的确定性更新链。详见仓库根目录 **`INSTRUCTION_AND_RELEASE_PLAN.md`**。对外 Git tag：`engine-v1.0.0`（在 `llm-wiki-skill` 仓库创建）。
+
+发布到 GitLab 前必须先升级版本号并写入发行记录，不允许只提交代码。使用：
+
+```bash
+python3 scripts/release_version.py \
+  --version <next-patch-version> \
+  --engine-version engine-v<next-patch-version> \
+  --note "<中文发行说明>"
+```
+
+随后提交版本文件、README 和功能变更，推送 `main` 后打并推送同名 `engine-v*` tag。
 
 ## Bundle 内容
 

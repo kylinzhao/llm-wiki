@@ -119,8 +119,8 @@ test_force_replaces_existing_skill() {
   assert_file "$home/skills/llm-wiki-maintain-all/SKILL.md"
   assert_contains "语言要求" "$home/skills/llm-wiki-backfill/SKILL.md"
   assert_no_path "$home/skills/llm-wiki/local.txt"
-  assert_contains "version: 1.0.0" "$home/skills/llm-wiki/VERSION"
-  assert_contains "engine_version: engine-v1.0.0" "$home/skills/llm-wiki/VERSION"
+  assert_contains "version: 1.0.2" "$home/skills/llm-wiki/VERSION"
+  assert_contains "engine_version: engine-v1.0.2" "$home/skills/llm-wiki/VERSION"
   assert_contains "replaced llm-wiki" "$TMP_DIR/force.out"
 }
 

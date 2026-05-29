@@ -137,6 +137,26 @@ llm-wiki-skill/
 
 安装脚本默认安全优先：如果目标 skill 已存在，会拒绝覆盖。使用 `--dry-run` 预览，使用 `--backup` 备份旧目录后安装，只有明确传 `--force` 才会删除旧目录。
 
+### GitLab 发布版本规则
+
+每次把 `llm-wiki-skill` 发布到 GitLab 前，必须同步升级 bundle 版本和 engine 版本，并更新 README 发行记录。不要只提交代码再推送。
+
+标准命令：
+
+```bash
+python3 scripts/release_version.py \
+  --version <next-patch-version> \
+  --engine-version engine-v<next-patch-version> \
+  --note "<中文发行说明>"
+```
+
+该命令会同步更新 `skills/llm-wiki/VERSION`、`dist/llm-wiki-skill/VERSION`、`dist/llm-wiki-skill/manifest.json`、根 README 以及 dist/source README。推送 `main` 后必须打并推送同名 `engine-v*` tag，例如：
+
+```bash
+git tag engine-v1.0.2
+git push origin main engine-v1.0.2
+```
+
 ## engine-v1.0.0（发布切片）
 
 **标签：** Git tag `engine-v1.0.0` 打在 `llm-wiki-skill` 仓库；对应 **manifest + RSS + 确定性更新链** 契约冻结。
