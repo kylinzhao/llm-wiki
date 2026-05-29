@@ -325,9 +325,9 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --client auto --backup
 ```
 
-更新来源不是脚本里写死的 URL，而是本地 `llm-wiki-skill` bundle checkout 的 git upstream。内部标准 checkout 的 `main` 跟踪 `origin/main`，`origin` 为 GitLab 地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git`；GitHub remote 只作为额外远端，除非显式指定，不默认使用。
+更新来源优先使用本地 `llm-wiki-skill` bundle checkout 的 git upstream。若无法从安装目录、环境变量或当前工作目录推断本地 checkout，updater 会从公司 GitLab 默认地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` 下载到 `~/.cache/llm-wiki-skill/llm-wiki`，再从该 cache 安装。可用 `--git-url` / `LLM_WIKI_SKILL_GIT_URL` 覆盖下载地址，用 `--cache-dir` / `LLM_WIKI_SKILL_CACHE_DIR` 覆盖 cache 目录；GitHub remote 只作为额外远端，除非显式指定，不默认使用。
 
-如果当前安装目录是复制出来的、脚本无法推断源码 checkout，则传入 bundle 仓库路径：
+如果要强制使用指定的本地 bundle 仓库路径：
 
 ```text
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --source /path/to/llm-wiki-skill --client auto --backup

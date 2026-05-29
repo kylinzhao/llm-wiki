@@ -93,7 +93,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/update_installed_skill.py" --source "$PWD" --client auto --backup
 ```
 
-更新来源由本地 bundle checkout 的 git upstream 决定；内部标准 checkout 的 `main` 跟踪公司 GitLab `origin/main`，`origin` 为 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git`。仓库里可能还有 GitHub mirror remote，但不作为默认更新源。
+更新来源优先由本地 bundle checkout 的 git upstream 决定；若无法推断本地 checkout，updater 会从公司 GitLab 默认地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` 下载到 `~/.cache/llm-wiki-skill/llm-wiki`，再从该 cache 安装。可用 `--git-url` / `LLM_WIKI_SKILL_GIT_URL` 覆盖下载地址，用 `--cache-dir` / `LLM_WIKI_SKILL_CACHE_DIR` 覆盖 cache 目录。仓库里可能还有 GitHub mirror remote，但不作为默认更新源。
 
 如果 skill 是通过 `--link` 从本仓库安装的，也可以省略 `--source`，脚本会尝试从当前 skill 路径推断 bundle checkout 并执行 `git pull --ff-only` 后重新安装。
 

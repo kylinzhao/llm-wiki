@@ -313,10 +313,11 @@ Purpose: update the installed llm-wiki skill bundle itself. Use only when the us
 
 Update source:
 
-- The updater does not hard-code a hosted repository URL. It updates from the local llm-wiki-skill bundle checkout, using that checkout's configured git upstream.
-- In the canonical internal checkout, `main` tracks `origin/main`, where `origin` is the GitLab remote `https://git.guazi-corp.com/c2b-fe/llm-wiki.git`.
+- The updater first prefers a local llm-wiki-skill bundle checkout, using that checkout's configured git upstream.
+- If no local checkout can be inferred, the updater may clone the canonical GitLab source `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` into `~/.cache/llm-wiki-skill/llm-wiki`, then install from that cached checkout.
+- Override the fallback Git URL with `--git-url` or `LLM_WIKI_SKILL_GIT_URL`; override the cache parent with `--cache-dir` or `LLM_WIKI_SKILL_CACHE_DIR`.
 - A GitHub remote may exist as a mirror, but do not switch to it unless the user explicitly asks or the local checkout is configured that way.
-- If the installed skill was copied and no source checkout can be inferred, ask for `--source /path/to/llm-wiki-skill`.
+- If the installed skill was copied and no source checkout can be inferred, use the GitLab cache fallback unless the user requested offline mode with `--no-download`.
 
 Default behavior:
 
@@ -326,7 +327,7 @@ Default behavior:
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --client auto --backup
    ```
 
-2. If the installed skill was copied and the updater cannot infer the source checkout, ask for or use a known local bundle checkout:
+2. If the installed skill was copied and the updater cannot infer the source checkout, it clones/pulls the GitLab fallback. To force a known local bundle checkout:
 
    ```bash
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --source /path/to/llm-wiki-skill --client auto --backup
@@ -342,7 +343,7 @@ Default behavior:
 
 Stop when:
 
-- No bundle checkout is available and the user has not provided `--source`.
+- No bundle checkout is available, GitLab clone/pull fails, and the user has not provided `--source`.
 - `git pull --ff-only` fails because the bundle checkout has local conflicts or diverged history.
 - installation reports destination conflicts without `--backup` or `--force`.
 
