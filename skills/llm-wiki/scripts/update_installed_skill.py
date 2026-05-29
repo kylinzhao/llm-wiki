@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
-import sys
 from pathlib import Path
 
 
 SCRIPT_PATH = Path(__file__).resolve()
 SKILL_ROOT = SCRIPT_PATH.parents[1]
+
+
+def is_bundle_root(path: Path) -> bool:
+    return (path / "install.sh").is_file() and (path / "skills" / "llm-wiki").is_dir()
 
 
 def run(command: list[str], cwd: Path) -> int:
@@ -21,8 +25,22 @@ def run(command: list[str], cwd: Path) -> int:
 def default_bundle_root() -> Path | None:
     # Source checkout layout: <bundle>/skills/llm-wiki/scripts/this_file.py
     candidate = SCRIPT_PATH.parents[3]
-    if (candidate / "install.sh").is_file() and (candidate / "skills" / "llm-wiki").is_dir():
+    if is_bundle_root(candidate):
         return candidate
+
+    for env_name in ("LLM_WIKI_SKILL_SOURCE", "LLM_WIKI_SKILL_BUNDLE", "LLM_WIKI_SKILL_CHECKOUT"):
+        env_value = os.environ.get(env_name)
+        if not env_value:
+            continue
+        candidate = Path(env_value).expanduser().resolve()
+        if is_bundle_root(candidate):
+            return candidate
+
+    cwd = Path.cwd().resolve()
+    for base in (cwd, *cwd.parents):
+        for candidate in (base, base / "llm-wiki-skill"):
+            if is_bundle_root(candidate):
+                return candidate
     return None
 
 
@@ -37,9 +55,9 @@ def resolve_bundle_root(source: str | None) -> Path:
                 "Pass --source /path/to/llm-wiki-skill."
             )
 
-    if not (root / "install.sh").is_file():
-        raise SystemExit(f"Missing install.sh in bundle source: {root}")
-    if not (root / "skills" / "llm-wiki").is_dir():
+    if not is_bundle_root(root):
+        if not (root / "install.sh").is_file():
+            raise SystemExit(f"Missing install.sh in bundle source: {root}")
         raise SystemExit(f"Missing skills/llm-wiki in bundle source: {root}")
     return root
 
@@ -64,7 +82,7 @@ def main() -> int:
     parser.add_argument(
         "--client",
         default="auto",
-        choices=["auto", "codex", "claude", "cursor", "all"],
+        choices=["auto", "codex", "claude", "cursor", "qoder", "all"],
         help="Client skill directory to update. Defaults to auto.",
     )
     parser.add_argument("--mode", default="--copy", choices=["--copy", "--link"], help="Install mode.")

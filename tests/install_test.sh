@@ -52,6 +52,12 @@ run_install_cursor() {
   HOME="$home" CURSOR_HOME="$home" "$ROOT_DIR/install.sh" --client cursor "$@"
 }
 
+run_install_qoder() {
+  local home="$1"
+  shift
+  HOME="$home" QODER_HOME="$home" "$ROOT_DIR/install.sh" --client qoder "$@"
+}
+
 test_default_refuses_existing_skill() {
   local home="$TMP_DIR/default-refuse"
   local skill_dir="$home/skills/llm-wiki"
@@ -123,11 +129,19 @@ test_cursor_client_installs_to_cursor_home() {
   assert_contains "Installed llm-wiki skills into:" "$TMP_DIR/cursor.out"
 }
 
+test_qoder_client_installs_to_qoder_home() {
+  local home="$TMP_DIR/qoder"
+  run_install_qoder "$home" --copy >"$TMP_DIR/qoder.out"
+  assert_file "$home/skills/llm-wiki/SKILL.md"
+  assert_contains "Installed llm-wiki skills into:" "$TMP_DIR/qoder.out"
+}
+
 test_default_refuses_existing_skill
 test_dry_run_does_not_write
 test_backup_preserves_existing_skill
 test_force_replaces_existing_skill
 test_claude_client_installs_to_claude_home
 test_cursor_client_installs_to_cursor_home
+test_qoder_client_installs_to_qoder_home
 
 echo "install tests passed"

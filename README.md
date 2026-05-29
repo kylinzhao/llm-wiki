@@ -13,10 +13,11 @@ https://git.guazi-corp.com/c2b-fe/llm-wiki
 - **Python** 3.10+（与项目模板 `pyproject.toml` 一致）
 - **`uv`**：模板与文档中的构建命令统一为 `uv run python ...`（见 `skills/llm-wiki/assets/project-template/docs/tooling-dependencies.md`）
 - **Unix 环境**：`install.sh` 为 Bash 脚本；Windows 请手动将 `skills/` 下各目录复制到对应 skills 安装路径，或使用 WSL/Git Bash。
-- `install.sh` 支持 `--client codex|claude|cursor|all|auto`：
+- `install.sh` 支持 `--client codex|claude|cursor|qoder|all|auto`：
   - `codex` -> `${CODEX_HOME:-$HOME/.codex}/skills`
   - `claude` -> `${CLAUDE_HOME:-$HOME/.claude}/skills`
   - `cursor` -> `${CURSOR_HOME:-$HOME/.cursor}/skills`
+  - `qoder` -> `${QODER_HOME:-$HOME/.qoder}/skills`
   - `auto`（默认）会按当前机器上已存在的客户端目录自动选择目标；`all` 强制安装到三者。
 - **可选**：`graphify`（仅当需要代码图谱增强时）。**可选**：`local-port-registry` skill——仅在 `requirement-review` 流程里要起本地预览服且担心端口冲突时使用；本 bundle 未内置该 skill。
 
@@ -83,6 +84,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 ./install.sh --copy --backup --client codex
 ./install.sh --copy --backup --client claude
 ./install.sh --copy --backup --client cursor
+./install.sh --copy --backup --client qoder
 ```
 
 更新已安装的 bundle 时，可从源码 checkout 运行安装脚本，或使用已安装 skill 内的 updater：
@@ -140,6 +142,7 @@ python3 "${CURSOR_HOME:-$HOME/.cursor}/skills/llm-wiki/scripts/install_project_t
 codex  -> ${CODEX_HOME:-$HOME/.codex}/skills
 claude -> ${CLAUDE_HOME:-$HOME/.claude}/skills
 cursor -> ${CURSOR_HOME:-$HOME/.cursor}/skills
+qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
 ```
 
 ## 主入口
