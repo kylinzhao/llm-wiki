@@ -147,6 +147,8 @@ class BackfillTest(unittest.TestCase):
             self.assertEqual(manifest["sources"][0]["codebase_id"], "csp-rn-dcn")
             self.assertEqual(manifest["sources"][0]["target_dir"], "raw-code/csp-rn-dcn")
             self.assertEqual(manifest["sources"][0]["sync"], {"mode": "ff-only"})
+            metadata = (codebase / ".llm-wiki-codebase.yaml").read_text(encoding="utf-8")
+            self.assertIn("managed_path: raw-code/csp-rn-dcn", metadata)
             self.assertIn("upstream/code-sources.json", report["refinement_scope"]["files"])
 
     def test_backfill_replaces_local_code_source_metadata_with_origin_remote(self):
@@ -177,6 +179,8 @@ class BackfillTest(unittest.TestCase):
             self.assertEqual(report["status"], "ok")
             manifest = json.loads((project / "upstream" / "code-sources.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["sources"][0]["repo_url"], "https://git.guazi-corp.com/oversea/global-bd")
+            metadata = (codebase / ".llm-wiki-codebase.yaml").read_text(encoding="utf-8")
+            self.assertIn("managed_path: raw-code/global-bd", metadata)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ from raw_code_manager import (
     read_codebase_metadata,
     run_git,
     validate_code_sources_manifest,
+    write_codebase_metadata,
     write_code_sources_manifest,
 )
 
@@ -191,6 +192,7 @@ def pass_code_sources(project: Path) -> dict[str, object]:
         }
 
     sources: list[dict[str, object]] = []
+    changed_metadata: list[str] = []
     blocked: list[dict[str, str]] = []
     for entry in sorted(raw_code.iterdir()):
         if not entry.is_dir() or entry.name.startswith("."):
@@ -208,18 +210,27 @@ def pass_code_sources(project: Path) -> dict[str, object]:
             else:
                 blocked.append({"codebase_id": entry.name, "reason": "local_repo_url_without_origin_remote"})
                 continue
-        sources.append(
-            {
-                "codebase_id": codebase_id,
-                "repo_url": repo_url,
-                "origin_ref": str(metadata.get("origin_ref") or metadata.get("default_branch") or ""),
-                "default_branch": str(metadata.get("default_branch") or metadata.get("origin_ref") or ""),
-                "target_dir": f"raw-code/{codebase_id}",
-                "enabled": True,
-                "managed": True,
-                "sync": {"mode": "ff-only"},
-            }
-        )
+        source = {
+            "codebase_id": codebase_id,
+            "repo_url": repo_url,
+            "origin_ref": str(metadata.get("origin_ref") or metadata.get("default_branch") or ""),
+            "default_branch": str(metadata.get("default_branch") or metadata.get("origin_ref") or ""),
+            "target_dir": f"raw-code/{codebase_id}",
+            "enabled": True,
+            "managed": True,
+            "sync": {"mode": "ff-only"},
+        }
+        sources.append(source)
+        expected_metadata = {
+            "codebase_id": codebase_id,
+            "repo_url": str(source["repo_url"]),
+            "origin_ref": str(source["origin_ref"]),
+            "default_branch": str(source["default_branch"]),
+            "managed_path": str(source["target_dir"]),
+        }
+        if any(metadata.get(key) != value for key, value in expected_metadata.items()):
+            write_codebase_metadata(entry, expected_metadata)
+            changed_metadata.append(f"{source['target_dir']}/.llm-wiki-codebase.yaml")
 
     try:
         normalized = validate_code_sources_manifest({"version": 1, "sources": sources}, shared_mode=True, project=project)
@@ -234,16 +245,20 @@ def pass_code_sources(project: Path) -> dict[str, object]:
 
     before = read_code_sources_manifest(project)
     after = {"version": 1, "sources": normalized}
-    changed = before != after
-    if changed:
+    manifest_changed = before != after
+    if manifest_changed:
         write_code_sources_manifest(project, after)
+    affected_files = []
+    if manifest_changed:
+        affected_files.append("upstream/code-sources.json")
+    affected_files.extend(changed_metadata)
 
     return {
         "status": "ok",
-        "changed_count": 1 if changed else 0,
+        "changed_count": len(affected_files),
         "codebase_count": len(normalized),
         "blocked": blocked,
-        "affected_files": ["upstream/code-sources.json"] if changed else [],
+        "affected_files": affected_files,
     }
 
 
