@@ -9,6 +9,7 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki fast` | New project, user wants the standard path completed in one run | Full first-pass wiki, refinement, validation, status |
 | `llm-wiki init` | New project, user wants phased initialization | Skeleton, deterministic build, first-pass plan |
 | `llm-wiki doctor` | User wants site status, diagnosis, quality review, or prioritized recommendations | Findings plus health portrait and next steps |
+| `llm-wiki version` | User asks for the llm-wiki skill / bundle version, current version, skill version, or engine version | Installed skill bundle version from `VERSION` |
 | `llm-wiki update` | Existing KB needs resume, refinement, traceability refresh, source/code updates, or validation after changes | Impact-scoped update, validation, and maintenance report |
 | `llm-wiki backfill` | Existing KB was built with older skill versions and needs historical evidence re-scanned | Deterministic evidence backfill, then refinement absorption through update semantics |
 | `llm-wiki update-skill` | User explicitly asks to update the llm-wiki skill bundle itself, not the current KB content | Pull/reinstall the installed skill bundle, then optionally refresh project tooling |
@@ -18,6 +19,17 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki query-plus` | Answer with business/requirement evidence and code implementation evidence together | Detailed business+code evidence analysis |
 | `llm-wiki review-requirement` | Review a new PRD, Cwiki page, Markdown requirement, or prototype package against wiki, raw, image, zip, frontend, and code evidence | Findings-first requirement review and Cwiki comment draft |
 | `llm-wiki image` | Add high-value image evidence after text completion | image notes and linked facts |
+
+## Skill Version Queries
+
+When the user asks for the llm-wiki skill / bundle version, current version, skill version, or engine version through `llm-wiki`, `/llm-wiki`, `llm-wiki query`, `/llm-wiki query`, `$llm-wiki-query`, or `/llm-wiki-query`, treat it as a skill metadata request, not as a KB query.
+
+Read `VERSION` from the llm-wiki skill package root and answer from that file:
+
+- `version`: llm-wiki skill bundle version.
+- `engine_version`: bundled project template / deterministic tooling contract version.
+
+If `VERSION` is missing, fall back to `manifest.json` in the same directory when available and report its `version`; state clearly that `engine_version` is not declared in that fallback.
 
 ## Evidence preflight (partial clone / git without raw)
 

@@ -24,6 +24,15 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/install_project_tem
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"
 ```
 
+## 版本查询
+
+当用户通过 `$llm-wiki`、`/llm-wiki`、`$llm-wiki query`、`/llm-wiki query`、`$llm-wiki-query` 或 `/llm-wiki-query` 询问 llm-wiki skill / bundle 的版本、当前版本、skill 版本或 engine 版本时，先读取 **llm-wiki skill 包根目录**下的 `VERSION` 文件并直接回答；不要把这类问题当作当前 KB 项目的业务查询，也不要进入 `BUSINESS_CONTEXT.md`、`wiki/` 或 `raw/` 检索。
+
+如果 `VERSION` 文件缺失但同目录存在 `manifest.json`，可回退读取其中的 `version` 字段；同时说明 `engine_version` 未在该文件中声明。回答时区分：
+
+- `version`：llm-wiki skill bundle 版本。
+- `engine_version`：随 skill 打包的项目模板 / 确定性工具契约版本。
+
 它适用于：
 
 - 新项目 0-1 初始化

@@ -1,4 +1,4 @@
-engine_version: "engine-v0.1.0"
+engine_version: "engine-v1.0.0"
 
 capabilities:
   - wiki.query
