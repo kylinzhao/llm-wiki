@@ -172,7 +172,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 10. 阶段 I：发布 / 提交 / 远端同步
 11. 阶段 M：后续增量维护
 
-阶段 I 的共享发布硬门禁是证据同步、health、graph、必要 anchor check 和发布范围安全。`check_refinement.py` 的 pending 或 `refinement_contract.status=needs_refinement` 不是 raw/graph/health 硬阻断，但它是 P1 自动精修任务：`update` 必须在同轮进入 Codex-native source 精修队列，不能只发布后提醒用户下次处理；pending 太多时可以分批 checkpoint，并明确记录已处理和剩余队列。图片证据待筛选或已 checkpoint 的语义层待加厚可作为 `usable-with-gaps` 发布。raw-code 权限失败、非受管、损坏、dirty 或不能 fast-forward 是硬阻断，应在写入 raw/wiki/staging 产物前停止，并让用户先修权限/凭证或显式切换本机模式。
+阶段 I 的共享发布硬门禁是证据同步、health、graph、必要 anchor check 和发布范围安全。`check_refinement.py` 的 pending 或 `refinement_contract.status=needs_refinement` 不是 raw/graph/health 硬阻断，但它是 P1 自动精修任务：`update` 必须在同轮进入 Codex-native source 精修队列，不能只发布后提醒用户下次处理。pending source 队列超过 10 页时，应默认使用 subagent / worker 并行分片尽可能处理完整队列，分片只改互不重叠的 `wiki/sources/*`，主 agent 统一写 `staging/refinement-status.md` 并收口验证；不得把 5 页或少量样本当作默认完成策略。只有真实 blocker、工具限制、上下文耗尽或用户要求停止时才允许 checkpoint。图片证据待筛选或已 checkpoint 的语义层待加厚可作为 `usable-with-gaps` 发布。raw-code 权限失败、非受管、损坏、dirty 或不能 fast-forward 是硬阻断，应在写入 raw/wiki/staging 产物前停止，并让用户先修权限/凭证或显式切换本机模式。
 
 ### 2. 新项目优先构建，不优先查询
 

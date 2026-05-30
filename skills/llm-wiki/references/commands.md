@@ -124,7 +124,7 @@ If the user asks to update the **llm-wiki skill itself** rather than KB content,
 
 Shared update protocol:
 
-- `llm-wiki update` defaults to shared mode. Before local deterministic work starts, synchronize the KB git repository with its upstream branch. After deterministic update and hard validation finish, publish the shared KB baseline with a normal git commit and push. Pending source refinement is not a raw/graph/health hard blocker, but `refinement_contract.status=needs_refinement` is a P1 automatic update task: the current agent must run Codex-native source refinement before final closure, not merely publish and tell the user to run update later. If the queue is too large, process a coherent batch, record handled and remaining pages, and publish that explicit checkpoint rather than leaving each machine with divergent uncommitted outputs.
+- `llm-wiki update` defaults to shared mode. Before local deterministic work starts, synchronize the KB git repository with its upstream branch. After deterministic update and hard validation finish, publish the shared KB baseline with a normal git commit and push. Pending source refinement is not a raw/graph/health hard blocker, but `refinement_contract.status=needs_refinement` is a P1 automatic update task: the current agent must run Codex-native source refinement before final closure, not merely publish and tell the user to run update later. If more than 10 source pages are pending, use subagents/workers to process disjoint `wiki/sources/*` slices in parallel and try to finish the full queue in the same update. Do not treat a tiny sample, such as five pages, as the default completion target. Publish a batch checkpoint only when a real blocker, tool limit, context limit, or explicit user stop prevents further progress.
 - `llm-wiki update --local` or `LLM_WIKI_UPDATE_MODE=local` is the explicit local-only trial mode. Local mode may update the user's working copy without pulling or pushing the shared KB baseline.
 - `--no-auto-raw-sync` and `LLM_WIKI_NO_AUTO_RAW_SYNC=1` are local-mode escape hatches only. Shared mode must reject them before running the update callback; do not publish a baseline built from intentionally stale `raw/` or `raw-code/`.
 - `upstream/wiki-sources.json` restores `raw/`. `upstream/code-sources.json` restores `raw-code/` as engine-managed git checkouts created by `llm-wiki add-code`.
@@ -223,7 +223,7 @@ Default update order:
 15. Run optional traceability anchor check when traceability pages changed.
 16. Update `staging/refinement-status.md`.
 17. Treat validation as part of update completion:
-   - run or inspect `tools/check_refinement.py` and `staging/update/latest.json.refinement_contract` when `staging/refinement-plan.json` says semantic refinement is required; classify pending source refinement as a P1 automatic update task and process it in the current command before final closure
+   - run or inspect `tools/check_refinement.py` and `staging/update/latest.json.refinement_contract` when `staging/refinement-plan.json` says semantic refinement is required; classify pending source refinement as a P1 automatic update task and process it in the current command before final closure. When more than 10 source pages are pending, dispatch parallel subagent/worker batches with disjoint write scopes, size the plan to cover as much of the full queue as possible, and do not manually stop after a tiny sample.
    - run health before final reporting when `tools/health.py` exists or the project has an equivalent health check
    - rebuild graph before final reporting when `tools/build_graph.py` exists or wikilinks changed
    - run `tools/anchor_check.py` when traceability pages or code anchors changed
@@ -269,7 +269,7 @@ Final report:
 Recommendation rule:
 
 - Do not recommend `llm-wiki update` as the next step when the current `llm-wiki update` can safely finish the remaining source refinement, capability, traceability, health, or graph work. Finish it in the current command.
-- Do not leave P1 `source_refinement_pending` as a plain soft gap. Run Codex-native source refinement in the current update. If the queue is too large, checkpoint a coherent batch and state exactly what remains.
+- Do not leave P1 `source_refinement_pending` as a plain soft gap. Run Codex-native source refinement in the current update. If the queue is too large for one manual pass, use subagents/workers in parallel and target the full queue, not a tiny sample. Checkpoint only after a real blocker, tool/context limit, or explicit user stop, and state exactly what remains.
 - If affected source pages remain stale and affected code traceability also needs refresh but a hard blocker prevents completion, report the blocker and checkpoint, then recommend one combined continuation: `llm-wiki update` to resume the integrated source refinement plus traceability refresh.
 - Traceability-only and source-only refinements still stay under `llm-wiki update`; do not route to separate commands.
 - When validation fails, recommend the smallest safe continuation or fix, phrased as a command the user can run (`llm-wiki update`, `llm-wiki doctor`, or `llm-wiki image`) rather than a script chain.
