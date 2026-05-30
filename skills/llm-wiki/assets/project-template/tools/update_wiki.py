@@ -775,7 +775,14 @@ def run_code_sync(project: Path, shared_mode: bool = False) -> int:
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip()
             if is_permission_error(detail):
-                print(f"代码仓库同步失败：请先获取代码仓库读取权限后重试。详情：{detail}", file=sys.stderr)
+                message = f"代码仓库同步失败：请先获取代码仓库读取权限后重试。详情：{detail}"
+                if shared_mode:
+                    message += (
+                        "\n共享模式已阻断，本轮不会继续生成或发布 KB 产物。"
+                        "请先申请代码仓库权限或检查 SSH Key / Git 凭证；"
+                        "如果只想在本机试跑，请显式使用 LLM_WIKI_UPDATE_MODE=local 或 $llm-wiki-update --local。"
+                    )
+                print(message, file=sys.stderr)
             else:
                 print(f"代码仓库同步失败：请检查网络、分支或 fast-forward 状态。详情：{detail}", file=sys.stderr)
             return result.returncode
@@ -845,6 +852,8 @@ def main() -> int:
         action="store_true",
         help="Skip automatic AGENTS.md query-routing rule maintenance.",
     )
+    parser.add_argument("--local", action="store_true", help="Run as an explicit local-only update.")
+    parser.add_argument("--shared", action="store_true", help="Run as a shared update. This is the default.")
     args = parser.parse_args()
 
     project = Path(args.project).resolve()
@@ -859,6 +868,16 @@ def main() -> int:
     if no_auto_raw_sync:
         skipped_steps.append("auto_raw_sync")
         skipped_steps.append("confluence_sync")
+
+    update_mode = "local" if args.local or os.environ.get("LLM_WIKI_UPDATE_MODE") == "local" else "shared"
+    if args.shared:
+        update_mode = "shared"
+    shared_mode = update_mode == "shared"
+
+    code = run_code_sync(project, shared_mode=shared_mode)
+    if code != 0:
+        write_failure_report(project, "code_sync", code)
+        return code
 
     code, failed_step = prepare_raw_evidence(project, raw_sync_command, no_auto_raw_sync)
     if code != 0:
@@ -875,11 +894,6 @@ def main() -> int:
     code = run_drawio_repair(project)
     if code != 0:
         write_failure_report(project, "drawio_repair", code)
-        return code
-
-    code = run_code_sync(project)
-    if code != 0:
-        write_failure_report(project, "code_sync", code)
         return code
 
     steps = deterministic_steps(tools, graphify=bool(args.graphify))

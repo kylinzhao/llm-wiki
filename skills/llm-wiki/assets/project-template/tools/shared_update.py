@@ -45,6 +45,14 @@ class PublishDecision:
         self.message = message
 
 
+SOFT_VALIDATION_STATUSES = {
+    "ok",
+    "refinement_pending",
+    "usable_with_gaps",
+    "semantic_gaps",
+}
+
+
 PERMISSION_PATTERNS = (
     "permission denied",
     "authentication failed",
@@ -433,6 +441,6 @@ def accept_local_fallback(project: Path, local_preflight_fn=local_preflight, upd
 
 def complete_shared_update(project: Path, semantic_validation, publisher=publish_shared_baseline) -> PublishResult:
     validation = semantic_validation()
-    if validation.status != "ok":
+    if validation.status not in SOFT_VALIDATION_STATUSES:
         return validation
     return publisher(project)

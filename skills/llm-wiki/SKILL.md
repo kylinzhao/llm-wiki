@@ -172,6 +172,8 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 10. 阶段 I：发布 / 提交 / 远端同步
 11. 阶段 M：后续增量维护
 
+阶段 I 的共享发布硬门禁是证据同步、health、graph、必要 anchor check 和发布范围安全；`check_refinement.py` 的 pending、图片证据待筛选或语义层待加厚属于 `usable-with-gaps` 质量缺口，不应单独阻断共享 commit/push。raw-code 权限失败、非受管、损坏、dirty 或不能 fast-forward 是硬阻断，应在写入 raw/wiki/staging 产物前停止，并让用户先修权限/凭证或显式切换本机模式。
+
 ### 2. 新项目优先构建，不优先查询
 
 如果项目还没有 `wiki/` 骨架，应先做：

@@ -124,13 +124,13 @@ If the user asks to update the **llm-wiki skill itself** rather than KB content,
 
 Shared update protocol:
 
-- `llm-wiki update` defaults to shared mode. Before local deterministic work starts, synchronize the KB git repository with its upstream branch. After deterministic update, semantic refinement, and validation finish, publish the shared KB baseline with a normal git commit and push.
+- `llm-wiki update` defaults to shared mode. Before local deterministic work starts, synchronize the KB git repository with its upstream branch. After deterministic update and hard validation finish, publish the shared KB baseline with a normal git commit and push. Pending semantic refinement is a soft quality gap; publish the healthier `usable-with-gaps` baseline instead of leaving every machine with divergent uncommitted outputs.
 - `llm-wiki update --local` or `LLM_WIKI_UPDATE_MODE=local` is the explicit local-only trial mode. Local mode may update the user's working copy without pulling or pushing the shared KB baseline.
 - `--no-auto-raw-sync` and `LLM_WIKI_NO_AUTO_RAW_SYNC=1` are local-mode escape hatches only. Shared mode must reject them before running the update callback; do not publish a baseline built from intentionally stale `raw/` or `raw-code/`.
 - `upstream/wiki-sources.json` restores `raw/`. `upstream/code-sources.json` restores `raw-code/` as engine-managed git checkouts created by `llm-wiki add-code`.
 - `raw/` and `raw-code/` are local evidence caches. They must be ignored by git and excluded from shared publish. Shared publish is allowlisted to KB outputs such as `BUSINESS_CONTEXT.md`, `upstream/**`, `wiki/**`, selected `docs/**`, `staging/**`, `graph/**`, `index/**`, and engine-owned `tools/**` files refreshed from the installed skill template.
 - If the KB repository is missing, has no upstream, diverges, has dirty local changes, or contains unrecognized local commits, fail closed before update or publish. In interactive cases where the failure can safely remain local, ask in Chinese whether to switch to local mode, then rerun local-mode preflight before continuing.
-- If `git pull`, `git fetch`, raw-code checkout pull, or `git push` fails because of permission/authentication, report it in Chinese as missing read/write permission. Use wording like `缺少读取/写入权限，请先申请 KB/代码仓库权限，或检查 SSH Key / Git 凭证。` Do not present permission failures as skippable sync.
+- If `git pull`, `git fetch`, raw-code checkout pull, or `git push` fails because of permission/authentication, report it in Chinese as missing read/write permission. Use wording like `缺少读取/写入权限，请先申请 KB/代码仓库权限，或检查 SSH Key / Git 凭证。` Do not present permission failures as skippable sync. For raw-code permission failures in shared mode, block before writing raw/wiki/staging outputs; tell the user to either fix code repository access and retry, or explicitly switch to `llm-wiki update --local` / `LLM_WIKI_UPDATE_MODE=local` for a local-only trial.
 
 Common triggers:
 
@@ -167,7 +167,7 @@ Default update order:
 
 1. Resolve update mode. Default to shared mode unless `--local` or `LLM_WIKI_UPDATE_MODE=local` is present.
 2. In shared mode, run KB git preflight first: evidence caches ignored and untracked, upstream configured, worktree clean, fetch/pull fast-forward only, recognized local shared-update commits pushed if needed, and skip flags rejected. If this fails with an interactive local fallback offer, continue only after the user accepts the switch to local mode.
-3. Restore evidence caches: use `upstream/wiki-sources.json` to sync `raw/`, and `upstream/code-sources.json` to clone or pull managed `raw-code/<codebase_id>/` checkouts. Local mode may use `--no-auto-raw-sync`; shared mode may not.
+3. Restore code evidence first in shared mode: use `upstream/code-sources.json` to clone or pull managed `raw-code/<codebase_id>/` checkouts before any raw/wiki/staging writes. If raw-code is unmanaged, damaged, dirty, missing permissions, or cannot fast-forward, stop the shared update before generating KB outputs. Then use `upstream/wiki-sources.json` to sync `raw/`. Local mode may use `--no-auto-raw-sync`; shared mode may not.
 4. Identify changed files and classify the trigger.
 5. Repair project agent query-routing rules when the standard template tooling is available:
    - Before running a local `tools/update_wiki.py` that may be from an older KB, refresh engine-owned project tooling from the installed skill template:
@@ -223,13 +223,13 @@ Default update order:
 15. Run optional traceability anchor check when traceability pages changed.
 16. Update `staging/refinement-status.md`.
 17. Treat validation as part of update completion:
-   - run `tools/check_refinement.py` before health when `staging/refinement-plan.json` says semantic refinement is required
+   - run or inspect `tools/check_refinement.py` when `staging/refinement-plan.json` says semantic refinement is required, but classify pending source refinement as `usable-with-gaps`, not a publish blocker
    - run health before final reporting when `tools/health.py` exists or the project has an equivalent health check
    - rebuild graph before final reporting when `tools/build_graph.py` exists or wikilinks changed
    - run `tools/anchor_check.py` when traceability pages or code anchors changed
-   - if validation fails and the fix is low-risk and in scope, fix it before final reporting
-   - if validation fails and cannot be fixed safely, report the blocker and recommend the smallest safe continuation
-18. In shared mode, publish the shared KB only after deterministic update, semantic refinement, and validation callbacks finish. Stage exact allowlisted paths only; never broad-add `raw/`, `raw-code/`, credentials, logs, dependencies, or unrecognized local files. If push fails after commit, say in Chinese that the shared KB is committed locally but unpublished, and include read/write permission guidance when applicable.
+   - if hard validation fails and the fix is low-risk and in scope, fix it before final reporting
+   - if hard validation fails and cannot be fixed safely, report the blocker and recommend the smallest safe continuation
+18. In shared mode, publish the shared KB after deterministic update and hard validation callbacks finish. Do not block publish solely for refinement pending, image evidence pending, or low-density G+ layers when health, graph and required anchor checks pass. Stage exact allowlisted paths only; never broad-add `raw/`, `raw-code/`, credentials, logs, dependencies, or unrecognized local files. If push fails after commit, say in Chinese that the shared KB is committed locally but unpublished, and include read/write permission guidance when applicable.
 19. For status-sensitive projects, read `staging/cjira-registry/active.json` and `archive.json` during update / doctor / query:
    - `doctor` should report stale Jira fetches and low-confidence primary selections
    - `query` should use registry state when answering whether a requirement is `idea`, `in_progress`, or `frozen`

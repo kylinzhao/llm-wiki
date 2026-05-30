@@ -520,6 +520,28 @@ class SharedUpdateTests(unittest.TestCase):
         self.assertEqual(result.status, "published")
         self.assertEqual(events, ["semantic", "publish"])
 
+    def test_shared_protocol_publishes_when_only_refinement_is_pending(self):
+        shared = load_shared_update()
+        events = []
+        result = shared.complete_shared_update(
+            project=Path("."),
+            semantic_validation=lambda: events.append("semantic") or shared.PublishResult("refinement_pending", "refinement pending"),
+            publisher=lambda project: events.append("publish") or shared.PublishResult("published"),
+        )
+        self.assertEqual(result.status, "published")
+        self.assertEqual(events, ["semantic", "publish"])
+
+    def test_shared_protocol_blocks_hard_validation_failures(self):
+        shared = load_shared_update()
+        events = []
+        result = shared.complete_shared_update(
+            project=Path("."),
+            semantic_validation=lambda: events.append("semantic") or shared.PublishResult("health_failed", "health failed"),
+            publisher=lambda project: events.append("publish") or shared.PublishResult("published"),
+        )
+        self.assertEqual(result.status, "health_failed")
+        self.assertEqual(events, ["semantic"])
+
     def test_accept_local_fallback_restarts_local_preflight(self):
         shared = load_shared_update()
         events = []

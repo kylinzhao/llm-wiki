@@ -12,10 +12,11 @@ description: LLM Wiki 增量维护入口。用于 raw/、BUSINESS_CONTEXT.md、r
 1. 读取 **llm-wiki** skill 包根目录下的 `SKILL.md`（路径由当前环境的 skill 安装位置解析，勿写死本机绝对路径）。
 2. 读取同包内 `references/commands.md`。
 3. 将 `$llm-wiki-update` 后面的用户文本作为 `llm-wiki update` 参数。
-4. 默认协作模式：`llm-wiki update` 默认先同步共享 KB git 基线，再恢复 `raw/` / `raw-code/` 证据缓存，完成更新和校验后发布共享 KB 产物。只有用户显式使用 `--local` 或 `LLM_WIKI_UPDATE_MODE=local` 时，才跳过 pull/push。共享模式不得使用 `--no-auto-raw-sync` 或 `LLM_WIKI_NO_AUTO_RAW_SYNC=1` 发布基线。
+4. 默认协作模式：`llm-wiki update` 默认先同步共享 KB git 基线，再恢复 `raw/` / `raw-code/` 证据缓存，完成结构校验后发布共享 KB 产物。只有用户显式使用 `--local` 或 `LLM_WIKI_UPDATE_MODE=local` 时，才跳过 pull/push。共享模式不得使用 `--no-auto-raw-sync` 或 `LLM_WIKI_NO_AUTO_RAW_SYNC=1` 发布基线。
    - 如果 `git pull` / `git push` 因权限失败，中文说明缺少读取/写入权限，并提示用户申请仓库权限或检查 SSH Key / Git 凭证。
    - 如果共享发布失败且不是权限缺失、分叉、未识别本地提交或脏工作区等硬阻塞，交互式场景应提醒用户“是否切换到本机模式继续？”。切换后必须重新执行本机模式 preflight，不得复用失败的共享状态。
-5. 优先使用项目内更新入口，例如 `uv run python tools/update_wiki.py`；如果项目已配置可用 RSS/feed，同步原始 wiki 证据应作为 update 的默认前置步骤，而不是等用户额外提醒。对于 `raw-code/`，只允许一种协议：`llm-wiki add-code` 创建的 engine-managed git checkout。同一次 update 必须先对这些受管且干净的 codebase 执行 `git pull --ff-only`，再继续 code wiki 构建；发现 legacy copy/symlink/raw snapshot、权限缺失、checkout 损坏或 worktree 不干净时，必须明确失败并要求迁移或修复。
+   - `tools/check_refinement.py` 的 pending / missing status record 属于语义精修缺口，不属于共享发布硬阻断。只要 raw/raw-code 同步、health、graph 和必要 anchor check 通过，应发布 `usable-with-gaps` 的共享基线，并在最终输出中说明 refinement pending 数量和下一步继续 `llm-wiki update` 或 `llm-wiki image`。
+5. 优先使用项目内更新入口，例如 `uv run python tools/update_wiki.py`；如果项目已配置可用 RSS/feed，同步原始 wiki 证据应作为 update 的默认前置步骤，而不是等用户额外提醒。对于 `raw-code/`，只允许一种协议：`llm-wiki add-code` 创建的 engine-managed git checkout。同一次 shared update 必须在写入 raw/wiki/staging 产物前，先对这些受管且干净的 codebase 执行 `git pull --ff-only`；发现 legacy copy/symlink/raw snapshot、权限缺失、checkout 损坏或 worktree 不干净时，必须立即阻断共享更新，避免生成缺代码证据的脏 wiki。权限受限时说明缺少代码仓库读取权限，并让用户选择：先申请权限/修复凭证后重试，或显式切换到 `--local` / `LLM_WIKI_UPDATE_MODE=local` 做本机试跑。
    - 如果上游 Cwiki 同步因缺少 `COOKIE_HEADER` / SSO 凭据阻塞，不要把手填 Cookie 作为推荐路径。llm-wiki engine 内置 `guazi-sso-login` 登录组件，推荐路径是让用户提供瓜子用户名、密码、手机号，并可同时提供 Jira 令牌；内置登录组件自动换取并本地缓存 Cwiki Cookie，Jira 读取优先使用 `JIRA_TOKEN`，CHDSSO 只作为没有 Jira token 时的 fallback。给用户的 Bash 必须是“复制后直接运行、按提示输入”的形式，不要出现需要用户手动替换的 `/path/to/...`、`GUAZI_SSO_SKILL_ROOT` 或其他内部路径，也不要让用户在 Bash 里重新执行 `uv run python tools/update_wiki.py`；让用户执行完凭据注册后回到 agent，由 agent 再继续执行 update。
    - 说明边界时要准确：llm-wiki skill 不会上报用户名、密码、手机号、Jira 令牌、Cookie 或 token，也不会把敏感信息写入 KB 项目的 raw/wiki/staging/git；如果选择持久化 SSO/Jira token，则会写到用户电脑本地 `~/.llm-wiki/guazi-sso.env`，供后续本机 update 自动加载。`guazi-sso-login` 如生成 Cookie/token 缓存，也只在用户电脑本地。
    - 给用户两个选择并讲清楚凭据组：首选是用户直接在 agent 窗口提供瓜子用户名、密码、手机号和 Jira 令牌，由 agent 写入本机 `~/.llm-wiki/guazi-sso.env` 后继续 update；备选是复制 Bash 到本地终端，按提示输入并持久化这些值。说明 agent 窗口输入的内容可能进入当前 agent 会话上下文或本地会话记录，具体取决于 engine，不能承诺 engine 不记录。完整 `COOKIE_HEADER` 只作为更低优先级的一次性 fallback，不要作为主要应急建议。
@@ -26,6 +27,6 @@ description: LLM Wiki 增量维护入口。用于 raw/、BUSINESS_CONTEXT.md、r
 8. 如果同一轮变更同时影响 source 精修和代码追踪，把 source 精修、capability 更新、traceability 刷新作为同一个 update 收口动作。代码更新后必须先刷新 freshness、upstream `docs/wiki` 适配、anchor/capability candidates，再让 `build_traceability.py` 刷新 `Code Anchor Candidates` 和 `staging/traceability-candidates.json`。如果当前 agent 或外部 agent worker 能执行 trace worker contract，则把结果写入 `staging/traceability/runs/<run_id>/proposals.json`，再由 `build_traceability.py` 合并到 `staging/traceability/state.json`；没有模型 worker 输出时，只能记录候选，不能自动宣称 `strong`。
 9. 如果发现当前命令可以安全完成的 pending/stale/source/traceability/G+/health/graph 工作，继续完成，不要建议用户再跑一次同一个 update。
 10. update 结束前必须自动执行收口检查：health、graph；如果 traceability 或代码锚点变化，再执行可用的 anchor check。
-11. 如果收口检查失败或仍有可安全修复的问题，优先继续修复或建议继续 `llm-wiki update`。
-12. 如果收口检查通过且没有阻塞项，在 `建议下一步` 中说明当前 KB 已可使用，并说明未来什么变化应触发下一次 `llm-wiki update`；如果只剩 G+ 欠拟合且本轮无法安全完成，明确说“结构健康但语义层欠拟合”，并给出最小继续动作。
+11. 如果硬收口检查失败或仍有可安全修复的问题，优先继续修复或建议继续 `llm-wiki update`。硬阻断包括 raw/raw-code 同步失败、health 失败、graph broken edges、必要 anchor check 失败、发布范围外文件或凭据/证据缓存误入 git；不包括 refinement pending 或图片证据待补强。
+12. 如果硬收口检查通过且没有阻塞项，在 `建议下一步` 中说明当前 KB 已可使用，并说明未来什么变化应触发下一次 `llm-wiki update`；如果只剩 refinement pending、图片证据待筛选或语义层待加厚，明确说“已发布/可发布 usable-with-gaps 共享基线”，并给出最小继续动作。
 13. 最后输出 `建议下一步`。

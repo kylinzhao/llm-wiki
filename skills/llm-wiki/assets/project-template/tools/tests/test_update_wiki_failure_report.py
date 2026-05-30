@@ -414,6 +414,8 @@ class UpdateFailureReportTest(unittest.TestCase):
             code = update_wiki.run_code_sync(project, shared_mode=True)
         self.assertEqual(code, 128)
         self.assertIn("请先获取代码仓库读取权限", stderr.getvalue())
+        self.assertIn("共享模式已阻断", stderr.getvalue())
+        self.assertIn("LLM_WIKI_UPDATE_MODE=local", stderr.getvalue())
 
     def test_run_code_sync_reports_non_permission_pull_failure_without_permission_claim(self):
         update_wiki = load_update_wiki()
@@ -430,6 +432,35 @@ class UpdateFailureReportTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("代码证据源配置无效", stderr.getvalue())
         self.assertNotIn("是否切换到本机模式", stderr.getvalue())
+
+    def test_main_blocks_raw_code_sync_before_raw_sync_writes_outputs(self):
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            calls = []
+            args = mock.Mock(
+                project=str(project),
+                raw_sync_command="",
+                no_auto_raw_sync=False,
+                graphify=False,
+                no_agent_rules_refresh=True,
+                local=False,
+                shared=False,
+            )
+
+            with mock.patch.object(update_wiki.argparse.ArgumentParser, "parse_args", return_value=args), mock.patch.object(
+                update_wiki, "best_effort_register_current_project"
+            ), mock.patch.object(
+                update_wiki, "prepare_raw_evidence", side_effect=lambda *a, **k: calls.append("raw") or (0, None)
+            ), mock.patch.object(
+                update_wiki, "run_code_sync", side_effect=lambda *a, **k: calls.append("code") or 2
+            ), mock.patch.object(
+                update_wiki, "write_failure_report"
+            ):
+                code = update_wiki.main()
+
+        self.assertEqual(code, 2)
+        self.assertEqual(calls, ["code"])
 
     def test_run_code_sync_pulls_existing_declared_checkout(self):
         update_wiki = load_update_wiki()

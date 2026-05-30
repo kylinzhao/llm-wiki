@@ -24,11 +24,13 @@ Evidence cache mapping:
 
 If `upstream/wiki-sources.json` contains enabled Cwiki or RSS sources, update should first refresh `raw/` automatically. Legacy `config/rss-feeds.yaml` is only a migration input.
 
-If `raw-code/<codebase_id>/` contains engine-managed clean git checkouts, the same update command should refresh them by default with `git pull --ff-only` before `scan_code.py` and `build_traceability.py`. If access is missing, the checkout is broken, or the worktree is dirty, update must stop and tell the operator to repair the managed raw-code entry first.
+If `raw-code/<codebase_id>/` contains engine-managed clean git checkouts, the same update command should refresh them by default with `git pull --ff-only` before raw/wiki/staging outputs are generated, and before `scan_code.py` and `build_traceability.py`. If access is missing, the checkout is broken, or the worktree is dirty, shared update must stop before generating KB outputs and tell the operator to repair the managed raw-code entry first.
 
 In shared mode, `raw/` and `raw-code/` remain ignored local evidence caches. The publish step must commit only the shared KB baseline outputs and engine-owned `tools/**` files refreshed from the installed skill template, and must exclude evidence caches, secrets, logs, dependencies, and other unrecognized local files. `--no-auto-raw-sync` is valid only for explicit local mode; shared mode must reject it before any update work starts.
 
-If KB git pull/push or managed code checkout pull fails because of permissions, report the failure in Chinese and tell the operator to request KB/code repository access or check SSH Key / Git credentials. If a shared-mode failure can safely continue locally, interactive clients may ask whether to switch to local mode and must rerun local preflight before continuing.
+If KB git pull/push or managed code checkout pull fails because of permissions, report the failure in Chinese and tell the operator to request KB/code repository access or check SSH Key / Git credentials. For raw-code permission failures, do not publish a shared baseline built without code evidence; ask the operator to fix access or explicitly switch to local mode for a local-only trial, then rerun local preflight before continuing.
+
+Semantic refinement gaps are not shared-publish blockers. If health, graph, and required anchor checks pass, publish the shared baseline as `usable-with-gaps` and record the remaining refinement/image evidence work for the next update pass.
 
 5. Use Codex to complete AI-native refinement of:
 
