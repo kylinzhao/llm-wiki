@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -12,7 +13,13 @@ from pathlib import Path
 from typing import Callable
 
 from agent_rules import refresh_agent_rules
-from build_wiki import backfill_source_page, discover_sources
+from build_wiki import (
+    backfill_source_page,
+    discover_sources,
+    replace_or_insert_section,
+    source_metadata_block,
+    source_page_metadata,
+)
 from cjira_registry import discover_project_sources, read_registry, update_registry_for_sources
 from drawio_repair import build_report as build_drawio_report
 from drawio_repair import write_report as write_drawio_report
@@ -27,6 +34,7 @@ from raw_code_manager import (
     write_codebase_metadata,
     write_code_sources_manifest,
 )
+from refinement_contract import refinement_status
 
 
 BackfillPass = Callable[[Path], dict[str, object]]
@@ -108,6 +116,141 @@ def pass_source_metadata(project: Path) -> dict[str, object]:
         "status": "ok",
         "changed_count": len(changed_pages),
         "source_count": len(sources),
+        "affected_source_pages": sorted(changed_pages),
+    }
+
+
+CONTENT_PENDING_MARKERS = (
+    "Pending AI-native summary",
+    "Pending extraction from source evidence",
+    "Deterministic seed page.",
+    "待完成 AI 原生摘要",
+    "待从来源证据中提取",
+    "确定性种子页。",
+)
+
+REFINED_STATES = {"applied", "complete", "completed", "refined"}
+
+
+def text_without_source_metadata(text: str) -> str:
+    return re.sub(r"(?ms)^## Source Metadata\s*```json\s*\{.*?\}\s*```\s*", "", text)
+
+
+def has_heading(text: str, names: tuple[str, ...]) -> bool:
+    return any(re.search(rf"(?m)^##\s+{re.escape(name)}\s*$", text) for name in names)
+
+
+def looks_refined_source_page(text: str) -> bool:
+    content = text_without_source_metadata(text)
+    if has_content_pending_markers(content):
+        return False
+    return (
+        has_heading(content, ("Summary", "摘要"))
+        and has_heading(content, ("Key Facts", "关键事实"))
+        and has_heading(content, ("Business Links", "业务链接"))
+        and has_heading(content, ("Evidence Notes", "证据说明"))
+    )
+
+
+def has_content_pending_markers(text: str) -> bool:
+    return any(marker in text_without_source_metadata(text) for marker in CONTENT_PENDING_MARKERS)
+
+
+def source_raw_rel_from_text(path: Path, metadata: dict[str, object]) -> str:
+    raw_rel = metadata.get("raw_rel") if isinstance(metadata, dict) else None
+    if isinstance(raw_rel, str) and raw_rel.strip():
+        return raw_rel.strip()
+    text = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
+    match = re.search(r"(?:Raw path|原始路径):\s*`([^`]+)`", text)
+    return match.group(1).strip() if match else ""
+
+
+def write_refinement_status(project: Path, reconciled: list[dict[str, str]]) -> int:
+    if not reconciled:
+        return 0
+    status = refinement_status(project)
+    if not status:
+        status = {}
+    completed = status.get("completed")
+    if not isinstance(completed, list):
+        completed = []
+    existing_paths = {
+        str(entry.get("path") or entry.get("wiki_path") or "")
+        for entry in completed
+        if isinstance(entry, dict)
+    }
+    updated_at = utc_now()
+    added_count = 0
+    for item in reconciled:
+        wiki_path = item["wiki_path"]
+        if wiki_path in existing_paths:
+            continue
+        completed.append(
+            {
+                "path": wiki_path,
+                "wiki_path": wiki_path,
+                "raw_path": item.get("raw_path", ""),
+                "status": "reconciled_from_existing_content",
+                "source": "backfill.refinement_state_reconcile",
+                "updated_at": updated_at,
+            }
+        )
+        existing_paths.add(wiki_path)
+        added_count += 1
+    if added_count == 0:
+        return 0
+    status["completed"] = completed
+    status["updated_at"] = updated_at
+    (project / "staging").mkdir(parents=True, exist_ok=True)
+    (project / "staging" / "refinement-status.md").write_text(
+        "# Refinement Status\n\n```json\n" + json.dumps(status, ensure_ascii=False, indent=2) + "\n```\n",
+        encoding="utf-8",
+    )
+    return added_count
+
+
+def pass_refinement_state_reconcile(project: Path) -> dict[str, object]:
+    sources_dir = project / "wiki" / "sources"
+    if not sources_dir.is_dir():
+        return {
+            "status": "skipped",
+            "reason": "missing_source_pages",
+            "changed_count": 0,
+            "source_count": 0,
+            "reconciled_source_pages": [],
+            "affected_source_pages": [],
+        }
+
+    changed_pages: list[str] = []
+    reconciled_records: list[dict[str, str]] = []
+    source_pages = sorted(sources_dir.glob("*.md"))
+    for page in source_pages:
+        before = page.read_text(encoding="utf-8", errors="replace")
+        metadata = source_page_metadata(page)
+        state = str(metadata.get("ai_refinement_state") or "").strip().lower()
+        should_reconcile = (
+            (state in REFINED_STATES and not has_content_pending_markers(before))
+            or (state == "pending" and looks_refined_source_page(before))
+        )
+        if not should_reconcile:
+            continue
+        metadata["ai_refinement_state"] = "refined"
+        after = replace_or_insert_section(before, "Source Metadata", source_metadata_block(metadata))
+        wiki_path = rel(project, page)
+        raw_path = source_raw_rel_from_text(page, metadata)
+        if after != before:
+            page.write_text(after, encoding="utf-8")
+            changed_pages.append(wiki_path)
+        reconciled_records.append({"wiki_path": wiki_path, "raw_path": raw_path})
+
+    status_added_count = write_refinement_status(project, reconciled_records)
+    return {
+        "status": "ok",
+        "changed_count": len(changed_pages) + status_added_count,
+        "metadata_changed_count": len(changed_pages),
+        "status_record_added_count": status_added_count,
+        "source_count": len(source_pages),
+        "reconciled_source_pages": sorted(item["wiki_path"] for item in reconciled_records),
         "affected_source_pages": sorted(changed_pages),
     }
 
@@ -267,6 +410,7 @@ BACKFILL_PASSES: tuple[tuple[str, BackfillPass], ...] = (
     ("code_sources", pass_code_sources),
     ("drawio", pass_drawio),
     ("source_metadata", pass_source_metadata),
+    ("refinement_state_reconcile", pass_refinement_state_reconcile),
     ("cjira", pass_cjira),
     ("agent_rules", pass_agent_rules),
 )

@@ -49,6 +49,7 @@ description: LLM Wiki 存量知识库历史证据补全入口。用于老版本 
 
 - `drawio`：历史 `.drawio` / `.dio` 附件转 Mermaid 结构化证据，并回链 raw 页面。
 - `source_metadata`：补齐旧 source page 的 Delivery Tracking 与 Source Metadata。
+- `refinement_state_reconcile`：只做确定性状态收口；当 `wiki/sources/*` 已有完整精修结构且没有种子/待补标记时，把旧的 `pending` / `applied` / `complete` 状态规范为 `refined`，并补 `staging/refinement-status.md` 的 `reconciled_from_existing_content` 记录。
 - `cjira`：扫描历史 raw 中的 Jira/Cjira/IDEA 信号，刷新 `staging/cjira-registry/`。
 - `agent_rules`：补齐老 KB 的 Query Routing 规则。
 - `wiki_export_state`：修复老 KB 的 Cwiki 导出控制状态；把 legacy `raw/export-state.json`、`raw/progress/*.json`、`staging/wiki-export/**` 复制到 canonical `staging/wiki-export-state/`，供 Gateway 临时 worktree 和其他用户本地 update 续跑。

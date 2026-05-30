@@ -198,6 +198,7 @@ Default update order:
 8. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
    - Read `staging/refinement-plan.json` and `references/refinement-contract.md`; use them as the write-scope and acceptance contract for semantic refinement.
    - Read `staging/update/latest.json` `gplus_quality`; if `status=needs_attention`, treat it as an update trigger even when `semantic_update_required=false`.
+   - Before deciding which pending pages need semantic rewrite, run the lightweight historical refinement-state reconcile built into `tools/update_wiki.py`. This repairs source pages whose content is already refined but whose `Source Metadata` or `staging/refinement-status.md` still says pending/applied/missing completed record. It may update only `wiki/sources/*` metadata and `staging/refinement-status.md`; it must not rewrite source prose.
    - Before dispatching a large semantic queue, choose workers by capability tier instead of by client or model name:
      - inspect what the current host exposes: no worker support, workers without model/capability controls, or selectable worker tiers
      - choose the lowest-cost available worker that can safely satisfy the slice
@@ -325,6 +326,7 @@ Current deterministic passes:
 
 - `drawio`: converts historical `.drawio` / `.dio` files into Mermaid-backed Markdown evidence and links that evidence from raw page indexes.
 - `source_metadata`: patches existing `wiki/sources/*` with Delivery Tracking and Source Metadata without rewriting refined summaries.
+- `refinement_state_reconcile`: repairs historical source refinement state when existing page content is already refined but metadata/status is still pending, applied, complete, or missing a completed record. It records `reconciled_from_existing_content` instead of claiming a new semantic rewrite.
 - `cjira`: rebuilds `staging/cjira-registry/` from historical raw Jira/Cjira/IDEA signals.
 - `agent_rules`: patches missing project query-routing rules.
 

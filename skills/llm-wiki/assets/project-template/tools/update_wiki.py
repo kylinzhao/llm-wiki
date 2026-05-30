@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 import yaml
 from agent_rules import refresh_agent_rules
+from backfill import pass_refinement_state_reconcile
 from graphify_code import decide_graphify_action
 from gplus_quality import inspect_gplus_quality
 from raw_code_manager import RawCodeManagerError, is_permission_error, managed_code_sync_specs as declared_code_sync_specs, read_codebase_metadata
@@ -131,6 +132,7 @@ def write_success_report(
     project: Path,
     skipped_steps: list[str] | None = None,
     graphify_decisions: list[dict[str, object]] | None = None,
+    auto_reconcile: dict[str, object] | None = None,
 ) -> None:
     report_dir = project / "staging" / "update"
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -143,6 +145,7 @@ def write_success_report(
         "generated_at": utc_now(),
         "skipped_steps": skipped_steps or [],
         "graphify_decisions": graphify_decisions or [],
+        "auto_reconcile": auto_reconcile or {},
         "gplus_quality": gplus_quality,
         "refinement_contract": refinement_contract,
     }
@@ -159,6 +162,17 @@ def write_success_report(
     if skipped_steps:
         for step in skipped_steps:
             lines.append(f"- `{step}`")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Auto Reconcile", ""])
+    if auto_reconcile:
+        lines.append(f"- Status: `{auto_reconcile.get('status', 'unknown')}`")
+        lines.append(f"- Changed source pages: `{auto_reconcile.get('changed_count', 0)}`")
+        reconciled = list(auto_reconcile.get("reconciled_source_pages") or [])
+        if reconciled:
+            lines.append("- Reconciled source pages: " + ", ".join(f"`{item}`" for item in reconciled[:20]))
+        else:
+            lines.append("- Reconciled source pages: none")
     else:
         lines.append("- None")
     lines.extend(["", "## Graphify Decisions", ""])
@@ -219,6 +233,11 @@ def collect_graphify_decisions(project: Path, requested: bool = False) -> list[d
         for path in sorted(raw_code.iterdir())
         if path.is_dir()
     ]
+
+
+def run_update_reconcile(project: Path) -> dict[str, object]:
+    """Repair old source refinement state anomalies without running full backfill."""
+    return pass_refinement_state_reconcile(project)
 
 
 def health_failure_details(project: Path) -> dict[str, object]:
@@ -943,10 +962,12 @@ def main() -> int:
             if script.name != "health.py":
                 break
     if exit_code == 0:
+        auto_reconcile = run_update_reconcile(project)
         write_success_report(
             project,
             skipped_steps=skipped_steps,
             graphify_decisions=collect_graphify_decisions(project, requested=bool(args.graphify)),
+            auto_reconcile=auto_reconcile,
         )
     return exit_code
 

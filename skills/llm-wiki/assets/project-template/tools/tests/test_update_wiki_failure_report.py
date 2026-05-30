@@ -621,6 +621,64 @@ class UpdateFailureReportTest(unittest.TestCase):
             self.assertIn("## Graphify Decisions", latest_md)
             self.assertIn("skipped_upstream_sufficient", latest_md)
 
+    def test_update_auto_reconciles_historical_refinement_state_before_success_report(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            raw_page = project / "raw" / "product" / "index.md"
+            raw_page.parent.mkdir(parents=True)
+            raw_page.write_text("# Product Rules\n\nRule A.\n", encoding="utf-8")
+            source_page = project / "wiki" / "sources" / "product-index.md"
+            source_page.parent.mkdir(parents=True)
+            source_page.write_text(
+                "# Product Rules\n\n"
+                "## Summary\n\n"
+                "Product rules are already summarized from raw/product/index.md.\n\n"
+                "## Key Facts\n\n"
+                "- Rule A is active.\n\n"
+                "## Business Links\n\n"
+                "- Concepts: [[concepts/rules|Rules]]\n\n"
+                "## Evidence Notes\n\n"
+                "- Evidence path: `raw/product/index.md`\n\n"
+                "## Source Metadata\n"
+                "```json\n"
+                '{"raw_rel": "raw/product/index.md", "ai_refinement_state": "pending"}\n'
+                "```\n",
+                encoding="utf-8",
+            )
+            plan_path = project / "staging" / "refinement-plan.json"
+            plan_path.parent.mkdir(parents=True)
+            plan_path.write_text(
+                json.dumps(
+                    {
+                        "semantic_update_required": True,
+                        "required_source_pages": [
+                            {
+                                "wiki_path": "wiki/sources/product-index.md",
+                                "raw_path": "raw/product/index.md",
+                                "required": True,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(update_wiki, "refresh_agent_rules", return_value="skipped"),
+                mock.patch.object(update_wiki, "deterministic_steps", return_value=[]),
+                mock.patch.object(sys, "argv", ["update_wiki.py", "--project", str(project), "--local", "--no-auto-raw-sync"]),
+            ):
+                self.assertEqual(update_wiki.main(), 0)
+
+            latest = json.loads((project / "staging" / "update" / "latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(latest["auto_reconcile"]["metadata_changed_count"], 1)
+            self.assertEqual(latest["auto_reconcile"]["status_record_added_count"], 1)
+            self.assertEqual(latest["refinement_contract"]["status"], "ok")
+            self.assertIn('"ai_refinement_state": "refined"', source_page.read_text(encoding="utf-8"))
+
     def test_rss_sync_enabled_defaults_on_and_respects_false_manifest_flag(self):
         import tempfile
 

@@ -99,6 +99,88 @@ class BackfillTest(unittest.TestCase):
             self.assertFalse(second["refinement_absorption_required"])
             self.assertEqual(second["passes"]["drawio"]["changed_count"], 0)
             self.assertEqual(second["passes"]["source_metadata"]["changed_count"], 0)
+            self.assertEqual(second["passes"]["refinement_state_reconcile"]["changed_count"], 0)
+
+    def test_backfill_reconciles_pending_metadata_for_already_refined_source_page(self):
+        backfill = load_backfill()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source_page = project / "wiki" / "sources" / "product-index.md"
+            source_page.parent.mkdir(parents=True)
+            source_page.write_text(
+                "# Product Rules\n\n"
+                "## Summary\n\n"
+                "Product rules are already summarized from raw/product/index.md.\n\n"
+                "## Key Facts\n\n"
+                "- Rule A is active.\n\n"
+                "## Business Links\n\n"
+                "- Concepts: [[concepts/rules|Rules]]\n\n"
+                "## Evidence Notes\n\n"
+                "- Evidence path: `raw/product/index.md`\n\n"
+                "## Source Metadata\n"
+                "```json\n"
+                "{\n"
+                '  "page_kind": "source",\n'
+                '  "schema_version": "source-v2",\n'
+                '  "raw_rel": "raw/product/index.md",\n'
+                '  "ai_refinement_state": "pending"\n'
+                "}\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            plan = {
+                "semantic_update_required": True,
+                "required_source_pages": [
+                    {
+                        "wiki_path": "wiki/sources/product-index.md",
+                        "raw_path": "raw/product/index.md",
+                        "required": True,
+                    }
+                ],
+            }
+            plan_path = project / "staging" / "refinement-plan.json"
+            plan_path.parent.mkdir(parents=True)
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+
+            report = backfill.run_backfill(project)
+            second = backfill.run_backfill(project)
+
+            self.assertEqual(report["passes"]["refinement_state_reconcile"]["metadata_changed_count"], 1)
+            self.assertEqual(report["passes"]["refinement_state_reconcile"]["status_record_added_count"], 1)
+            self.assertIn(
+                "wiki/sources/product-index.md",
+                report["passes"]["refinement_state_reconcile"]["reconciled_source_pages"],
+            )
+            self.assertEqual(second["passes"]["refinement_state_reconcile"]["changed_count"], 0)
+            text = source_page.read_text(encoding="utf-8")
+            self.assertIn('"ai_refinement_state": "refined"', text)
+            status_text = (project / "staging" / "refinement-status.md").read_text(encoding="utf-8")
+            self.assertIn('"status": "reconciled_from_existing_content"', status_text)
+
+    def test_backfill_does_not_reconcile_seed_source_page(self):
+        backfill = load_backfill()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            source_page = project / "wiki" / "sources" / "product-index.md"
+            source_page.parent.mkdir(parents=True)
+            source_page.write_text(
+                "# Product Rules\n\n"
+                "> 确定性种子页。agent 需要补全。\n\n"
+                "## Summary\n\n"
+                "待完成 AI 原生摘要。\n\n"
+                "## Key Facts\n\n"
+                "- 待从来源证据中提取。\n\n"
+                "## Source Metadata\n"
+                "```json\n"
+                '{"raw_rel": "raw/product/index.md", "ai_refinement_state": "pending"}\n'
+                "```\n",
+                encoding="utf-8",
+            )
+
+            report = backfill.run_backfill(project)
+
+            self.assertEqual(report["passes"]["refinement_state_reconcile"]["changed_count"], 0)
+            self.assertIn('"ai_refinement_state": "pending"', source_page.read_text(encoding="utf-8"))
 
     def test_backfill_migrates_legacy_raw_progress_to_canonical_export_state(self):
         backfill = load_backfill()
