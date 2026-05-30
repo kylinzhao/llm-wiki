@@ -876,7 +876,8 @@ def main() -> int:
 
     code = run_code_sync(project, shared_mode=shared_mode)
     if code != 0:
-        write_failure_report(project, "code_sync", code)
+        if not shared_mode:
+            write_failure_report(project, "code_sync", code)
         return code
 
     code, failed_step = prepare_raw_evidence(project, raw_sync_command, no_auto_raw_sync)

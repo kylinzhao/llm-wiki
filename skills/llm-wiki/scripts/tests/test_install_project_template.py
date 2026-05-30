@@ -143,6 +143,7 @@ class InstallProjectTemplateTest(unittest.TestCase):
             gitignore = (project / ".gitignore").read_text(encoding="utf-8")
             self.assertIn("raw/\n", gitignore)
             self.assertIn("raw-code/\n", gitignore)
+            self.assertIn("uv.lock\n", gitignore)
 
     def test_main_recommends_llm_wiki_commands_not_internal_script_chain(self):
         installer = load_installer()

@@ -456,11 +456,12 @@ class UpdateFailureReportTest(unittest.TestCase):
                 update_wiki, "run_code_sync", side_effect=lambda *a, **k: calls.append("code") or 2
             ), mock.patch.object(
                 update_wiki, "write_failure_report"
-            ):
+            ) as failure_report:
                 code = update_wiki.main()
 
         self.assertEqual(code, 2)
         self.assertEqual(calls, ["code"])
+        failure_report.assert_not_called()
 
     def test_run_code_sync_pulls_existing_declared_checkout(self):
         update_wiki = load_update_wiki()

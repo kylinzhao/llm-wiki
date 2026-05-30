@@ -9,4 +9,5 @@ raw-code/
 **/.DS_Store
 __pycache__/
 .pytest_cache/
+uv.lock
 graphify-out/
