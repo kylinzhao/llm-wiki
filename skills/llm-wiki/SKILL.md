@@ -82,7 +82,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD"
 ```
 
-该模板提供 `tools/build_wiki.py`、`tools/scan_code.py`、`tools/graphify_code.py`、`tools/build_traceability.py`、`tools/health.py`、`tools/build_graph.py`、`tools/anchor_check.py`、项目 `AGENTS.md`、`.gitignore` 和依赖说明。模板脚本负责确定性扫描、脚手架、校验、图谱构建、代码锚点候选和 traceability state 合并；语义 summary、实体归一和能力判断可由 Codex / subagent 辅助。traceability 的模型步骤必须走 `docs/traceability-contract.md`：当前 agent 或外部 agent worker 都只能输出 `staging/traceability/runs/<run_id>/proposals.json`，由确定性工具合并到 `staging/traceability/state.json` 并渲染 Markdown。
+该模板提供 `tools/build_wiki.py`、`tools/scan_code.py`、`tools/graphify_code.py`、`tools/build_traceability.py`、`tools/health.py`、`tools/build_graph.py`、`tools/anchor_check.py`、项目 `AGENTS.md`、`.gitignore` 和依赖说明。模板脚本负责确定性扫描、脚手架、校验、图谱构建、代码锚点候选和 traceability state 合并；语义 summary、实体归一和能力判断由当前 agent 或其可用 worker 辅助。traceability 的模型步骤必须走 `docs/traceability-contract.md`：当前 agent 或外部 agent worker 都只能输出 `staging/traceability/runs/<run_id>/proposals.json`，由确定性工具合并到 `staging/traceability/state.json` 并渲染 Markdown。
 标准模板现在还会维护 `staging/cjira-registry/active.json`、`archive.json` 和 `cache.json`，用于记录 source page 的 `cjira` / `idea` 状态、刷新 Jira 活跃状态，并在 query / mapping / doctor 中区分 `idea`、`in_progress`、`frozen`。
 
 **内置 Confluence/Cwiki 下载（无需单独安装 obsidian-wiki-export skill）**：模板中包含 `tools/confluence_sync/export_obsidian_wiki.py`。安装模板并 `uv sync` 后，用带 `pageId` 的空间页面 URL 可把 wiki 树落入 **`raw/<pageId>-<slug>/index.md`**（每页目录 + `assets/`），同步元数据（`export-state.json`、`progress/`、`manifest-*.json`）默认写在 **`staging/wiki-export-state/`**，不把状态文件放进 `raw/`。项目的根 wiki、后续新增 wiki、RSS URL、层级和筛选条件统一落在 **`upstream/wiki-sources.json`**；日期筛选使用对应 source 的 `filters.updated_since`。详见 `references/bootstrapping.md`「从 wiki URL 拉取 raw」。
@@ -172,7 +172,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 10. 阶段 I：发布 / 提交 / 远端同步
 11. 阶段 M：后续增量维护
 
-阶段 I 的共享发布硬门禁是证据同步、health、graph、必要 anchor check 和发布范围安全。`check_refinement.py` 的 pending 或 `refinement_contract.status=needs_refinement` 不是 raw/graph/health 硬阻断，但它是 P1 自动精修任务：`update` 必须在同轮进入 Codex-native source 精修队列，不能只发布后提醒用户下次处理。pending source 队列超过 10 页时，应默认使用 subagent / worker 并行分片尽可能处理完整队列，分片只改互不重叠的 `wiki/sources/*`，主 agent 统一写 `staging/refinement-status.md` 并收口验证；不得把 5 页或少量样本当作默认完成策略。只有真实 blocker、工具限制、上下文耗尽或用户要求停止时才允许 checkpoint。图片证据待筛选或已 checkpoint 的语义层待加厚可作为 `usable-with-gaps` 发布。raw-code 权限失败、非受管、损坏、dirty 或不能 fast-forward 是硬阻断，应在写入 raw/wiki/staging 产物前停止，并让用户先修权限/凭证或显式切换本机模式。
+阶段 I 的共享发布硬门禁是证据同步、health、graph、必要 anchor check 和发布范围安全。`check_refinement.py` 的 pending 或 `refinement_contract.status=needs_refinement` 不是 raw/graph/health 硬阻断，但它是 P1 自动精修任务：`update` 必须在同轮进入 agent-native source 精修队列，不能只发布后提醒用户下次处理。pending source 队列超过 10 页时，应默认使用当前环境可用的 subagent / worker 并行分片尽可能处理完整队列，分片只改互不重叠的 `wiki/sources/*`，主 agent 统一写 `staging/refinement-status.md` 并收口验证；不得把 5 页或少量样本当作默认完成策略。只有真实 blocker、工具限制、上下文耗尽或用户要求停止时才允许 checkpoint。图片证据待筛选或已 checkpoint 的语义层待加厚可作为 `usable-with-gaps` 发布。raw-code 权限失败、非受管、损坏、dirty 或不能 fast-forward 是硬阻断，应在写入 raw/wiki/staging 产物前停止，并让用户先修权限/凭证或显式切换本机模式。
 
 ### 2. 新项目优先构建，不优先查询
 
@@ -246,6 +246,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 - 可以独立推进的 codebase、目录层、能力页、source 批次、graphify 分析、health 审查，应使用 subagent 并发执行。
 - 阶段 H 图片证据补充也应使用 subagent 并发执行：按 source page 或相关页面包切分，每个 worker 只写自己负责的 `staging/image-notes/<source-page-id>/`，主 agent 负责候选排序、去重、wiki 合并、health/graph 和状态收口。
+- worker 选择按能力层级动态路由，而不是按客户端或具体模型名路由：确定性状态修复、metadata/status 收口、短页整理优先使用最低成本 lightweight worker；普通 source 精修使用 standard worker；跨页冲突、G+ 语义重构、traceability 强证据判断和高风险业务口径使用 strongest available worker。当前环境没有暴露能力选择时，使用默认 worker，并说明选择能力不可用。
 - 多个简单、相近、低风险的小任务可以打包给同一个 subagent，一次性完成，避免为每个小页面启动单独 subagent。
 - 不要让多个 subagent 写同一文件或同一能力页；并发任务必须有清晰、互不重叠的输出范围。
 - 主 agent 负责全局协议、命名、跨层链接、最终整合和质量口径；subagent 负责局部扫描、摘要、页面草稿、映射表和审查发现。
@@ -304,7 +305,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 - 可以读取 `raw/`，不得修改 `raw/`。
 - 默认不提交 `raw/`；Gateway 发布同步也只提交 canonical staging 状态和生成知识层，`raw/` 由本地 wiki-export/sync 刷新。无论哪种模式，都不得由 agent 直接修改 `raw/` 原文。
-- 不调用本地模型 SDK 做摘要、分类、实体归一或语义判断；这些由 Codex / subagent 完成。
+- 不调用本地模型 SDK 做摘要、分类、实体归一或语义判断；这些由当前 agent 或其可用 worker 完成。
 - 本地脚本只做确定性扫描、health、graph、文件统计和格式检查。
 - 不把 token、cookie、密码、私钥、access key、内部凭据或完整敏感配置值写入 wiki；必要时只写用途并脱敏。
 - 不修改项目 `tools/` 来产品化一次性 workflow，除非用户明确要求。
