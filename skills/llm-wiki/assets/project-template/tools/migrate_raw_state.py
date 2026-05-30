@@ -91,7 +91,7 @@ def rewrite_gitignore(project: Path) -> bool:
 
 def normalize_metadata_dir(value: object, project: Path) -> tuple[str, str | None]:
     text = str(value or "").strip()
-    if not text or text == "staging/wiki-export":
+    if not text or text in {"staging/wiki-export", "raw", "raw/"}:
         return CANONICAL_METADATA_DIR, None
     path_value = Path(text)
     if not path_value.is_absolute():
@@ -124,6 +124,8 @@ def normalize_wiki_sources(project: Path, *, apply: bool) -> tuple[list[str], li
             continue
         if source.get("metadata_dir") == "staging/wiki-export":
             warnings.append("legacy_wiki_export_metadata_dir")
+        if source.get("metadata_dir") in {"raw", "raw/"}:
+            warnings.append("legacy_raw_metadata_dir")
         if source.get("metadata_dir") != metadata_dir:
             source["metadata_dir"] = metadata_dir
             changed = True

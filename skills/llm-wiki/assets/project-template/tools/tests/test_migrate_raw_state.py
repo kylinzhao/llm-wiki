@@ -130,3 +130,34 @@ class RawStateNormalizationMigrationTest(unittest.TestCase):
             self.assertEqual((flat_page / "index.md").read_text(encoding="utf-8"), "# Flat\n")
             self.assertTrue((flat_page / "assets" / "only-in-legacy.png").is_file())
             self.assertIn("removed_legacy_pages_root:raw/pages-642319072", report["actions"])
+
+    def test_apply_moves_legacy_raw_metadata_dir_to_canonical_staging_dir(self):
+        migration = load_migration()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / ".gitignore").write_text("raw/\n", encoding="utf-8")
+            (project / "raw" / "123-page").mkdir(parents=True)
+            (project / "raw" / "123-page" / "index.md").write_text("# Source\n", encoding="utf-8")
+            (project / "upstream").mkdir()
+            (project / "upstream" / "wiki-sources.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "sources": [
+                            {
+                                "type": "confluence",
+                                "page_id": "123",
+                                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=123",
+                                "metadata_dir": "raw",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            report = migration.apply_project(project, allow_dirty=True)
+
+            sources = json.loads((project / "upstream" / "wiki-sources.json").read_text(encoding="utf-8"))["sources"]
+            self.assertEqual(sources[0]["metadata_dir"], "staging/wiki-export-state")
+            self.assertIn("legacy_raw_metadata_dir", report["warnings"])
