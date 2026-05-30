@@ -39,6 +39,10 @@ RATE_LIMIT_RETRIES = 5
 RATE_LIMIT_BACKOFF_SECONDS = 3.0
 REQUEST_INTERVAL_SECONDS = 1.0
 ASSET_REQUEST_INTERVAL_SECONDS = 0.0
+DEFAULT_MAX_IMAGE_DOWNLOAD_BYTES = 5 * 1024 * 1024
+MAX_IMAGE_DOWNLOAD_BYTES = int(
+    os.environ.get("LLM_WIKI_MAX_IMAGE_DOWNLOAD_BYTES", str(DEFAULT_MAX_IMAGE_DOWNLOAD_BYTES))
+)
 BLOCK_TAGS = {
     "article",
     "blockquote",
@@ -1608,6 +1612,35 @@ def build_page_paths(
     return paths
 
 
+def is_legacy_root_pages_path(path_value: str | Path) -> bool:
+    path = Path(path_value)
+    first_part = path.parts[0] if path.parts else ""
+    return bool(re.fullmatch(r"pages-\d+", first_part))
+
+
+def normalize_page_path_overrides(
+    pages: dict[str, PageNode],
+    output_dir: Path,
+    *,
+    pages_dir_name: str,
+    page_path_overrides: dict[str, str | Path],
+) -> dict[str, str | Path]:
+    if pages_dir_name:
+        return dict(page_path_overrides)
+    normalized: dict[str, str | Path] = {}
+    for page_id, override in page_path_overrides.items():
+        if is_legacy_root_pages_path(override):
+            page = pages.get(page_id)
+            if page is not None:
+                normalized[page_id] = path_relative_to_base(
+                    page_output_dir(output_dir, page, pages_dir_name="") / "index.md",
+                    output_dir,
+                )
+            continue
+        normalized[page_id] = override
+    return normalized
+
+
 def relpath_from(source: Path, target: Path) -> str:
     return os.path.relpath(target, start=source.parent).replace(os.sep, "/")
 
@@ -1732,21 +1765,45 @@ def download_page_images(
             asset_map[image_url] = image_path.name
             image_links[image_url] = f"assets/{image_path.name}"
             continue
-        response = send_request(
-            session,
-            image_url,
-            stream=True,
-            accept="*/*",
-            request_interval_override=getattr(session, "asset_request_interval", 0.0),
-        )
+        try:
+            response = send_request(
+                session,
+                image_url,
+                stream=True,
+                accept="*/*",
+                request_interval_override=getattr(session, "asset_request_interval", 0.0),
+            )
+        except requests.RequestException:
+            continue
         if response.status_code >= 400:
             continue
-        with image_path.open("wb") as file_obj:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    file_obj.write(chunk)
-        asset_map[image_url] = image_path.name
-        image_links[image_url] = f"assets/{image_path.name}"
+        content_length = getattr(response, "headers", {}).get("Content-Length", "").strip()
+        if content_length:
+            try:
+                if int(content_length) > MAX_IMAGE_DOWNLOAD_BYTES:
+                    continue
+            except ValueError:
+                pass
+        downloaded = 0
+        try:
+            with image_path.open("wb") as file_obj:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        downloaded += len(chunk)
+                        if downloaded > MAX_IMAGE_DOWNLOAD_BYTES:
+                            file_obj.close()
+                            image_path.unlink(missing_ok=True)
+                            break
+                        file_obj.write(chunk)
+                else:
+                    asset_map[image_url] = image_path.name
+                    image_links[image_url] = f"assets/{image_path.name}"
+                    continue
+        except requests.RequestException:
+            image_path.unlink(missing_ok=True)
+            continue
+        image_path.unlink(missing_ok=True)
+        continue
     save_asset_map(page_dir, asset_map)
     return image_links
 
@@ -2545,6 +2602,12 @@ def complete_page_path_overrides(
     pages_dir_name: str,
     page_path_overrides: dict[str, str | Path],
 ) -> dict[str, str]:
+    page_path_overrides = normalize_page_path_overrides(
+        pages,
+        output_dir,
+        pages_dir_name=pages_dir_name,
+        page_path_overrides=page_path_overrides,
+    )
     page_paths = build_page_paths(
         pages,
         output_dir,
@@ -2592,6 +2655,12 @@ def update_root_from_rss(
     effective_page_paths: dict[str, str | Path] = dict(state.get("page_paths") or {})
     if page_path_overrides:
         effective_page_paths.update(page_path_overrides)
+    effective_page_paths = normalize_page_path_overrides(
+        pages,
+        output_dir,
+        pages_dir_name=effective_pages_dir_name,
+        page_path_overrides=effective_page_paths,
+    )
     feed_entries = fetch_rss_entries(session, rss_url)
     updated_page_ids: list[str] = []
     skipped_page_ids: list[str] = []

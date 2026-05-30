@@ -95,3 +95,38 @@ class RawStateNormalizationMigrationTest(unittest.TestCase):
             self.assertTrue((project / "staging" / "wiki-export-state" / "export-state.json").is_file())
             self.assertTrue((project / "staging" / "wiki-export-state" / "progress" / "123.json").is_file())
             self.assertEqual(report["status"], "applied")
+
+    def test_apply_flattens_legacy_pages_root_and_merges_missing_assets(self):
+        migration = load_migration()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / ".gitignore").write_text("raw/\n", encoding="utf-8")
+            legacy_page = project / "raw" / "pages-642319072" / "123-page"
+            flat_page = project / "raw" / "123-page"
+            (legacy_page / "assets").mkdir(parents=True)
+            flat_page.mkdir(parents=True)
+            (legacy_page / "index.md").write_text("# Legacy\n", encoding="utf-8")
+            (legacy_page / "assets" / "only-in-legacy.png").write_text("png", encoding="utf-8")
+            (flat_page / "index.md").write_text("# Flat\n", encoding="utf-8")
+            (project / "raw" / "progress").mkdir(parents=True)
+            (project / "raw" / "progress" / "642319072.json").write_text(
+                json.dumps(
+                    {
+                        "root_page_id": "642319072",
+                        "depth_limit": 3,
+                        "page_paths": {
+                            "123": "pages-642319072/123-page/index.md",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            report = migration.apply_project(project, allow_dirty=True)
+
+            progress = json.loads((project / "raw" / "progress" / "642319072.json").read_text(encoding="utf-8"))
+            self.assertEqual(progress["page_paths"]["123"], "123-page/index.md")
+            self.assertFalse((project / "raw" / "pages-642319072").exists())
+            self.assertEqual((flat_page / "index.md").read_text(encoding="utf-8"), "# Flat\n")
+            self.assertTrue((flat_page / "assets" / "only-in-legacy.png").is_file())
+            self.assertIn("removed_legacy_pages_root:raw/pages-642319072", report["actions"])
