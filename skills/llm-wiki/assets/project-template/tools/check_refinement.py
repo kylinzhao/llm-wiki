@@ -4,66 +4,14 @@
 from __future__ import annotations
 
 import argparse
-import json
-import re
 from pathlib import Path
 
-
-def read_json(path: Path) -> dict:
-    if not path.is_file():
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def refinement_status(project: Path) -> dict:
-    path = project / "staging" / "refinement-status.md"
-    if not path.is_file():
-        return {}
-    text = path.read_text(encoding="utf-8", errors="replace")
-    match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.S)
-    if not match:
-        return {}
-    try:
-        data = json.loads(match.group(1))
-    except json.JSONDecodeError:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def completed_or_skipped_paths(status: dict) -> set[str]:
-    paths: set[str] = set()
-    for key in ("completed", "skipped"):
-        entries = status.get(key)
-        if not isinstance(entries, list):
-            continue
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            path = entry.get("path") or entry.get("wiki_path")
-            if isinstance(path, str) and path:
-                paths.add(path)
-    return paths
-
-
-def page_has_pending_markers(text: str) -> bool:
-    markers = [
-        "Pending AI-native summary",
-        "Pending extraction from source evidence",
-        "Deterministic seed page.",
-        "待完成 AI 原生摘要",
-        "待从来源证据中提取",
-        "确定性种子页。",
-        "ai_refinement_state: pending",
-        '"ai_refinement_state": "pending"',
-        '"ai_refinement_state":"pending"',
-        '"ai_refinement_state": "stale"',
-        '"ai_refinement_state":"stale"',
-    ]
-    return any(marker in text for marker in markers)
+from refinement_contract import (
+    completed_or_skipped_paths,
+    page_has_pending_markers,
+    read_json,
+    refinement_status,
+)
 
 
 def check_project(project: Path) -> int:

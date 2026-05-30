@@ -172,7 +172,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 10. 阶段 I：发布 / 提交 / 远端同步
 11. 阶段 M：后续增量维护
 
-阶段 I 的共享发布硬门禁是证据同步、health、graph、必要 anchor check 和发布范围安全；`check_refinement.py` 的 pending、图片证据待筛选或语义层待加厚属于 `usable-with-gaps` 质量缺口，不应单独阻断共享 commit/push。raw-code 权限失败、非受管、损坏、dirty 或不能 fast-forward 是硬阻断，应在写入 raw/wiki/staging 产物前停止，并让用户先修权限/凭证或显式切换本机模式。
+阶段 I 的共享发布硬门禁是证据同步、health、graph、必要 anchor check 和发布范围安全。`check_refinement.py` 的 pending 或 `refinement_contract.status=needs_refinement` 不是 raw/graph/health 硬阻断，但它是 P1 自动精修任务：`update` 必须在同轮进入 Codex-native source 精修队列，不能只发布后提醒用户下次处理；pending 太多时可以分批 checkpoint，并明确记录已处理和剩余队列。图片证据待筛选或已 checkpoint 的语义层待加厚可作为 `usable-with-gaps` 发布。raw-code 权限失败、非受管、损坏、dirty 或不能 fast-forward 是硬阻断，应在写入 raw/wiki/staging 产物前停止，并让用户先修权限/凭证或显式切换本机模式。
 
 ### 2. 新项目优先构建，不优先查询
 
@@ -411,6 +411,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 7. 优先级建议和下一步命令
 8. 图片证据层：`raw/` 图片资产数量、`staging/image-notes/` 状态、是否应进入阶段 H、优先候选页面
 9. G+ semantic thickness：source 数与非 index concepts/entities 数、source-to-concept/entity 覆盖率、manual concept/entity placeholder、truth/evidence/proposals/operations/reference 是否 index-only 或低密度；这些问题按 P1/P2 报告，不因 health pass 而忽略
+10. P2 消化规则：如果 doctor / update 当前没有 P0/P1，重要 P2（图片证据 unknown、Cjira 状态质量、orphan source、G+ 薄层等）应提权为 P1，避免长期沉底
 
 ### G+ 任务
 
@@ -422,7 +423,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 4. `docs/gplus-quality-audit.md` 状态
 5. health / broken wikilinks / graph 状态
 6. 图片证据层是否仍待阶段 H；若待处理，给出 `llm-wiki image` 作为建议下一步
-7. 如果 `tools/update_wiki.py` 或 `tools/doctor.py` 报 `gplus_quality.status=needs_attention`，必须说明是 P1/P2 语义层欠拟合还是可接受的窄域薄层；P1/P2 时优先在本轮 update 完成 G+ semantic expansion
+7. 如果 `tools/update_wiki.py` 或 `tools/doctor.py` 报 `gplus_quality.status=needs_attention`，必须说明是 P1/P2 语义层欠拟合还是可接受的窄域薄层；P1/P2 时优先在本轮 update 完成 G+ semantic expansion。若没有其他 P0/P1，重要 P2 欠拟合提权为 P1 处理
 
 ### 代码 wiki 任务
 

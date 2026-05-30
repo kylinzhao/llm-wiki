@@ -21,6 +21,7 @@ from agent_rules import refresh_agent_rules
 from graphify_code import decide_graphify_action
 from gplus_quality import inspect_gplus_quality
 from raw_code_manager import RawCodeManagerError, is_permission_error, managed_code_sync_specs as declared_code_sync_specs, read_codebase_metadata
+from refinement_contract import summarize_refinement_contract
 from project_registry import best_effort_register_current_project
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
@@ -135,6 +136,7 @@ def write_success_report(
     report_dir.mkdir(parents=True, exist_ok=True)
     health = read_json_if_present(project / "staging" / "health" / "latest.json")
     gplus_quality = inspect_gplus_quality(project, health if isinstance(health, dict) else {})
+    refinement_contract = summarize_refinement_contract(project)
     payload = {
         "version": 1,
         "status": "ok",
@@ -142,6 +144,7 @@ def write_success_report(
         "skipped_steps": skipped_steps or [],
         "graphify_decisions": graphify_decisions or [],
         "gplus_quality": gplus_quality,
+        "refinement_contract": refinement_contract,
     }
     (report_dir / "latest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     lines = [
@@ -191,6 +194,19 @@ def write_success_report(
         )
     else:
         lines.append("- No G+ semantic underfit finding from deterministic heuristics.")
+    lines.extend(["", "## Source Refinement Contract", ""])
+    if refinement_contract["status"] == "needs_refinement":
+        lines.extend(
+            [
+                "- Status: `needs_refinement`",
+                f"- Required source pages: `{refinement_contract['required_count']}`",
+                f"- Pending source pages: `{refinement_contract['pending_count']}`",
+                "",
+                "Next action: the current `llm-wiki update` agent must run Codex-native source refinement for these pages before final closure; this is a P1 automatic update task, not a user follow-up.",
+            ]
+        )
+    else:
+        lines.append(f"- Status: `{refinement_contract['status']}`")
     (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

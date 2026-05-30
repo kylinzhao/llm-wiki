@@ -47,7 +47,6 @@ class PublishDecision:
 
 SOFT_VALIDATION_STATUSES = {
     "ok",
-    "refinement_pending",
     "usable_with_gaps",
     "semantic_gaps",
 }

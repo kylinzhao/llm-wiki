@@ -17,6 +17,7 @@ from typing import Any
 
 from agent_rules import inspect_agent_rules
 from gplus_quality import inspect_gplus_quality
+from refinement_contract import summarize_refinement_contract
 
 
 def utc_now() -> str:
@@ -116,19 +117,46 @@ def max_severity(findings: list[dict[str, Any]]) -> str | None:
     return current
 
 
-def finding(severity: str, title: str, detail: str, *, blocking: bool = False) -> dict[str, Any]:
-    return {
+def finding(
+    severity: str,
+    title: str,
+    detail: str,
+    *,
+    blocking: bool = False,
+    promote_when_no_p1: bool = False,
+) -> dict[str, Any]:
+    payload = {
         "severity": severity,
         "blocking": blocking,
         "title": title,
         "detail": detail,
     }
+    if promote_when_no_p1:
+        payload["promote_when_no_p1"] = True
+    return payload
+
+
+def promote_important_p2_when_no_p1(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if any(item.get("blocking") is True or item.get("severity") in {"P0", "P1"} for item in findings):
+        return findings
+    promoted: list[dict[str, Any]] = []
+    for item in findings:
+        if item.get("severity") == "P2" and item.get("promote_when_no_p1") is True:
+            next_item = dict(item)
+            next_item["severity"] = "P1"
+            next_item["promoted_from"] = "P2"
+            next_item["detail"] = f"{next_item.get('detail', '')} Promoted from P2 because no P1 issue is currently active."
+            promoted.append(next_item)
+        else:
+            promoted.append(item)
+    return promoted
 
 
 def build_report(project: Path) -> dict[str, Any]:
     health = run_health(project)
     agent_rules = inspect_agent_rules(project)
     gplus_quality = inspect_gplus_quality(project, health if isinstance(health, dict) else {})
+    refinement_contract = summarize_refinement_contract(project)
     findings: list[dict[str, Any]] = []
 
     if health.get("ok") is not True:
@@ -197,6 +225,22 @@ def build_report(project: Path) -> dict[str, Any]:
                 blocking=False,
             )
         )
+    raw_image_assets = int(health.get("raw_image_assets") or 0)
+    image_notes = int(health.get("image_notes") or 0)
+    image_evidence_status = str(health.get("image_evidence_status") or "unknown")
+    if raw_image_assets and image_evidence_status == "unknown":
+        findings.append(
+            finding(
+                "P2",
+                "image_evidence_status_unknown",
+                (
+                    f"raw/ contains {raw_image_assets} image asset(s), {image_notes} image note(s) exist, "
+                    "but image evidence status is still unknown. Run `llm-wiki image` after source refinement "
+                    "to screen high-value visual evidence."
+                ),
+                promote_when_no_p1=True,
+            )
+        )
 
     drawio_repair = health.get("drawio_repair", {})
     if isinstance(drawio_repair, dict) and drawio_repair.get("missing_evidence_count"):
@@ -232,7 +276,53 @@ def build_report(project: Path) -> dict[str, Any]:
             )
         )
 
-    findings.extend(gplus_quality["findings"])
+    for item in gplus_quality["findings"]:
+        next_item = dict(item)
+        if next_item.get("severity") == "P2":
+            next_item["promote_when_no_p1"] = True
+        findings.append(next_item)
+    if refinement_contract["status"] == "needs_refinement":
+        findings.append(
+            finding(
+                "P1",
+                "source_refinement_pending",
+                (
+                    f"{refinement_contract['pending_count']} required source page(s) still need AI-native "
+                    "source refinement/status records. `llm-wiki update` must process this queue automatically; "
+                    "it is not a user-only follow-up."
+                ),
+                blocking=False,
+            )
+        )
+    cjira_registry = health.get("cjira_registry")
+    if isinstance(cjira_registry, dict):
+        stale_status_pages = int(cjira_registry.get("stale_status_pages") or 0)
+        low_confidence_pages = int(cjira_registry.get("low_confidence_pages") or 0)
+        if stale_status_pages or low_confidence_pages:
+            findings.append(
+                finding(
+                    "P2",
+                    "cjira_status_quality_gaps",
+                    (
+                        f"Cjira registry has {stale_status_pages} stale status page(s) and "
+                        f"{low_confidence_pages} low-confidence primary selection(s). Refresh Jira auth/status "
+                        "and review low-confidence mappings before relying on lifecycle answers."
+                    ),
+                    promote_when_no_p1=True,
+                )
+            )
+    orphan_source_pages = health.get("orphan_source_pages")
+    if isinstance(orphan_source_pages, list) and orphan_source_pages:
+        sample = json.dumps(orphan_source_pages[:5], ensure_ascii=False)
+        findings.append(
+            finding(
+                "P2",
+                "orphan_source_pages",
+                f"{len(orphan_source_pages)} source page(s) are not mapped back to a raw source. Sample: {sample}",
+                promote_when_no_p1=True,
+            )
+        )
+    findings = promote_important_p2_when_no_p1(findings)
 
     p0_count = sum(1 for item in findings if item.get("severity") == "P0" or item.get("blocking") is True)
     summary = (
@@ -257,6 +347,7 @@ def build_report(project: Path) -> dict[str, Any]:
             "drawio_repair": health.get("drawio_repair"),
         },
         "gplus_quality": gplus_quality,
+        "refinement_contract": refinement_contract,
         "agent_rules": agent_rules,
     }
 
