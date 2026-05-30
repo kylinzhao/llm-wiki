@@ -23,6 +23,50 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def normalize_for_stability(value: object) -> object:
+    if isinstance(value, dict):
+        normalized: dict[str, object] = {}
+        for key, item in value.items():
+            if key == "generated_at":
+                continue
+            if key == "project":
+                normalized[key] = "."
+                continue
+            if key == "path" and isinstance(item, str) and item.endswith("AGENTS.md"):
+                normalized[key] = "AGENTS.md"
+                continue
+            normalized[key] = normalize_for_stability(item)
+        return normalized
+    if isinstance(value, list):
+        return [normalize_for_stability(item) for item in value]
+    return value
+
+
+def stable_output_report(report: dict[str, Any]) -> dict[str, Any]:
+    stable = dict(report)
+    stable["project"] = "."
+    agent_rules = stable.get("agent_rules")
+    if isinstance(agent_rules, dict):
+        stable["agent_rules"] = {
+            **agent_rules,
+            "path": "AGENTS.md" if agent_rules.get("path") else "",
+        }
+    return stable
+
+
+def write_stable_report(path: Path, report: dict[str, Any]) -> None:
+    next_report = stable_output_report(report)
+    if path.is_file():
+        try:
+            current = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            current = None
+        if normalize_for_stability(current) == normalize_for_stability(next_report):
+            return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(next_report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def read_json(path: Path, default: Any) -> Any:
     if not path.is_file():
         return default
@@ -199,7 +243,7 @@ def build_report(project: Path) -> dict[str, Any]:
     return {
         "schemaVersion": "doctor.v1",
         "generated_at": utc_now(),
-        "project": str(project),
+        "project": ".",
         "summary": summary,
         "findings": findings,
         "maxSeverity": max_severity(findings),
@@ -226,11 +270,10 @@ def main() -> int:
     project = Path(args.project).resolve()
     report = build_report(project)
     out = project / "staging" / "doctor" / "latest.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_stable_report(out, report)
 
     if args.json:
-      print(json.dumps(report, ensure_ascii=False, indent=2))
+      print(json.dumps(stable_output_report(report), ensure_ascii=False, indent=2))
     else:
       print(f"doctor={'pass' if report['p0Count'] == 0 else 'fail'}")
       print(f"p0={report['p0Count']} maxSeverity={report['maxSeverity']}")

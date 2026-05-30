@@ -77,6 +77,38 @@ class GPlusQualityTest(unittest.TestCase):
 
             self.assertIn("gplus_concepts_underfit", {item["title"] for item in report["findings"]})
             self.assertEqual(report["gplus_quality"]["metrics"]["non_index_concept_pages"], 1)
+            self.assertEqual(report["project"], ".")
+
+    def test_doctor_latest_is_stable_when_only_path_and_time_would_change(self):
+        doctor = load_module("doctor")
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            out = project / "staging" / "doctor" / "latest.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            existing = {
+                "schemaVersion": "doctor.v1",
+                "generated_at": "2026-05-01T00:00:00+00:00",
+                "project": "/tmp/old-checkout",
+                "summary": "No blocking LLM Wiki issues found.",
+                "findings": [],
+                "maxSeverity": None,
+                "p0Count": 0,
+                "health": {"ok": True, "status": "pass", "wiki_pages": 2, "source_pages": 1, "raw_drawio_assets": 0, "drawio_repair": {}},
+                "gplus_quality": {"status": "ok", "metrics": {}, "findings": []},
+                "agent_rules": {"path": "/tmp/old-checkout/AGENTS.md", "exists": True, "has_query_routing": True, "ok": True},
+            }
+            out.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            report = {
+                **existing,
+                "generated_at": "2026-06-01T00:00:00+00:00",
+                "project": str(project),
+                "agent_rules": {"path": str(project / "AGENTS.md"), "exists": True, "has_query_routing": True, "ok": True},
+            }
+            before = out.read_text(encoding="utf-8")
+
+            doctor.write_stable_report(out, report)
+
+            self.assertEqual(out.read_text(encoding="utf-8"), before)
 
     def test_update_success_report_records_gplus_quality(self):
         update_wiki = load_module("update_wiki")

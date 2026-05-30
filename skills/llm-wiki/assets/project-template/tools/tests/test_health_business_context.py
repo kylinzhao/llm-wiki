@@ -87,6 +87,70 @@ class HealthBusinessContextTest(unittest.TestCase):
             self.assertTrue(report["ok"])
             self.assertTrue(report["has_valid_business_context"])
             self.assertNotIn("BUSINESS_CONTEXT.md", report["missing_required_paths"])
+            self.assertEqual(report["project"], ".")
+
+    def test_health_latest_is_stable_when_only_path_and_time_would_change(self):
+        health = load_health()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            write_minimal_project(project)
+            (project / "BUSINESS_CONTEXT.md").write_text(
+                "# BUSINESS_CONTEXT\n\n- 项目名称：二手车知识库\n- 目标用户/角色：运营\n- 核心业务目标：统一需求口径。\n",
+                encoding="utf-8",
+            )
+            out = project / "staging" / "health" / "latest.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-05-01T00:00:00+00:00",
+                        "project": "/tmp/old-checkout",
+                        "ok": True,
+                        "status": "pass",
+                        "has_business_context": True,
+                        "has_valid_business_context": True,
+                        "business_context_status": "ok",
+                        "business_context_message": "",
+                        "missing_required_paths": [],
+                        "wiki_pages": 2,
+                        "source_pages": 0,
+                        "empty_pages": [],
+                        "broken_wikilinks": [],
+                        "stale_sources": [],
+                        "orphan_source_pages": [],
+                        "expects_raw_evidence": False,
+                        "has_raw_dir": True,
+                        "has_raw_files": True,
+                        "expects_raw_code_evidence": False,
+                        "has_raw_code_dir": False,
+                        "has_raw_code_codebases": False,
+                        "evidence_mode": "no_raw_expectation",
+                        "code_evidence_mode": "no_raw_code_expectation",
+                        "evidence_gaps": [],
+                        "raw_image_assets": 0,
+                        "raw_drawio_assets": 0,
+                        "drawio_repair": {"drawio_count": 0, "missing_evidence_count": 0, "missing_evidence": [], "last_report": {"generated_at": "", "converted_count": 0, "unparsed_count": 0, "changed_count": 0}},
+                        "image_notes": 0,
+                        "image_evidence_status": "unknown",
+                        "image_evidence_gaps": [],
+                        "image_refinement_candidates": [],
+                        "cjira_registry": {"active_pages": 0, "archived_pages": 0, "idea_pages": 0, "in_progress_pages": 0, "frozen_pages": 0, "low_confidence_pages": 0, "stale_status_pages": 0},
+                        "code_intelligence": {"detected_codebases": [], "fallback_only_codebases": [], "details": {}},
+                        "recommended_actions": [],
+                        "query_may_work_without_full_evidence": False,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            before = out.read_text(encoding="utf-8")
+
+            report = health.build_report(project)
+            health.write_stable_report(out, report)
+
+            self.assertEqual(out.read_text(encoding="utf-8"), before)
 
     def test_health_reports_cjira_registry_summary(self):
         health = load_health()
