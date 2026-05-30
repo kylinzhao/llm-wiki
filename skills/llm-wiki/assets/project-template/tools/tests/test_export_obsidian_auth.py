@@ -52,6 +52,20 @@ class ExportObsidianAuthTest(unittest.TestCase):
         self.assertNotIn("GUAZI_SSO_SKILL_ROOT", stderr.getvalue())
         self.assertNotIn("/path/to/guazi-sso-login", stderr.getvalue())
 
+    def test_missing_auth_instructions_include_persistent_cookie_fallback(self):
+        export_obsidian = load_export_obsidian()
+        stderr = io.StringIO()
+
+        with mock.patch.object(sys, "stderr", stderr):
+            export_obsidian.print_auth_instructions()
+
+        output = stderr.getvalue()
+        self.assertIn("SSO", output)
+        self.assertIn("COOKIE_HEADER", output)
+        self.assertIn("~/.llm-wiki/guazi-sso.env", output)
+        self.assertIn("non-intranet", output)
+        self.assertNotIn("only a one-off fallback", output)
+
     def test_vendored_sso_login_is_discovered_by_default(self):
         export_obsidian = load_export_obsidian()
 

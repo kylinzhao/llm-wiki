@@ -114,7 +114,18 @@ class InstallProjectTemplateTest(unittest.TestCase):
             self.assertTrue(script.is_file())
             self.assertIn("#!/usr/bin/env bash", text)
             self.assertIn("GUAZI_SSO_USER_NAME", text)
+            self.assertIn("COOKIE_HEADER", text)
+            self.assertIn("Choose auth mode", text)
             self.assertIn(".llm-wiki/guazi-sso.env", text)
+
+    def test_skill_level_auth_init_script_supports_cookie_mode(self):
+        script = Path(__file__).resolve().parents[1] / "init_auth_env.sh"
+        text = script.read_text(encoding="utf-8")
+
+        self.assertIn("GUAZI_SSO_USER_NAME", text)
+        self.assertIn("COOKIE_HEADER", text)
+        self.assertIn("Choose auth mode", text)
+        self.assertIn(".llm-wiki/guazi-sso.env", text)
 
     def test_project_template_ignores_evidence_caches(self):
         installer = load_installer()

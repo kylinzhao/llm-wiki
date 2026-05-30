@@ -119,14 +119,14 @@ def cookie_refresh_help(reason: str) -> str:
             reason,
             "",
             "Wiki authentication needs a valid local login state.",
-            "Recommended path: provide Guazi username, password, and phone so the bundled login helper can cache a local Cwiki login state.",
-            "The llm-wiki skill does not upload credentials or write them into the KB project; persistent SSO values live only on this computer in ~/.llm-wiki/guazi-sso.env.",
-            "guazi-sso-login exchanges those credentials for a local Cookie/login cache and reuses it until it expires.",
+            "Supported auth setup paths:",
+            "1. SSO mode: provide Guazi username, password, and phone so the bundled login helper can cache a local Cwiki login state.",
+            "2. Cookie mode: paste a full COOKIE_HEADER into ~/.llm-wiki/guazi-sso.env when the SSO token service is unreachable, for example outside non-intranet/VPN access.",
+            "The llm-wiki skill does not upload credentials or write them into the KB project; persistent auth values live only on this computer in ~/.llm-wiki/guazi-sso.env.",
             "",
-            "Terminal setup: run `bash tools/confluence_sync/init_auth_env.sh` from the KB project root, then retry the sync.",
+            "Terminal setup: run `bash tools/confluence_sync/init_auth_env.sh` from the KB project root, choose SSO or Cookie mode, then retry the sync.",
             "If the project template is not installed yet, run `bash ${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/init_auth_env.sh`.",
             "",
-            "COOKIE_HEADER is still supported as a one-off emergency credential, but it is not the recommended path.",
             "Do not commit credentials or paste them into project files.",
         ]
     )
@@ -178,13 +178,15 @@ def load_json(path: Path, default: Any) -> Any:
 def sso_env_setup_help() -> str:
     return "\n".join(
         [
-            "To enable auto-login, run `bash tools/confluence_sync/init_auth_env.sh` or export SSO credentials in the current environment:",
+            "To enable auto-login, run `bash tools/confluence_sync/init_auth_env.sh` and choose SSO or Cookie mode.",
+            "SSO mode can also be set by exporting credentials in the current environment:",
             "Optional for Jira CHDSSO auto-refresh:",
             "  export GUAZI_CHDSSO_TEST_PHONE='<phone>'",
             "  export GUAZI_CHDSSO_TEST_CODE='<code>'",
             "  # or PRE/ONLINE variants:",
             "  export GUAZI_CHDSSO_PRE_PHONE='...'; export GUAZI_CHDSSO_PRE_CODE='...'",
             "  export GUAZI_CHDSSO_ONLINE_PHONE='...'; export GUAZI_CHDSSO_ONLINE_CODE='...'",
+            "Cookie mode can be set globally in ~/.llm-wiki/guazi-sso.env as COOKIE_HEADER='<full cookie header>'.",
         ]
     )
 

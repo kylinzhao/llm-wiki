@@ -242,17 +242,18 @@ def print_auth_instructions() -> None:
         "\n"
         "Security boundary:\n"
         "- The llm-wiki skill does not upload your username, password, phone, Jira token, Cookie, or token.\n"
-        "- It does not write secrets into the KB project. When you choose persistent SSO, values are written only to your computer.\n"
+        "- It does not write secrets into the KB project. Persistent auth values are written only to your computer.\n"
         "- The local env file is ~/.llm-wiki/guazi-sso.env with user-only permissions, and is loaded by future llm-wiki updates.\n"
-        "- guazi-sso-login exchanges the SSO credentials for a Cookie/login cache locally and reuses it until it expires.\n"
+        "- SSO mode stores username/password/phone locally, then guazi-sso-login exchanges them for a local Cookie/login cache.\n"
+        "- Cookie mode stores a full COOKIE_HEADER locally. Use it when the SSO token service is unreachable, for example outside non-intranet/VPN access.\n"
         "- Secrets are not written to raw/, wiki/, upstream/, staging reports, command arguments, or git files by this skill.\n"
         "- If you type secrets in the agent chat window, they may enter the current agent session context or local session history depending on the engine.\n"
         "\n"
-        "Recommended terminal setup: run `bash tools/confluence_sync/init_auth_env.sh` from the KB project root, then return and continue update.\n"
+        "Terminal setup: run `bash tools/confluence_sync/init_auth_env.sh` from the KB project root, then choose SSO or Cookie mode and retry update.\n"
         "\n"
         "If the project template is not installed yet, run the skill-level script instead: `bash ${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/init_auth_env.sh`.\n"
         "\n"
-        "The Cwiki login helper is bundled with llm-wiki. Jira issue reading prefers JIRA_TOKEN; CHDSSO is only a fallback. A full COOKIE_HEADER is only a one-off fallback, not the recommended path.\n",
+        "The Cwiki login helper is bundled with llm-wiki. Jira issue reading prefers JIRA_TOKEN; CHDSSO is only a fallback.\n",
         file=sys.stderr,
     )
 
@@ -315,7 +316,7 @@ def write_auth_env_file(path: Path, values: dict[str, str]) -> None:
     except OSError:
         pass
     lines = [
-        "# Local llm-wiki SSO credentials. Do not commit.",
+        "# Local llm-wiki auth values. Do not commit.",
         "# Used by tools/confluence_sync/export_obsidian_wiki.py.",
     ]
     for key in AUTH_ENV_KEYS:
