@@ -77,6 +77,7 @@ SSO_ENV_KEYS = (
     "GUAZI_SSO_PASSWORD",
     "GUAZI_SSO_APPLY_PHONE",
 )
+AUTH_ENV_KEYS = SSO_ENV_KEYS + ("COOKIE_HEADER",)
 SSO_SKILL_CANDIDATES = (
     str(Path(__file__).with_name("guazi-sso-login")),
     "~/.codex/skills/guazi-sso-login",
@@ -95,7 +96,7 @@ def load_auth_env_file(path: Path = AUTH_ENV_FILE) -> dict[str, str]:
             continue
         key, value = line.split("=", 1)
         key = key.strip()
-        if key in SSO_ENV_KEYS:
+        if key in AUTH_ENV_KEYS:
             try:
                 parsed = shlex.split(value, posix=True)
                 values[key] = parsed[0] if parsed else ""
@@ -3006,6 +3007,9 @@ def root_states_from_saved_state(metadata_dir: Path, *, raw_output_dir: Optional
 
 def main() -> int:
     args = parse_args()
+    auth_env = load_auth_env_file()
+    if not str(getattr(args, "cookie", "") or "").strip() and auth_env.get("COOKIE_HEADER"):
+        args.cookie = auth_env["COOKIE_HEADER"]
     updated_since = parse_updated_since(args.updated_since)
     if not args.url and not args.update:
         raise SystemExit("--url is required unless --update is used with a saved output directory.")

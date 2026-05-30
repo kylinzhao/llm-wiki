@@ -103,6 +103,7 @@ class ExportObsidianAuthTest(unittest.TestCase):
                     "GUAZI_SSO_PASSWORD": "secret-password",
                     "GUAZI_SSO_APPLY_PHONE": "13800138000",
                     "JIRA_TOKEN": "jira-token-123",
+                    "COOKIE_HEADER": "JSESSIONID=abc; confluence=xyz",
                 },
             )
 
@@ -113,6 +114,17 @@ class ExportObsidianAuthTest(unittest.TestCase):
         self.assertEqual(loaded["GUAZI_SSO_APPLY_PHONE"], "13800138000")
         self.assertEqual(loaded["GUAZI_SSO_SKILL_ROOT"], "/tmp/guazi-sso-login")
         self.assertEqual(loaded["JIRA_TOKEN"], "jira-token-123")
+        self.assertEqual(loaded["COOKIE_HEADER"], "JSESSIONID=abc; confluence=xyz")
+
+    def test_auth_env_file_applies_cookie_default(self):
+        export_obsidian = load_export_obsidian()
+        args = export_obsidian.parse_args(["--update", "--project-dir", "/tmp/kb"])
+        env = {"COOKIE_HEADER": "JSESSIONID=abc; confluence=xyz"}
+
+        export_obsidian.apply_auth_env_defaults(args, env)
+
+        self.assertEqual(args.cookie, "JSESSIONID=abc; confluence=xyz")
+        self.assertFalse(args.auto_cookie_from_sso)
 
     def test_auth_env_file_applies_jira_token_default(self):
         export_obsidian = load_export_obsidian()

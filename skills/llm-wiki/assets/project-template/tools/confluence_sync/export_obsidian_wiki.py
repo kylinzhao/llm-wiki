@@ -22,7 +22,7 @@ SSO_ENV_KEYS = (
     "GUAZI_SSO_PASSWORD",
     "GUAZI_SSO_APPLY_PHONE",
 )
-AUTH_ENV_KEYS = SSO_ENV_KEYS + ("JIRA_TOKEN",)
+AUTH_ENV_KEYS = SSO_ENV_KEYS + ("JIRA_TOKEN", "COOKIE_HEADER")
 SSO_SKILL_CANDIDATES = (
     str(Path(__file__).with_name("guazi-sso-login")),
     "~/.codex/skills/guazi-sso-login",
@@ -330,6 +330,8 @@ def write_auth_env_file(path: Path, values: dict[str, str]) -> None:
 
 
 def apply_auth_env_defaults(args: argparse.Namespace, env: dict[str, str]) -> None:
+    if not str(getattr(args, "cookie", "") or "").strip() and env.get("COOKIE_HEADER"):
+        args.cookie = env["COOKIE_HEADER"]
     if not str(getattr(args, "sso_skill_root", "") or "").strip() and env.get("GUAZI_SSO_SKILL_ROOT"):
         args.sso_skill_root = env["GUAZI_SSO_SKILL_ROOT"]
     if not str(getattr(args, "sso_skill_root", "") or "").strip():
