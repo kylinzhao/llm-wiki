@@ -461,8 +461,17 @@ def source_updated_since(source: dict[str, object]) -> str:
     return str(filters.get("updated_since") or source.get("updated_since") or "").strip()
 
 
+def output_dir_has_confluence_pages(output_dir: Path) -> bool:
+    """Return true when the ignored raw cache contains exported page bodies."""
+    if not output_dir.is_dir():
+        return False
+    return any(path.is_file() for path in output_dir.glob("*/index.md"))
+
+
 def has_saved_confluence_progress(metadata_dir: Path, output_dir: Path, page_id: str, depth: int) -> bool:
-    """Return true when an RSS update has a crawl progress state to resume from."""
+    """Return true when an RSS update has both progress state and raw pages."""
+    if not output_dir_has_confluence_pages(output_dir):
+        return False
     candidates = [
         metadata_dir / "progress" / f"{page_id}.json",
         output_dir / "progress" / f"{page_id}.json",

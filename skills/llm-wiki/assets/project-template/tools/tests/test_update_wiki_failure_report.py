@@ -678,6 +678,9 @@ class UpdateFailureReportTest(unittest.TestCase):
             )
             progress_dir = state_dir / "progress"
             progress_dir.mkdir(parents=True)
+            raw_page = project / "raw" / "638576143-demo"
+            raw_page.mkdir(parents=True)
+            (raw_page / "index.md").write_text("# demo\n", encoding="utf-8")
             (progress_dir / "638576143.json").write_text(
                 json.dumps(
                     {
@@ -704,6 +707,61 @@ class UpdateFailureReportTest(unittest.TestCase):
             self.assertIn("--rss-include-new", commands[0])
             self.assertIn(str(project / "staging" / "wiki-export-state"), commands[0])
             self.assertIn("638576143=https://cwiki.guazi.com/spaces/createrssfeed.action?x=1", commands[0])
+
+    def test_confluence_sync_uses_normal_export_when_raw_cache_missing(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            exporter = project / "tools" / "confluence_sync" / "export_obsidian_wiki.py"
+            exporter.parent.mkdir(parents=True)
+            exporter.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            (project / "upstream").mkdir(parents=True)
+            (project / "upstream" / "wiki-sources.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "sources": [
+                            {
+                                "type": "confluence",
+                                "enabled": True,
+                                "page_id": "638576143",
+                                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=638576143",
+                                "depth": 3,
+                                "metadata_dir": "staging/wiki-export-state",
+                                "output_dir": "raw",
+                                "rss_url": "https://cwiki.guazi.com/spaces/createrssfeed.action?x=1",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            progress_dir = project / "staging" / "wiki-export-state" / "progress"
+            progress_dir.mkdir(parents=True)
+            (progress_dir / "638576143.json").write_text(
+                json.dumps(
+                    {
+                        "root_page_id": "638576143",
+                        "depth_limit": 3,
+                        "pages": {"638576143": {}},
+                        "queue": [],
+                        "enqueued": [],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            commands = update_wiki.confluence_sync_commands(project)
+
+            self.assertEqual(len(commands), 1)
+            self.assertIn("--url", commands[0])
+            self.assertNotIn("--update", commands[0])
 
     def test_upstream_wiki_sources_normalizes_metadata_dir(self):
         import tempfile
