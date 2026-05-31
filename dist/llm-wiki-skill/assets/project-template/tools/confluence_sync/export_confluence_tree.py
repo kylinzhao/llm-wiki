@@ -77,6 +77,7 @@ SSO_ENV_KEYS = (
     "GUAZI_SSO_PASSWORD",
     "GUAZI_SSO_APPLY_PHONE",
 )
+AUTH_ENV_KEYS = (*SSO_ENV_KEYS, "COOKIE_HEADER")
 SSO_SKILL_CANDIDATES = (
     str(Path(__file__).with_name("guazi-sso-login")),
     "~/.codex/skills/guazi-sso-login",
@@ -85,7 +86,8 @@ SSO_SKILL_CANDIDATES = (
 )
 
 
-def load_auth_env_file(path: Path = AUTH_ENV_FILE) -> dict[str, str]:
+def load_auth_env_file(path: Optional[Path] = None) -> dict[str, str]:
+    path = AUTH_ENV_FILE if path is None else path
     if not path.is_file():
         return {}
     values: dict[str, str] = {}
@@ -95,7 +97,7 @@ def load_auth_env_file(path: Path = AUTH_ENV_FILE) -> dict[str, str]:
             continue
         key, value = line.split("=", 1)
         key = key.strip()
-        if key in SSO_ENV_KEYS:
+        if key in AUTH_ENV_KEYS:
             try:
                 parsed = shlex.split(value, posix=True)
                 values[key] = parsed[0] if parsed else ""
@@ -189,6 +191,13 @@ def sso_env_setup_help() -> str:
 
 
 @dataclass
+class PageRef:
+    page_id: str
+    title: str
+    url: str
+
+
+@dataclass
 class PageNode:
     page_id: str
     title: str
@@ -201,6 +210,8 @@ class PageNode:
     created_at: str = ""
     updated_at: str = ""
     version_number: int = 0
+    ancestors: list[PageRef] = field(default_factory=list)
+    ancestry_loaded: bool = False
     children: list["PageNode"] = field(default_factory=list)
 
 
@@ -231,6 +242,7 @@ class UpdateResult:
     skipped_page_ids: list[str]
     ignored_page_ids: list[str]
     change_records: list[dict[str, Any]] = field(default_factory=list)
+    ignored_page_records: list[dict[str, Any]] = field(default_factory=list)
     change_report_path: str = ""
     dry_run: bool = False
 
@@ -254,7 +266,25 @@ def page_node_to_dict(page: PageNode) -> dict[str, Any]:
         "created_at": page.created_at,
         "updated_at": page.updated_at,
         "version_number": page.version_number,
+        "ancestors": [page_ref_to_dict(ancestor) for ancestor in page.ancestors],
+        "ancestry_loaded": page.ancestry_loaded,
     }
+
+
+def page_ref_to_dict(page_ref: PageRef) -> dict[str, str]:
+    return {
+        "page_id": page_ref.page_id,
+        "title": page_ref.title,
+        "url": page_ref.url,
+    }
+
+
+def page_ref_from_dict(data: dict[str, Any]) -> PageRef:
+    return PageRef(
+        page_id=str(data.get("page_id") or data.get("id") or ""),
+        title=str(data.get("title") or ""),
+        url=str(data.get("url") or data.get("_links", {}).get("webui") or ""),
+    )
 
 
 def page_node_from_dict(data: dict[str, Any]) -> PageNode:
@@ -269,10 +299,17 @@ def page_node_from_dict(data: dict[str, Any]) -> PageNode:
         created_at=data.get("created_at", ""),
         updated_at=data.get("updated_at", ""),
         version_number=int(data.get("version_number", 0) or 0),
+        ancestors=[
+            page_ref_from_dict(item)
+            for item in data.get("ancestors", [])
+            if isinstance(item, dict)
+        ],
+        ancestry_loaded=bool(data.get("ancestry_loaded") or data.get("ancestors")),
     )
 
 
 def parse_args() -> argparse.Namespace:
+    auth_env = load_auth_env_file()
     parser = argparse.ArgumentParser(
         description="Export a Confluence page tree to local Markdown files."
     )
@@ -302,7 +339,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--cookie",
-        default=os.environ.get("COOKIE_HEADER", ""),
+        default=os.environ.get("COOKIE_HEADER") or auth_env.get("COOKIE_HEADER", ""),
         help="Raw Cookie header. Falls back to COOKIE_HEADER env var.",
     )
     parser.add_argument(
@@ -696,7 +733,7 @@ def fetch_json_with_headers(
 
 
 def content_endpoint(site_base: str, page_id: str) -> str:
-    return f"{site_base}/rest/api/content/{quote(page_id)}?expand=body.view,body.storage,history,version"
+    return f"{site_base}/rest/api/content/{quote(page_id)}?expand=body.view,body.storage,history,version,ancestors"
 
 
 def attachments_endpoint(site_base: str, page_id: str, filename: str = "") -> str:
@@ -721,6 +758,15 @@ def page_url_from_api(site_base: str, page_id: str) -> str:
     return f"{site_base}/pages/viewpage.action?pageId={quote(page_id)}"
 
 
+def page_ref_from_payload(site_base: str, payload: dict) -> PageRef:
+    page_id = str(payload.get("id") or "")
+    return PageRef(
+        page_id=page_id,
+        title=str(payload.get("title") or ""),
+        url=page_url_from_api(site_base, page_id) if page_id else "",
+    )
+
+
 def page_from_payload(site_base: str, payload: dict, depth: int) -> PageNode:
     page_id = str(payload["id"])
     title = payload["title"]
@@ -742,6 +788,12 @@ def page_from_payload(site_base: str, payload: dict, depth: int) -> PageNode:
         created_at=history.get("createdDate", ""),
         updated_at=version.get("when", ""),
         version_number=version.get("number", 0) or 0,
+        ancestors=[
+            page_ref_from_payload(site_base, ancestor)
+            for ancestor in payload.get("ancestors", [])
+            if isinstance(ancestor, dict)
+        ],
+        ancestry_loaded="ancestors" in payload,
     )
 
 
@@ -1663,6 +1715,8 @@ def page_is_unchanged(page_path: Path, page: PageNode) -> bool:
         return False
     if parse_frontmatter_value(content, "version_number") != str(page.version_number):
         return False
+    if source_path_is_complete(page) and parse_frontmatter_value(content, "source_path_text") != source_path_text(page):
+        return False
     for asset_ref in local_asset_refs(content):
         if not (page_path.parent / asset_ref).exists():
             return False
@@ -2217,12 +2271,83 @@ def yaml_escape(value: str) -> str:
     return f"'{escaped}'"
 
 
+def source_path(page: PageNode) -> list[PageRef]:
+    if not source_path_is_complete(page):
+        return []
+    refs: list[PageRef] = []
+    seen: set[str] = set()
+    for ref in [*page.ancestors, PageRef(page.page_id, page.title, page.url)]:
+        if not ref.page_id or ref.page_id in seen:
+            continue
+        seen.add(ref.page_id)
+        refs.append(ref)
+    return refs
+
+
+def source_path_is_complete(page: PageNode) -> bool:
+    return page.ancestry_loaded or bool(page.ancestors)
+
+
+def source_path_text(page: PageNode) -> str:
+    return " / ".join(ref.title or ref.page_id for ref in source_path(page))
+
+
+def relative_depth_from_root(page: PageNode, root_page_id: str) -> Optional[int]:
+    path = source_path(page)
+    for index, ref in enumerate(path):
+        if ref.page_id == root_page_id:
+            return len(path) - index - 1
+    return None
+
+
+def parent_ref(page: PageNode) -> Optional[PageRef]:
+    path = source_path(page)
+    if len(path) < 2:
+        return None
+    return path[-2]
+
+
+def frontmatter_source_path_lines(page: PageNode) -> list[str]:
+    if not source_path_is_complete(page):
+        return ["source_path: []"]
+    lines = ["source_path:"]
+    for ref in source_path(page):
+        lines.extend(
+            [
+                f"  - page_id: {yaml_escape(ref.page_id)}",
+                f"    title: {yaml_escape(ref.title)}",
+                f"    url: {ref.url}",
+            ]
+        )
+    return lines
+
+
+def manifest_entry(page: PageNode, page_path: Path, output_dir: Path) -> dict[str, Any]:
+    parent = parent_ref(page)
+    return {
+        "page_id": page.page_id,
+        "title": page.title,
+        "depth": page.depth,
+        "path": path_relative_to_base(page_path, output_dir),
+        "source_url": page.url,
+        "parent_page_id": parent.page_id if parent else "",
+        "parent_title": parent.title if parent else "",
+        "source_path": [page_ref_to_dict(ref) for ref in source_path(page)],
+        "source_path_text": source_path_text(page),
+    }
+
+
 def build_frontmatter(page: PageNode) -> str:
+    parent = parent_ref(page)
     lines = [
         "---",
         f"title: {yaml_escape(page.title)}",
         f"page_id: {yaml_escape(page.page_id)}",
         f"source_url: {page.url}",
+        f"parent_page_id: {yaml_escape(parent.page_id if parent else '')}",
+        f"parent_title: {yaml_escape(parent.title if parent else '')}",
+        f"source_path_text: {yaml_escape(source_path_text(page))}",
+        *frontmatter_source_path_lines(page),
         f"author: {yaml_escape(page.author)}",
         f"last_editor: {yaml_escape(page.last_editor)}",
         f"created_at: {yaml_escape(page.created_at)}",
@@ -2274,15 +2399,7 @@ def write_export(
         page_dir.mkdir(parents=True, exist_ok=True)
         page_path = page_paths[page_id]
         if page_is_unchanged(page_path, page):
-            manifest.append(
-                {
-                    "page_id": page.page_id,
-                    "title": page.title,
-                    "depth": page.depth,
-                    "path": path_relative_to_base(page_path, output_dir),
-                    "source_url": page.url,
-                }
-            )
+            manifest.append(manifest_entry(page, page_path, output_dir))
             continue
         image_links = download_page_images(session, page.html, page.url, page_dir)
         page_links = {
@@ -2303,15 +2420,7 @@ def write_export(
         if prototype_markdown:
             markdown = markdown.rstrip() + "\n\n" + prototype_markdown
         write_page(page_path, page, markdown)
-        manifest.append(
-                {
-                    "page_id": page.page_id,
-                    "title": page.title,
-                    "depth": page.depth,
-                    "path": path_relative_to_base(page_path, output_dir),
-                    "source_url": page.url,
-                }
-        )
+        manifest.append(manifest_entry(page, page_path, output_dir))
 
     manifest_path = manifest_base / manifest_name
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2498,6 +2607,7 @@ def write_update_change_report(
     changed_pages: list[dict[str, Any]],
     skipped_page_ids: list[str],
     ignored_page_ids: list[str],
+    ignored_pages: Optional[list[dict[str, Any]]] = None,
     dry_run: bool = False,
     root_summaries: Optional[list[dict[str, Any]]] = None,
     generated_at: Optional[datetime] = None,
@@ -2520,6 +2630,7 @@ def write_update_change_report(
         "changed_pages": changed_pages,
         "skipped_page_ids": skipped_page_ids,
         "ignored_page_ids": ignored_page_ids,
+        "ignored_pages": ignored_pages or [],
         "root_summaries": root_summaries or [],
     }
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -2551,6 +2662,31 @@ def complete_page_path_overrides(
     return {
         page_id: path_relative_to_base(page_path, output_dir)
         for page_id, page_path in page_paths.items()
+    }
+
+
+def ignored_page_record(
+    *,
+    root_page_id: str,
+    entry: FeedEntry,
+    reason: str,
+    page: Optional[PageNode] = None,
+    relative_depth: Optional[int] = None,
+    depth_limit: Optional[int] = None,
+) -> dict[str, Any]:
+    return {
+        "root_page_id": root_page_id,
+        "page_id": entry.page_id,
+        "title": page.title if page is not None else entry.title,
+        "reason": reason,
+        "relative_depth": relative_depth,
+        "depth_limit": depth_limit,
+        "source_url": page.url if page is not None else entry.url,
+        "source_path_text": source_path_text(page) if page is not None else "",
+        "rss_entry_title": entry.title,
+        "rss_entry_url": entry.url,
+        "rss_entry_updated_at": entry.updated_at,
+        "rss_entry_version": entry.version_number,
     }
 
 
@@ -2593,24 +2729,74 @@ def update_root_from_rss(
     updated_page_ids: list[str] = []
     skipped_page_ids: list[str] = []
     ignored_page_ids: list[str] = []
+    ignored_page_records: list[dict[str, Any]] = []
     change_records: list[dict[str, Any]] = []
 
     for entry in feed_entries:
         entry_time = parse_iso_datetime(entry.updated_at) or parse_iso_datetime(entry.published_at)
         if updated_since is not None and (entry_time is None or entry_time < updated_since):
             ignored_page_ids.append(entry.page_id)
+            ignored_page_records.append(
+                ignored_page_record(root_page_id=root_page_id, entry=entry, reason="older_than_updated_since")
+            )
             continue
         existing_page = pages.get(entry.page_id)
         if existing_page is None:
             if not include_new:
                 ignored_page_ids.append(entry.page_id)
+                ignored_page_records.append(
+                    ignored_page_record(root_page_id=root_page_id, entry=entry, reason="unknown_page")
+                )
                 continue
-            depth = 0
+            fetched_page = fetch_page(session, site_base, entry.page_id, depth=0)
+            relative_depth = relative_depth_from_root(fetched_page, root_page_id)
+            if not source_path_is_complete(fetched_page):
+                ignored_page_ids.append(entry.page_id)
+                ignored_page_records.append(
+                    ignored_page_record(
+                        root_page_id=root_page_id,
+                        entry=entry,
+                        reason="missing_ancestors",
+                        page=fetched_page,
+                        relative_depth=relative_depth,
+                        depth_limit=depth_limit,
+                    )
+                )
+                continue
+            if relative_depth is None:
+                ignored_page_ids.append(entry.page_id)
+                ignored_page_records.append(
+                    ignored_page_record(
+                        root_page_id=root_page_id,
+                        entry=entry,
+                        reason="out_of_scope",
+                        page=fetched_page,
+                        relative_depth=relative_depth,
+                        depth_limit=depth_limit,
+                    )
+                )
+                continue
+            if relative_depth > depth_limit:
+                ignored_page_ids.append(entry.page_id)
+                ignored_page_records.append(
+                    ignored_page_record(
+                        root_page_id=root_page_id,
+                        entry=entry,
+                        reason="depth_exceeded",
+                        page=fetched_page,
+                        relative_depth=relative_depth,
+                        depth_limit=depth_limit,
+                    )
+                )
+                continue
+            depth = relative_depth
+            fetched_page.depth = depth
         else:
             if not feed_entry_is_newer(entry, existing_page):
                 skipped_page_ids.append(entry.page_id)
                 continue
             depth = existing_page.depth
+            fetched_page = None
 
         if existing_page is not None and entry.page_id not in effective_page_paths:
             old_path = build_page_paths(
@@ -2621,22 +2807,37 @@ def update_root_from_rss(
             effective_page_paths[entry.page_id] = path_relative_to_base(old_path, output_dir)
 
         if dry_run:
-            new_page = PageNode(
-                page_id=entry.page_id,
-                title=entry.title or (existing_page.title if existing_page is not None else entry.page_id),
-                url=entry.url or page_url_from_api(site_base, entry.page_id),
-                depth=depth,
-                html="",
-                author=existing_page.author if existing_page is not None else "",
-                last_editor=existing_page.last_editor if existing_page is not None else "",
-                created_at=existing_page.created_at if existing_page is not None else "",
-                updated_at=entry.updated_at or (existing_page.updated_at if existing_page is not None else ""),
-                version_number=entry.version_number or 0,
-            )
+            if fetched_page is not None:
+                new_page = fetched_page
+            else:
+                new_page = PageNode(
+                    page_id=entry.page_id,
+                    title=entry.title or (existing_page.title if existing_page is not None else entry.page_id),
+                    url=entry.url or page_url_from_api(site_base, entry.page_id),
+                    depth=depth,
+                    html="",
+                    author=existing_page.author if existing_page is not None else "",
+                    last_editor=existing_page.last_editor if existing_page is not None else "",
+                    created_at=existing_page.created_at if existing_page is not None else "",
+                    updated_at=entry.updated_at or (existing_page.updated_at if existing_page is not None else ""),
+                    version_number=entry.version_number or 0,
+                    ancestors=existing_page.ancestors if existing_page is not None else [],
+                    ancestry_loaded=existing_page.ancestry_loaded if existing_page is not None else False,
+                )
         else:
-            new_page = fetch_page(session, site_base, entry.page_id, depth=depth)
+            new_page = fetched_page or fetch_page(session, site_base, entry.page_id, depth=depth)
             if not page_matches_updated_since(new_page, updated_since):
                 ignored_page_ids.append(entry.page_id)
+                ignored_page_records.append(
+                    ignored_page_record(
+                        root_page_id=root_page_id,
+                        entry=entry,
+                        reason="page_older_than_updated_since",
+                        page=new_page,
+                        relative_depth=relative_depth_from_root(new_page, root_page_id),
+                        depth_limit=depth_limit,
+                    )
+                )
                 continue
             pages[entry.page_id] = new_page
         new_path = build_page_paths(
@@ -2647,6 +2848,7 @@ def update_root_from_rss(
         )[entry.page_id]
         if not dry_run:
             effective_page_paths[entry.page_id] = path_relative_to_base(new_path, output_dir)
+        parent = parent_ref(new_page)
         change_records.append(
             {
                 "root_page_id": root_page_id,
@@ -2662,6 +2864,10 @@ def update_root_from_rss(
                 "raw_path": str(new_path),
                 "raw_relative_path": path_relative_to_base(new_path, output_dir),
                 "source_url": new_page.url,
+                "parent_page_id": parent.page_id if parent else "",
+                "parent_title": parent.title if parent else "",
+                "source_path": [page_ref_to_dict(ref) for ref in source_path(new_page)],
+                "source_path_text": source_path_text(new_page),
                 "needs_postprocess": True,
                 "detected_from": "rss",
                 "rss_entry_title": entry.title,
@@ -2710,6 +2916,7 @@ def update_root_from_rss(
             changed_pages=change_records,
             skipped_page_ids=skipped_page_ids,
             ignored_page_ids=ignored_page_ids,
+            ignored_pages=ignored_page_records,
             dry_run=dry_run,
         )
 
@@ -2720,6 +2927,7 @@ def update_root_from_rss(
         skipped_page_ids=skipped_page_ids,
         ignored_page_ids=ignored_page_ids,
         change_records=change_records,
+        ignored_page_records=ignored_page_records,
         change_report_path=report_path,
         dry_run=dry_run,
     )
@@ -3091,6 +3299,7 @@ def main() -> int:
         all_changed_pages: list[dict[str, Any]] = []
         all_skipped_page_ids: list[str] = []
         all_ignored_page_ids: list[str] = []
+        all_ignored_pages: list[dict[str, Any]] = []
         root_summaries: list[dict[str, Any]] = []
         change_report_dir = (
             Path(args.change_report_dir).expanduser().resolve()
@@ -3145,6 +3354,7 @@ def main() -> int:
             all_changed_pages.extend(result.change_records)
             all_skipped_page_ids.extend(f"{root_page_id}:{page_id}" for page_id in result.skipped_page_ids)
             all_ignored_page_ids.extend(f"{root_page_id}:{page_id}" for page_id in result.ignored_page_ids)
+            all_ignored_pages.extend(result.ignored_page_records)
             root_summaries.append(
                 {
                     "root_page_id": root_page_id,
@@ -3182,6 +3392,7 @@ def main() -> int:
             changed_pages=all_changed_pages,
             skipped_page_ids=all_skipped_page_ids,
             ignored_page_ids=all_ignored_page_ids,
+            ignored_pages=all_ignored_pages,
             dry_run=args.dry_run,
             root_summaries=root_summaries,
         )
