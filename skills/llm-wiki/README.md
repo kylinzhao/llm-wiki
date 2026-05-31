@@ -18,11 +18,12 @@
 
 ## 版本
 
-- `version`: `1.0.2`
-- `engine_version`: `engine-v1.0.2`
+- `version`: `1.0.3`
+- `engine_version`: `engine-v1.0.3`
 
 ### Engine 发行记录
 
+- **`engine-v1.0.3`**：发布 shared update checkpoint 语义、Cwiki smoke 限流、raw path/image 下载保护，并合入 Confluence source path metadata。
 - **`engine-v1.0.2`**：新增发布版本脚本与 GitLab 发布规则，要求每次发布前同步升级 VERSION、manifest 和 README 发行记录。
 - **`engine-v1.0.1`**：修复项目模板 health/graph 对 Markdown 代码片段中 `[[...]]` 路径的误判，修复 `tools/health.py` 普通 CLI 输出统计变量错误，并避免已有本机 SSO 自动鉴权时误打印 Cwiki 缺鉴权提示。
 - **`engine-v1.0.0`**：冻结 `kb.manifest.yaml` 字段、`config/rss-feeds.yaml` 形状、`tools/rss_sync.py` 抓取与限速语义，以及 `tools/update_wiki.py` 优先的确定性更新链。
