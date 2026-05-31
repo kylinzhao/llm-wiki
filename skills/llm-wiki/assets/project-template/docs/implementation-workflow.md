@@ -32,6 +32,8 @@ If KB git pull/push or managed code checkout pull fails because of permissions, 
 
 Semantic refinement gaps are not shared-publish blockers. If health, graph, and required anchor checks pass, publish the shared baseline as `usable-with-gaps` and record the remaining refinement/image evidence work for the next update pass.
 
+For temporary clone smoke tests, set `LLM_WIKI_UPDATE_MODE=local` with `LLM_WIKI_CWIKI_SMOKE_MAX_PAGES=<n>` or `LLM_WIKI_CWIKI_SMOKE_RSS_MAX_RESULTS=<n>` to exercise Cwiki login/download without crawling the full tree. These limits are rejected in shared mode so a truncated `raw/` cache cannot be committed as a shared baseline.
+
 5. Use Codex to complete AI-native refinement of:
 
 - `wiki/sources/`

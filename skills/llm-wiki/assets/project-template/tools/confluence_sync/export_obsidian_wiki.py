@@ -153,6 +153,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Seconds to wait between page requests.",
     )
     parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=0,
+        help="Maximum number of pages to fetch in this export run.",
+    )
+    parser.add_argument(
         "--rss-max-results",
         type=int,
         default=0,
@@ -435,6 +441,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
         command.append("--dry-run")
     if getattr(args, "init_from_existing", False):
         command.append("--init-from-existing")
+    if args.max_pages:
+        command.extend(["--max-pages", str(args.max_pages)])
     if args.rss_max_results:
         command.extend(["--rss-max-results", str(args.rss_max_results)])
     if args.rss_include_new:

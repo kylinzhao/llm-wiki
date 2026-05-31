@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 TOOLS_DIR = Path(__file__).resolve().parents[1]
@@ -122,6 +123,53 @@ class ExportConfluenceRawLayoutTest(unittest.TestCase):
 
             self.assertEqual(image_links, {})
             self.assertFalse((page_dir / "assets" / "flaky.png").exists())
+
+    def test_max_pages_ignores_saved_progress_and_fetches_limited_pages(self):
+        exporter = load_exporter()
+        with tempfile.TemporaryDirectory() as tmp:
+            progress_file = Path(tmp) / "progress" / "1.json"
+            saved_pages = {
+                str(index): exporter.PageNode(
+                    page_id=str(index),
+                    title=f"Saved {index}",
+                    url=f"https://cwiki.guazi.com/pages/viewpage.action?pageId={index}",
+                    depth=0,
+                    html="<p>saved</p>",
+                )
+                for index in range(1, 6)
+            }
+            exporter.save_progress_state(
+                progress_file,
+                root_page_id="1",
+                depth_limit=1,
+                pages=saved_pages,
+                queue=exporter.deque(),
+                enqueued=set(saved_pages),
+            )
+            fetched = []
+
+            def fake_fetch_page(session, site_base, page_id, depth):
+                fetched.append(page_id)
+                return exporter.PageNode(
+                    page_id=page_id,
+                    title=f"Fetched {page_id}",
+                    url=f"https://cwiki.guazi.com/pages/viewpage.action?pageId={page_id}",
+                    depth=depth,
+                    html="<p>fresh</p>",
+                )
+
+            with mock.patch.object(exporter, "fetch_page", side_effect=fake_fetch_page), mock.patch.object(exporter, "fetch_children", return_value=[]):
+                pages = exporter.crawl_pages(
+                    object(),
+                    "https://cwiki.guazi.com",
+                    "1",
+                    depth_limit=1,
+                    progress_file=progress_file,
+                    max_pages=1,
+                )
+
+        self.assertEqual(list(pages), ["1"])
+        self.assertEqual(fetched, ["1"])
 
 
 if __name__ == "__main__":

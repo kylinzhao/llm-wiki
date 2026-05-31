@@ -49,6 +49,7 @@ SOFT_VALIDATION_STATUSES = {
     "ok",
     "usable_with_gaps",
     "semantic_gaps",
+    "refinement_pending",
 }
 
 
@@ -62,13 +63,18 @@ PERMISSION_PATTERNS = (
     "http basic: access denied",
 )
 INCLUDE_PATTERNS = (
+    "AGENTS.md",
     "kb.manifest.yaml",
     "BUSINESS_CONTEXT.md",
+    "pyproject.toml",
+    "uv.lock",
     "upstream/**",
     "wiki/**",
     "docs/retrieval-playbook.md",
     "docs/build-and-maintenance.md",
     "docs/implementation-workflow.md",
+    "docs/tooling-dependencies.md",
+    "docs/traceability-contract.md",
     "docs/query-acceptance.md",
     "docs/*quality-audit*.md",
     "docs/*tooling*.md",
@@ -99,6 +105,16 @@ EXCLUDE_PATTERNS = (
     ".venv/**",
     "venv/**",
     "node_modules/**",
+)
+PREFLIGHT_ENGINE_REFRESH_PATTERNS = (
+    "AGENTS.md",
+    "pyproject.toml",
+    "uv.lock",
+    "tools/**",
+    "docs/implementation-workflow.md",
+    "docs/tooling-dependencies.md",
+    "docs/traceability-contract.md",
+    "staging/traceability/*.schema.json",
 )
 
 
@@ -200,6 +216,30 @@ def is_git_repo(project: Path) -> bool:
 def git_status_dirty(project: Path) -> bool:
     result = run_git(["status", "--porcelain"], cwd=project)
     return result.returncode != 0 or bool(result.stdout.strip())
+
+
+def git_dirty_changes(project: Path) -> list[GitChange] | None:
+    result = run_git_bytes(["status", "--porcelain=v1", "-z", "--untracked-files=all"], cwd=project)
+    if result.returncode != 0:
+        return None
+    return parse_porcelain_z(result.stdout)
+
+
+def is_preflight_engine_refresh_allowed(path: str) -> bool:
+    normalized = path.replace("\\", "/").lstrip("/")
+    return any(fnmatch.fnmatchcase(normalized, pattern) for pattern in PREFLIGHT_ENGINE_REFRESH_PATTERNS)
+
+
+def preflight_dirty_engine_refresh_only(project: Path) -> bool:
+    changes = git_dirty_changes(project)
+    if changes is None or not changes:
+        return False
+    for change in changes:
+        if not all(is_preflight_engine_refresh_allowed(path) for path in change.paths):
+            return False
+        if not all(is_publish_allowed(path) for path in change.paths):
+            return False
+    return True
 
 
 def current_upstream(project: Path, git_runner=run_git) -> tuple[str | None, GitResult]:
@@ -307,9 +347,6 @@ def shared_preflight(
             message = "无法读取 KB 仓库上游。请先获取 KB 仓库权限（读取权限）后重试。"
         return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
 
-    if git_status_dirty(project):
-        return PreflightResult("dirty_worktree_blocked", "共享模式要求 git 工作区干净，请先提交、暂存或清理本地改动。")
-
     fetch = git_runner(["fetch", "--prune", "origin"], project)
     if fetch.returncode != 0:
         detail = fetch.stderr.strip()
@@ -320,9 +357,13 @@ def shared_preflight(
         return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
 
     ahead, behind = divergence_reader(project, upstream)
+    dirty = git_status_dirty(project)
     if ahead and behind:
         message = "共享 KB 分支已分叉，无法自动同步。"
         return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
+
+    if dirty and (ahead or behind):
+        return PreflightResult("dirty_worktree_blocked", "共享模式要求 git 工作区干净，请先提交、暂存或清理本地改动。")
 
     if behind:
         pull = git_runner(["pull", "--ff-only"], project)
@@ -360,11 +401,14 @@ def shared_preflight(
                     return PreflightResult("shared_sync_failed", "无法读取 KB 仓库。请先获取 KB 仓库权限（读取权限）后重试。详情：" + detail)
                 return PreflightResult("shared_sync_failed", "共享 KB pull 失败。详情：" + detail)
 
+    if dirty and not preflight_dirty_engine_refresh_only(project):
+        return PreflightResult("dirty_worktree_blocked", "共享模式要求 git 工作区干净，请先提交、暂存或清理本地改动。")
+
     return PreflightResult("ok")
 
 
 def publish_shared_baseline(project: Path, actor: str = "local-skill", git_runner=run_git, status_runner=run_git_bytes) -> PublishResult:
-    status = status_runner(["status", "--porcelain=v1", "-z"], cwd=project)
+    status = status_runner(["status", "--porcelain=v1", "-z", "--untracked-files=all"], cwd=project)
     if status.returncode != 0:
         return PublishResult("shared_sync_failed", "读取 git 状态失败，未发布共享 KB。请检查本地仓库状态后重试。")
     changes = parse_porcelain_z(status.stdout)

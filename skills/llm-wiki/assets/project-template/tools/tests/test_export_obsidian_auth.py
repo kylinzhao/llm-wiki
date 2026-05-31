@@ -105,6 +105,17 @@ class ExportObsidianAuthTest(unittest.TestCase):
         self.assertNotIn("--jira-token", command)
         self.assertNotIn("jira-token-123", command)
 
+    def test_max_pages_is_forwarded_to_tree_exporter(self):
+        export_obsidian = load_export_obsidian()
+        args = export_obsidian.parse_args(
+            ["--url", "https://cwiki.guazi.com/pages/viewpage.action?pageId=1", "--project-dir", "/tmp/kb", "--max-pages", "3"]
+        )
+
+        command = export_obsidian.build_command(args)
+
+        self.assertIn("--max-pages", command)
+        self.assertIn("3", command)
+
     def test_auth_env_file_persists_sso_credentials_for_future_runs(self):
         export_obsidian = load_export_obsidian()
         with tempfile.TemporaryDirectory() as tmp:

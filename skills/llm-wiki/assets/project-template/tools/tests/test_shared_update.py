@@ -113,7 +113,11 @@ class SharedUpdateTests(unittest.TestCase):
         shared = load_shared_update()
         self.assertTrue(shared.is_publish_allowed("wiki/sources/demo.md"))
         self.assertTrue(shared.is_publish_allowed("BUSINESS_CONTEXT.md"))
+        self.assertTrue(shared.is_publish_allowed("AGENTS.md"))
+        self.assertTrue(shared.is_publish_allowed("pyproject.toml"))
         self.assertTrue(shared.is_publish_allowed("docs/retrieval-playbook.md"))
+        self.assertTrue(shared.is_publish_allowed("docs/tooling-dependencies.md"))
+        self.assertTrue(shared.is_publish_allowed("docs/traceability-contract.md"))
         self.assertTrue(shared.is_publish_allowed("docs/team-quality-audit.md"))
         self.assertTrue(shared.is_publish_allowed("staging/update/latest.json"))
         self.assertTrue(shared.is_publish_allowed("staging/health/latest.json"))
@@ -239,6 +243,30 @@ class SharedUpdateTests(unittest.TestCase):
 
         self.assertEqual(result.status, "dirty_worktree_blocked")
         self.assertNotIn("pull", calls)
+
+    def test_shared_mode_allows_engine_template_refresh_dirty_when_up_to_date(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            (project / "tools").mkdir()
+            (project / "tools" / "update_wiki.py").write_text("# refreshed\n", encoding="utf-8")
+            (project / "docs").mkdir(exist_ok=True)
+            (project / "docs" / "implementation-workflow.md").write_text("# refreshed\n", encoding="utf-8")
+            (project / "AGENTS.md").write_text("# refreshed\n", encoding="utf-8")
+
+            result = shared.shared_preflight(project, False, False)
+
+        self.assertEqual(result.status, "ok")
+
+    def test_shared_mode_blocks_non_engine_dirty_even_when_publish_allowed(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project, remote = make_repo_with_remote(Path(tmp))
+            (project / "wiki" / "page.md").write_text("# user edit\n", encoding="utf-8")
+
+            result = shared.shared_preflight(project, False, False)
+
+        self.assertEqual(result.status, "dirty_worktree_blocked")
 
     def test_shared_mode_rejects_skip_flags(self):
         shared = load_shared_update()
@@ -520,7 +548,7 @@ class SharedUpdateTests(unittest.TestCase):
         self.assertEqual(result.status, "published")
         self.assertEqual(events, ["semantic", "publish"])
 
-    def test_shared_protocol_blocks_unprocessed_refinement_pending(self):
+    def test_shared_protocol_publishes_refinement_pending_checkpoint(self):
         shared = load_shared_update()
         events = []
         result = shared.complete_shared_update(
@@ -528,8 +556,8 @@ class SharedUpdateTests(unittest.TestCase):
             semantic_validation=lambda: events.append("semantic") or shared.PublishResult("refinement_pending", "refinement pending"),
             publisher=lambda project: events.append("publish") or shared.PublishResult("published"),
         )
-        self.assertEqual(result.status, "refinement_pending")
-        self.assertEqual(events, ["semantic"])
+        self.assertEqual(result.status, "published")
+        self.assertEqual(events, ["semantic", "publish"])
 
     def test_shared_protocol_blocks_hard_validation_failures(self):
         shared = load_shared_update()

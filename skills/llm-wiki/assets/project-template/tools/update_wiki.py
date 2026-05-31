@@ -24,10 +24,13 @@ from gplus_quality import inspect_gplus_quality
 from raw_code_manager import RawCodeManagerError, is_permission_error, managed_code_sync_specs as declared_code_sync_specs, read_codebase_metadata
 from refinement_contract import summarize_refinement_contract
 from project_registry import best_effort_register_current_project
+import shared_update
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
 
 CANONICAL_WIKI_EXPORT_METADATA_DIR = "staging/wiki-export-state"
+CWIKI_SMOKE_MAX_PAGES_ENV = "LLM_WIKI_CWIKI_SMOKE_MAX_PAGES"
+CWIKI_SMOKE_RSS_MAX_RESULTS_ENV = "LLM_WIKI_CWIKI_SMOKE_RSS_MAX_RESULTS"
 
 
 def utc_now() -> str:
@@ -96,6 +99,22 @@ def read_json_if_present(path: Path) -> object | None:
 def write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def positive_int_env(name: str, env: dict[str, str] | None = None) -> int | None:
+    values = os.environ if env is None else env
+    raw = str(values.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
+def cwiki_smoke_limits_active(env: dict[str, str] | None = None) -> bool:
+    return positive_int_env(CWIKI_SMOKE_MAX_PAGES_ENV, env) is not None or positive_int_env(CWIKI_SMOKE_RSS_MAX_RESULTS_ENV, env) is not None
 
 
 def write_failure_report(project: Path, failed_step: str, returncode: int, details: dict[str, object] | None = None) -> None:
@@ -687,6 +706,12 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         rss_url = str(source.get("rss_url") or "").strip()
         if page_id and rss_url:
             command.extend(["--rss-url", f"{page_id}={rss_url}"])
+        smoke_max_pages = positive_int_env(CWIKI_SMOKE_MAX_PAGES_ENV)
+        if smoke_max_pages is not None:
+            command.extend(["--max-pages", str(smoke_max_pages)])
+        smoke_rss_max = positive_int_env(CWIKI_SMOKE_RSS_MAX_RESULTS_ENV)
+        if smoke_rss_max is not None:
+            command.extend(["--rss-max-results", str(smoke_rss_max)])
         commands.append(command)
 
     for metadata_dir, grouped_sources in sorted(saved_state_groups.items()):
@@ -717,6 +742,9 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
                 command.extend(["--rss-url", f"{page_id}={rss_url}"])
         if any(source.get("rss_include_new") is not False for source in grouped_sources):
             command.append("--rss-include-new")
+        smoke_rss_max = positive_int_env(CWIKI_SMOKE_RSS_MAX_RESULTS_ENV) or positive_int_env(CWIKI_SMOKE_MAX_PAGES_ENV)
+        if smoke_rss_max is not None:
+            command.extend(["--rss-max-results", str(smoke_rss_max)])
         commands.append(command)
     return commands
 
@@ -901,22 +929,35 @@ def main() -> int:
     args = parser.parse_args()
 
     project = Path(args.project).resolve()
+    raw_sync_command = args.raw_sync_command.strip()
+    no_auto_raw_sync = args.no_auto_raw_sync or os.environ.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
+    update_mode = "local" if args.local or os.environ.get("LLM_WIKI_UPDATE_MODE") == "local" else "shared"
+    if args.shared:
+        update_mode = "shared"
+    shared_mode = update_mode == "shared"
+
+    if shared_mode:
+        if cwiki_smoke_limits_active():
+            print(
+                "Cwiki smoke 限流只允许用于本机/临时测试。共享模式会发布 KB 基线，"
+                "请移除限流环境变量或显式使用 --local / LLM_WIKI_UPDATE_MODE=local。",
+                file=sys.stderr,
+            )
+            return 2
+        preflight = shared_update.shared_preflight(project, no_auto_raw_sync, interactive=False)
+        if preflight.status != "ok":
+            print(preflight.message, file=sys.stderr)
+            return 2
+
     best_effort_register_current_project(project)
     if not args.no_agent_rules_refresh:
         print(f"agent_rules={refresh_agent_rules(project)}")
 
     tools = project / "tools"
-    raw_sync_command = args.raw_sync_command.strip()
-    no_auto_raw_sync = args.no_auto_raw_sync or os.environ.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
     skipped_steps: list[str] = []
     if no_auto_raw_sync:
         skipped_steps.append("auto_raw_sync")
         skipped_steps.append("confluence_sync")
-
-    update_mode = "local" if args.local or os.environ.get("LLM_WIKI_UPDATE_MODE") == "local" else "shared"
-    if args.shared:
-        update_mode = "shared"
-    shared_mode = update_mode == "shared"
 
     code = run_code_sync(project, shared_mode=shared_mode)
     if code != 0:
@@ -969,6 +1010,12 @@ def main() -> int:
             graphify_decisions=collect_graphify_decisions(project, requested=bool(args.graphify)),
             auto_reconcile=auto_reconcile,
         )
+        if shared_mode:
+            publish = shared_update.publish_shared_baseline(project)
+            if publish.message:
+                print(publish.message)
+            if publish.status not in {"published", "no_changes"}:
+                return 2
     return exit_code
 
 

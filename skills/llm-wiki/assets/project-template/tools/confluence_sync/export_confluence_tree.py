@@ -1222,7 +1222,7 @@ def crawl_pages(
     max_pages: Optional[int] = None,
     depth_one_child_filter: Optional[Callable[[dict[str, Any]], bool]] = None,
 ) -> dict[str, PageNode]:
-    if progress_file:
+    if progress_file and max_pages is None:
         state = load_progress_state(progress_file, root_page_id=root_page_id, depth_limit=depth_limit)
     else:
         state = None

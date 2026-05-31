@@ -214,6 +214,60 @@ def run_code_page_without_source(update_wiki):
 
 
 class UpdateFailureReportTest(unittest.TestCase):
+    def test_shared_main_preflights_and_publishes_success_report_even_with_refinement_pending(self):
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            calls = []
+
+            def fake_success_report(*args, **kwargs):
+                calls.append("success_report")
+                report_dir = project / "staging" / "update"
+                report_dir.mkdir(parents=True, exist_ok=True)
+                (report_dir / "latest.json").write_text(
+                    json.dumps(
+                        {
+                            "status": "ok",
+                            "refinement_contract": {
+                                "status": "needs_refinement",
+                                "pending_count": 2,
+                            },
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+            with (
+                mock.patch.object(update_wiki, "refresh_agent_rules", return_value="skipped"),
+                mock.patch.object(update_wiki, "best_effort_register_current_project"),
+                mock.patch.object(update_wiki.shared_update, "shared_preflight", side_effect=lambda *a, **k: calls.append("preflight") or update_wiki.shared_update.PreflightResult("ok")),
+                mock.patch.object(update_wiki, "run_code_sync", side_effect=lambda *a, **k: calls.append("code_sync") or 0),
+                mock.patch.object(update_wiki, "prepare_raw_evidence", side_effect=lambda *a, **k: calls.append("raw_sync") or (0, None)),
+                mock.patch.object(update_wiki, "raw_evidence_preflight_failed", return_value=None),
+                mock.patch.object(update_wiki, "run_drawio_repair", return_value=0),
+                mock.patch.object(update_wiki, "deterministic_steps", return_value=[]),
+                mock.patch.object(update_wiki, "write_success_report", side_effect=fake_success_report),
+                mock.patch.object(update_wiki.shared_update, "publish_shared_baseline", side_effect=lambda *a, **k: calls.append("publish") or update_wiki.shared_update.PublishResult("published", "ok")),
+                mock.patch.object(sys, "argv", ["update_wiki.py", "--project", str(project), "--no-agent-rules-refresh"]),
+            ):
+                self.assertEqual(update_wiki.main(), 0)
+
+            self.assertEqual(calls, ["preflight", "code_sync", "raw_sync", "success_report", "publish"])
+
+    def test_shared_main_rejects_cwiki_smoke_limit_before_preflight(self):
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            with (
+                mock.patch.dict(update_wiki.os.environ, {"LLM_WIKI_CWIKI_SMOKE_MAX_PAGES": "3"}),
+                mock.patch.object(update_wiki.shared_update, "shared_preflight") as preflight,
+                mock.patch.object(sys, "argv", ["update_wiki.py", "--project", str(project)]),
+            ):
+                self.assertEqual(update_wiki.main(), 2)
+
+            preflight.assert_not_called()
+
     def test_main_registers_current_project_best_effort(self):
         import tempfile
 
@@ -229,7 +283,7 @@ class UpdateFailureReportTest(unittest.TestCase):
             ), mock.patch.object(update_wiki, "write_success_report"):
                 original_argv = sys.argv
                 try:
-                    sys.argv = ["update_wiki.py", "--project", str(project), "--no-agent-rules-refresh"]
+                    sys.argv = ["update_wiki.py", "--project", str(project), "--local", "--no-agent-rules-refresh"]
                     self.assertEqual(update_wiki.main(), 0)
                 finally:
                     sys.argv = original_argv
@@ -450,6 +504,8 @@ class UpdateFailureReportTest(unittest.TestCase):
 
             with mock.patch.object(update_wiki.argparse.ArgumentParser, "parse_args", return_value=args), mock.patch.object(
                 update_wiki, "best_effort_register_current_project"
+            ), mock.patch.object(
+                update_wiki.shared_update, "shared_preflight", return_value=update_wiki.shared_update.PreflightResult("ok")
             ), mock.patch.object(
                 update_wiki, "prepare_raw_evidence", side_effect=lambda *a, **k: calls.append("raw") or (0, None)
             ), mock.patch.object(
@@ -1083,6 +1139,43 @@ class UpdateFailureReportTest(unittest.TestCase):
 
             self.assertNotIn("--no-cookie-prompt", commands[0])
             self.assertIn("--auto-cookie-from-sso", commands[0])
+
+    def test_confluence_sync_smoke_limit_adds_max_pages_without_changing_default(self):
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            exporter = project / "tools" / "confluence_sync" / "export_obsidian_wiki.py"
+            exporter.parent.mkdir(parents=True)
+            exporter.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            (project / "upstream").mkdir(parents=True)
+            (project / "upstream" / "wiki-sources.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "sources": [
+                            {
+                                "type": "confluence",
+                                "enabled": True,
+                                "source_id": "cwiki-1",
+                                "page_id": "1",
+                                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=1",
+                                "depth": 2,
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            default_command = update_wiki.confluence_sync_commands(project)[0]
+            with mock.patch.dict(update_wiki.os.environ, {"LLM_WIKI_CWIKI_SMOKE_MAX_PAGES": "3"}):
+                smoke_command = update_wiki.confluence_sync_commands(project)[0]
+
+            self.assertNotIn("--max-pages", default_command)
+            self.assertIn("--max-pages", smoke_command)
+            self.assertIn("3", smoke_command)
 
 
 if __name__ == "__main__":
