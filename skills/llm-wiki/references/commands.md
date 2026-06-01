@@ -218,6 +218,7 @@ Default update order:
 15. For status-sensitive projects, read `staging/cjira-registry/active.json` and `archive.json` during update / doctor / query:
    - `doctor` should report stale Jira fetches and low-confidence primary selections
    - `query` should use registry state when answering whether a requirement is `idea`, `in_progress`, or `frozen`
+   - when cjira lookup fails but raw contains an explicit `project.guazi-corp.com/browse/<KEY>` link for the same key, treat that legacy link as shipped/frozen historical evidence and set `status_source = legacy_project_jira_reference`
    - unknown or failed Jira lookups must remain active and must not be promoted to `frozen`
 
 Project command convention:
@@ -300,7 +301,7 @@ Current deterministic passes:
 
 - `drawio`: converts historical `.drawio` / `.dio` files into Mermaid-backed Markdown evidence and links that evidence from raw page indexes.
 - `source_metadata`: patches existing `wiki/sources/*` with Delivery Tracking and Source Metadata without rewriting refined summaries.
-- `cjira`: rebuilds `staging/cjira-registry/` from historical raw Jira/Cjira/IDEA signals.
+- `cjira`: rebuilds `staging/cjira-registry/` from historical raw Jira/Cjira/IDEA signals. Since legacy `project.guazi-corp.com` is offline, cjira status refresh does not call it; explicit `project.guazi-corp.com/browse/<KEY>` links in raw are treated as offline legacy references for shipped/frozen historical evidence.
 - `agent_rules`: patches missing project query-routing rules.
 
 Extensibility rule: future features that need to re-scan historical documents should become a new `tools/backfill.py` pass and feed `refinement_scope`, instead of being hidden inside query or doctor.
@@ -310,7 +311,7 @@ Do not:
 - Treat backfill as a full rebuild.
 - Rewrite `raw/` source text, except deterministic evidence-link sections managed by the backfill pass.
 - Stop after deterministic backfill when new evidence changed source/G+ behavior; continue into refinement absorption unless blocked.
-- Silently ignore Jira auth failures. Offline key extraction can continue, but status refresh blockers must be reported.
+- Silently ignore Jira auth failures. Offline key extraction can continue, but status refresh blockers must be reported. Do not hardcode Jira tokens into the skill bundle; use local environment variables or `~/.llm-wiki/guazi-sso.env`.
 
 Final report:
 
@@ -766,6 +767,14 @@ Default behavior:
 - If the question is about business knowledge, product rules, 需求口径, terminology, operations, or document facts, answer from `BUSINESS_CONTEXT.md` and business/requirement wiki layers. Do not include detailed code evidence, code paths, endpoints, services, controllers, classes, tables, jobs, or implementation traces unless they are necessary to avoid a wrong answer.
 - If the question is about code implementation, architecture, APIs, source locations, call chains, frontend/backend mapping, testing, or whether a requirement has landed in code, use `wiki/code/` normally.
 - If the question is ambiguous, prefer the business-only path and mention that `llm-wiki query-plus` can be used for a full business+code answer.
+
+Evidence link policy:
+
+- Prefer remote original wiki links when source_url/page_id metadata is available.
+- Keep local raw/wiki snapshot links for reproducibility.
+- Do not expose local raw/wiki paths in Cwiki comment drafts.
+- For ordinary user-facing query answers, show the remote original link first and keep local raw/wiki links as snapshot or refinement evidence.
+- For doctor/update/debug output, local paths may be primary because the user is inspecting local KB state.
 
 Read `references/query-logic.md` before answering.
 

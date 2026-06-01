@@ -197,6 +197,39 @@
 - ...
 ```
 
+## 10. 证据链接展示规则
+
+query 的证据链接同时服务两个目标：方便用户跳回原文阅读，以及保留本地证据快照用于复现和审计。不要把远端原文链接和本地 raw/wiki 路径混成同一种证据。
+
+当 `raw/**/index.md` frontmatter 或 source metadata 中存在可信的 `source_url`、`page_id`、`title`、`version` 等来源元数据时：
+
+- 普通 query 面向用户回答时，优先展示远端原文链接；链接名称可写成“原文链接”。
+- 同一条证据仍应保留本地快照或本地整理页，例如 `raw/.../index.md`、`wiki/sources/...md`，用于说明本次回答依据的本地证据版本。
+- 如果引用的是 `wiki/sources`、`concepts`、`entities`、`truth`、`conflicts`、`evidence`、`proposals`、`reference`、`operations` 中的二次整理内容，应标成“本地整理”或“本地证据”，不要伪装成远端原文。
+- 如果 `source_url` 缺失、来源不是远端 wiki、鉴权或稳定性不确定，只展示本地证据，并明确“未找到可用原文链接”。
+
+推荐证据形状：
+
+```text
+证据：
+- 原文链接：<source_url>
+- 本地快照：raw/.../index.md
+- 本地整理：wiki/sources/...md
+```
+
+不同输出场景的取舍：
+
+- 普通 query：远端原文链接优先，本地快照/整理页作为复现补充。
+- doctor / update / debug：本地路径优先，必要时补充 `source_url`，因为这些命令主要检查本地 KB 状态。
+- Cwiki 评论稿、IM、邮件或其他会离开本机环境的输出：只使用远端原文链接；不要暴露 `/Users/...`、`raw/...`、`wiki/...` 等本地路径。
+- 代码证据：可引用 `wiki/code/...` 或 `raw-code/...` 本地证据；贴回远端评论时只描述“本地代码证据显示”，除非目标环境允许本地路径且用户明确要求。
+
+English policy anchors for generated project rules:
+
+- Prefer remote original wiki links when source_url/page_id metadata is available.
+- Keep local raw/wiki snapshot links for reproducibility.
+- Do not expose local raw/wiki paths in Cwiki comment drafts.
+
 ## Document Status Semantics
 
 当 `staging/cjira-registry/active.json` 或 `staging/cjira-registry/archive.json` 为某个 source page 提供了记录时：
@@ -204,6 +237,8 @@
 - `idea`：按 idea / proposal / exploratory evidence 描述，不要表述成已承诺范围。
 - `in_progress`：按 active / in-progress requirement evidence 描述，不要直接当成稳定事实。
 - `frozen`：可以作为稳定需求证据使用，但仍需遵守正常来源支持强度。
+- `status_source = legacy_project_jira_reference`：表示当前 cjira 未能返回状态，但 raw 原文里明确存在旧 `project.guazi-corp.com/browse/<KEY>` 链接。旧 project Jira 已下线后，这类链接可作为迁移前历史上线/冻结证据使用；回答时说明“旧 project Jira 链接证据”，不要表述成当前 Jira API 仍可查询。
+- `fetch_failed = true` 且没有 legacy project Jira reference：只能说明状态未能刷新，不能自动推断已上线、已删除或已冻结。
 
 做 mapping 和 traceability 时：
 

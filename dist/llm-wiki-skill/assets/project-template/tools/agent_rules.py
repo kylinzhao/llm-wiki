@@ -28,6 +28,9 @@ before answering from general model memory.
   `docs/retrieval-playbook.md` and the evidence hierarchy in `wiki/`.
 - Do not answer business facts from memory when relevant wiki evidence exists.
   Cite the supporting wiki/source pages and call out evidence gaps.
+- Prefer remote original wiki links when source_url/page_id metadata is available.
+- Keep local raw/wiki snapshot links for reproducibility.
+- Do not expose local raw/wiki paths in Cwiki comment drafts.
 
 ## Language Requirements
 

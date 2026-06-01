@@ -419,6 +419,82 @@ class CjiraRegistryStatusRefreshTest(unittest.TestCase):
             self.assertEqual(active_payload["records"][0]["primary_cjira_status"], "")
             self.assertTrue(cache_payload["PSP-40038"]["fetch_failed"])
 
+    def test_cjira_lookup_failure_uses_legacy_project_jira_reference_without_api(self):
+        registry = load_cjira_registry()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            sources = [
+                {
+                    "title": "历史 Jira 需求",
+                    "raw_path": "raw/product/index.md",
+                    "text": (
+                        "| 修改内容 | cjira |\n"
+                        "| --- | --- |\n"
+                        '| 上线 | <a href="http://project.guazi-corp.com/browse/CTB-7850">CTB-7850</a> |'
+                    ),
+                }
+            ]
+
+            def fake_fetch(issue_key, *, jira_base, headers, session):
+                self.assertEqual(issue_key, "CTB-7850")
+                self.assertEqual(jira_base, "https://cjira.guazi-corp.com")
+                raise RuntimeError("not found in cjira")
+
+            with mock.patch.object(registry, "fetch_jira_status", side_effect=fake_fetch):
+                registry.update_registry_for_sources(
+                    project,
+                    sources,
+                    refresh_status=True,
+                    jira_base="https://cjira.guazi-corp.com",
+                    headers={"Authorization": "Bearer current"},
+                    session=mock.Mock(),
+                )
+
+            active_payload = json.loads((project / "staging" / "cjira-registry" / "active.json").read_text(encoding="utf-8"))
+            archive_payload = json.loads((project / "staging" / "cjira-registry" / "archive.json").read_text(encoding="utf-8"))
+            cache_payload = json.loads((project / "staging" / "cjira-registry" / "cache.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(active_payload["records"], [])
+            self.assertEqual(len(archive_payload["records"]), 1)
+            record = archive_payload["records"][0]
+            self.assertEqual(record["doc_status"], "frozen")
+            self.assertEqual(record["primary_cjira_status"], "已上线（legacy project Jira reference）")
+            self.assertTrue(record["primary_cjira_terminal"])
+            self.assertEqual(record["status_source"], "legacy_project_jira_reference")
+            self.assertTrue(cache_payload["CTB-7850"]["legacy_project_jira_reference"])
+
+    def test_plain_issue_without_legacy_project_url_remains_active_when_cjira_fails(self):
+        registry = load_cjira_registry()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            sources = [
+                {
+                    "title": "纯文本 Jira 需求",
+                    "raw_path": "raw/product/index.md",
+                    "text": "| 修改内容 | cjira |\n| --- | --- |\n| 待确认 | CTB-7850 |",
+                }
+            ]
+
+            with mock.patch.object(registry, "fetch_jira_status", side_effect=RuntimeError("not found in cjira")):
+                registry.update_registry_for_sources(
+                    project,
+                    sources,
+                    refresh_status=True,
+                    jira_base="https://cjira.guazi-corp.com",
+                    headers={"Authorization": "Bearer current"},
+                    session=mock.Mock(),
+                )
+
+            active_payload = json.loads((project / "staging" / "cjira-registry" / "active.json").read_text(encoding="utf-8"))
+            archive_payload = json.loads((project / "staging" / "cjira-registry" / "archive.json").read_text(encoding="utf-8"))
+            cache_payload = json.loads((project / "staging" / "cjira-registry" / "cache.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(len(active_payload["records"]), 1)
+            self.assertEqual(archive_payload["records"], [])
+            self.assertEqual(active_payload["records"][0]["doc_status"], "in_progress")
+            self.assertTrue(cache_payload["CTB-7850"]["fetch_failed"])
+            self.assertFalse(cache_payload["CTB-7850"].get("legacy_project_jira_reference", False))
+
 
 class CjiraRegistryEndToEndTest(unittest.TestCase):
     def test_registry_covers_idea_primary_and_supporting_issue_pages(self):

@@ -358,6 +358,12 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --source /path/
 - `build_graph.py`：把 wikilink 连成图谱
 - `anchor_check.py`：检查 traceability 中的代码锚点是否存在
 
+### Jira 状态刷新
+
+`tools/cjira_registry.py --refresh` 默认先查 `https://cjira.guazi-corp.com`。旧 `project.guazi-corp.com` 已下线，不再做 live API fallback；如果 cjira 查不到某个历史 key，但 raw 原文里明确存在 `project.guazi-corp.com/browse/<KEY>` 链接，registry 会把这条旧链接本身记为 `status_source=legacy_project_jira_reference`，并作为已上线/冻结类历史证据归档。
+
+为了避免误判，只有明确出现旧 project Jira URL 的 key 才会走该离线归档规则；纯文本 Jira key 仍按 cjira 状态刷新结果处理。
+
 ## 语言要求
 
 使用 `llm-wiki` 及其相关短入口时，面向用户的回答、诊断、审查报告和最终总结默认使用中文；由 agent 生成或改写的 `wiki/`、`docs/`、`staging/` Markdown 知识文档也默认使用中文。代码标识符、命令、路径、API 名称、配置键、英文专有名词和原始证据引用可保留原文，并用中文解释。
@@ -412,6 +418,13 @@ uv run python tools/graphify_code.py --all
 - 代码实现证明的页面、接口、服务、状态机、异步任务或数据访问
 - 基于命名/调用关系的推断
 - 仍缺失的证据
+
+证据链接展示规则：
+
+- 有可信 `source_url` / `page_id` 元数据时，普通 query 优先展示远端原文链接，方便用户跳回原始 wiki。
+- 同时保留本地 `raw/` 快照或 `wiki/` 整理页，用于复现本次回答依据的证据版本。
+- `doctor` / `update` / debug 输出可以本地路径优先，因为它们主要检查本地 KB 状态。
+- Cwiki 评论稿、IM、邮件等离开本机环境的输出不得暴露 `/Users/...`、`raw/...`、`wiki/...` 本地路径；这类输出只使用远端原文链接。
 
 ## 10. 图片策略
 

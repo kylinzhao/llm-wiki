@@ -677,4 +677,4 @@ Skip this commit if `dist/` is not tracked or no distribution refresh is require
 - [ ] Confirm unknown or failed Jira status does not become `frozen`.
 - [ ] Confirm `idea` pages remain in the active registry even with no `cjira`.
 - [ ] Confirm old projects only need an upgraded skill plus `llm-wiki update` to populate the registry from existing `raw/`.
-
+- [ ] TODO: Legacy `project.guazi-corp.com` is offline. Do not attempt live API fallback or require legacy project Jira auth. Instead, verify that raw pages with explicit links such as `project.guazi-corp.com/browse/CTB-7850` are recorded offline as `status_source=legacy_project_jira_reference`, `doc_status=frozen`, and `primary_cjira_status=已上线（legacy project Jira reference）`; pure text keys without the old project URL must remain active when cjira lookup fails.

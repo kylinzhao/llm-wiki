@@ -16,6 +16,9 @@ import requests
 
 ISSUE_KEY_RE = re.compile(r"\b[A-Z][A-Z0-9_]+-\d+\b")
 CJIRA_URL_RE = re.compile(r"https?://cjira\.guazi-corp\.com/browse/(?P<key>[A-Z][A-Z0-9_]+-\d+)")
+LEGACY_PROJECT_JIRA_URL_RE = re.compile(
+    r"https?://project\.guazi-corp\.com/browse/(?P<key>[A-Z][A-Z0-9_]+-\d+)"
+)
 STRONG_IDEA_RE = re.compile(r"【\s*IDEA\s*】", re.IGNORECASE)
 FRONTMATTER_TITLE_RE = re.compile(r"^title:\s*['\"]?(.*?)['\"]?\s*$", re.M)
 SOFT_IDEA_PHRASES = (
@@ -96,9 +99,10 @@ def extract_issue_candidates(text: str) -> list[dict[str, object]]:
             index = current
         return index
 
-    url_matches = [(match, True) for match in CJIRA_URL_RE.finditer(text)]
-    plain_matches = [(match, False) for match in ISSUE_KEY_RE.finditer(text)]
-    for match, from_url in url_matches + plain_matches:
+    url_matches = [(match, True, False) for match in CJIRA_URL_RE.finditer(text)]
+    legacy_url_matches = [(match, True, True) for match in LEGACY_PROJECT_JIRA_URL_RE.finditer(text)]
+    plain_matches = [(match, False, False) for match in ISSUE_KEY_RE.finditer(text)]
+    for match, from_url, legacy_project_jira_reference in url_matches + legacy_url_matches + plain_matches:
         issue_key = match.group("key") if from_url else match.group(0)
         if not from_url and not _is_valid_plain_issue_match(text, match, issue_key):
             continue
@@ -127,6 +131,7 @@ def extract_issue_candidates(text: str) -> list[dict[str, object]]:
                 "role": role,
                 "score": score,
                 "offset": match.start(),
+                "legacy_project_jira_reference": legacy_project_jira_reference,
             }
         )
     return candidates
@@ -155,9 +160,12 @@ def classify_page(title: str, raw_path: str, text: str) -> dict[str, object]:
         primary = primary_candidates[0]
         primary_cjira = str(primary["issue_key"])
         source_anchor = str(primary["source_anchor"])
+        primary_legacy_project_jira_reference = bool(primary.get("legacy_project_jira_reference"))
         if len(primary_candidates) > 1:
             confidence = "low"
             supporting.extend(str(item["issue_key"]) for item in primary_candidates[1:] if str(item["issue_key"]) not in supporting)
+    else:
+        primary_legacy_project_jira_reference = False
 
     idea = detect_idea(title, text)
     if idea["idea_flag"]:
@@ -174,6 +182,7 @@ def classify_page(title: str, raw_path: str, text: str) -> dict[str, object]:
         "status_source": "cjira" if primary_cjira else ("idea" if idea["idea_flag"] else "none"),
         "primary_cjira_status": "",
         "primary_cjira_terminal": False,
+        "primary_cjira_legacy_project_jira_reference": primary_legacy_project_jira_reference,
         "last_checked_at": "",
         "source_anchor": source_anchor,
         "confidence": confidence,
@@ -206,6 +215,17 @@ def fetch_jira_status(
         "status": status,
         "terminal": is_terminal_status(status),
         "last_checked_at": utc_now(),
+    }
+
+
+def legacy_project_jira_reference_status(issue_key: str) -> dict[str, object]:
+    return {
+        "issue_key": issue_key,
+        "status": "已上线（legacy project Jira reference）",
+        "terminal": True,
+        "last_checked_at": utc_now(),
+        "status_source": "legacy_project_jira_reference",
+        "legacy_project_jira_reference": True,
     }
 
 
@@ -307,6 +327,7 @@ def sync_record_to_source_page(project: Path, record: dict[str, object]) -> None
         f"- Primary Jira: `{str(record.get('primary_cjira') or 'none')}`\n"
         f"- Supporting Jira: {supporting}\n"
         f"- Jira Status: `{str(record.get('primary_cjira_status') or '')}`\n"
+        f"- Jira Status Source: `{str(record.get('status_source') or '')}`\n"
         f"- Last Checked: `{str(record.get('last_checked_at') or '')}`\n"
         f"- Confidence: `{str(record.get('confidence') or 'high')}`\n"
     )
@@ -328,6 +349,10 @@ def sync_record_to_source_page(project: Path, record: dict[str, object]) -> None
             "primary_cjira": str(record.get("primary_cjira") or ""),
             "supporting_cjira": list(record.get("supporting_cjira") or []),
             "primary_cjira_status": str(record.get("primary_cjira_status") or ""),
+            "cjira_status_source": str(record.get("status_source") or ""),
+            "primary_cjira_legacy_project_jira_reference": bool(
+                record.get("primary_cjira_legacy_project_jira_reference")
+            ),
             "last_checked_at": str(record.get("last_checked_at") or ""),
             "cjira_confidence": str(record.get("confidence") or "high"),
         }
@@ -370,28 +395,38 @@ def _apply_status(
         try:
             status_info = fetch_jira_status(issue_key, jira_base=jira_base, headers=headers, session=session)
         except Exception:
-            cache[issue_key] = {
-                "issue_key": issue_key,
-                "status": "",
-                "terminal": False,
-                "last_checked_at": utc_now(),
-                "fetch_failed": True,
-            }
-            return record
-    status_info = status_info or {}
+            if record.get("primary_cjira_legacy_project_jira_reference"):
+                status_info = legacy_project_jira_reference_status(issue_key)
+            if status_info is None:
+                cache[issue_key] = {
+                    "issue_key": issue_key,
+                    "status": "",
+                    "terminal": False,
+                    "last_checked_at": utc_now(),
+                    "fetch_failed": True,
+                    "legacy_project_jira_reference": False,
+                }
+                return record
+    if status_info is None:
+        status_info = {}
     status = str(status_info.get("status") or "")
     terminal = bool(status_info.get("terminal"))
     fetched_at = str(status_info.get("last_checked_at") or utc_now())
+    status_source = str(status_info.get("status_source") or "cjira")
     cache[issue_key] = {
         "issue_key": issue_key,
         "status": status,
         "terminal": terminal,
         "last_checked_at": fetched_at,
         "fetch_failed": bool(status_info.get("fetch_failed")),
+        "status_source": status_source,
     }
+    if status_info.get("legacy_project_jira_reference"):
+        cache[issue_key]["legacy_project_jira_reference"] = True
     record["primary_cjira_status"] = status
     record["primary_cjira_terminal"] = terminal
     record["last_checked_at"] = fetched_at
+    record["status_source"] = status_source
     if terminal:
         record["doc_status"] = "frozen"
     elif not record["idea_flag"]:
@@ -525,6 +560,10 @@ def jira_headers(
     return headers
 
 
+def has_auth_headers(headers: dict[str, str]) -> bool:
+    return any(key in headers for key in ("Authorization", "Cookie", "chdsso"))
+
+
 def read_source_file(path: Path, project: Path) -> dict[str, object]:
     text = path.read_text(encoding="utf-8", errors="replace")
     title_match = FRONTMATTER_TITLE_RE.search(text)
@@ -583,15 +622,16 @@ def main(argv: list[str] | None = None) -> int:
         jira_chdsso=resolved_chdsso,
     )
     session = requests.Session()
+    can_refresh = has_auth_headers(headers)
     report = update_registry_for_sources(
         project,
         sources,
-        refresh_status=bool(args.refresh and any(key in headers for key in ("Authorization", "Cookie", "chdsso"))),
+        refresh_status=bool(args.refresh and can_refresh),
         jira_base=args.jira_base,
         headers=headers,
         session=session,
     )
-    if args.refresh and not any(key in headers for key in ("Authorization", "Cookie", "chdsso")):
+    if args.refresh and not can_refresh:
         report["warning"] = "Jira auth missing; registry written without live status refresh."
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
