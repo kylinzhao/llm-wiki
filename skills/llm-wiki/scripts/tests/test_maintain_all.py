@@ -24,6 +24,9 @@ def load_script_module(name: str):
 
 def make_kb(path: Path) -> Path:
     (path / "tools").mkdir(parents=True)
+    (path / "raw").mkdir(parents=True)
+    (path / "wiki").mkdir(parents=True)
+    (path / "BUSINESS_CONTEXT.md").write_text("# Context\n", encoding="utf-8")
     (path / "kb.manifest.yaml").write_text("version: 1\n", encoding="utf-8")
     (path / "tools" / "update_wiki.py").write_text("# update\n", encoding="utf-8")
     return path
@@ -178,6 +181,49 @@ class MaintainAllTest(unittest.TestCase):
             self.assertEqual(by_path[str(failing.resolve())]["status"], "failed")
             self.assertEqual(by_path[str(failing.resolve())]["last_error"], "backfill")
             self.assertIn(str(success), install_log.read_text(encoding="utf-8"))
+
+    def test_build_plan_reports_repairable_code_sources_and_blocks_tracked_raw_code(self):
+        maintain_all = load_script_module("maintain_all")
+        registry = load_script_module("project_registry")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repairable = make_kb(root / "repairable")
+            raw_code = repairable / "raw-code" / "demo"
+            raw_code.mkdir(parents=True)
+            subprocess.run(["git", "init", "-b", "main"], cwd=raw_code, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(["git", "remote", "add", "origin", "https://example.com/demo.git"], cwd=raw_code, check=True)
+            (raw_code / ".git" / "info" / "exclude").write_text(".llm-wiki-codebase.yaml\n", encoding="utf-8")
+            (raw_code / ".llm-wiki-codebase.yaml").write_text(
+                "codebase_id: demo\n"
+                "managed: true\n"
+                "repo_url: https://example.com/demo.git\n"
+                "origin_ref: main\n"
+                "default_branch: main\n"
+                "managed_path: raw-code/demo\n"
+                "created_by: llm-wiki-add-code\n",
+                encoding="utf-8",
+            )
+
+            blocked = make_kb(root / "blocked")
+            (blocked / "raw-code").mkdir()
+            (blocked / "raw-code" / "tracked.txt").write_text("tracked\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-b", "main"], cwd=blocked, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(["git", "config", "user.name", "Codex"], cwd=blocked, check=True)
+            subprocess.run(["git", "config", "user.email", "codex@example.com"], cwd=blocked, check=True)
+            subprocess.run(["git", "add", "."], cwd=blocked, check=True)
+            subprocess.run(["git", "commit", "-m", "track raw-code"], cwd=blocked, check=True, stdout=subprocess.DEVNULL)
+
+            registry_path = root / "projects.json"
+            for kb in (repairable, blocked):
+                registry.register_project(kb, registry_path=registry_path, now="2026-05-29T01:00:00+00:00")
+
+            plan = maintain_all.build_plan(registry_path=registry_path)
+
+            planned = {item["project"]: item for item in plan["planned"]}
+            self.assertIn("missing_code_sources_manifest", planned[str(repairable.resolve())]["preflight"]["repairable"])
+            skipped = {item["project"]: item for item in plan["skipped"]}
+            self.assertEqual(skipped[str(blocked.resolve())]["reason"], "preflight_blocked")
+            self.assertIn("raw_code_tracked_by_git", skipped[str(blocked.resolve())]["preflight"]["blockers"])
 
     def test_main_discovers_lists_prunes_filters_and_applies(self):
         maintain_all = load_script_module("maintain_all")

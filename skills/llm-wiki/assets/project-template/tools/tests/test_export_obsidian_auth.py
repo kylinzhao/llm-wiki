@@ -52,6 +52,20 @@ class ExportObsidianAuthTest(unittest.TestCase):
         self.assertNotIn("GUAZI_SSO_SKILL_ROOT", stderr.getvalue())
         self.assertNotIn("/path/to/guazi-sso-login", stderr.getvalue())
 
+    def test_missing_auth_instructions_include_persistent_cookie_fallback(self):
+        export_obsidian = load_export_obsidian()
+        stderr = io.StringIO()
+
+        with mock.patch.object(sys, "stderr", stderr):
+            export_obsidian.print_auth_instructions()
+
+        output = stderr.getvalue()
+        self.assertIn("SSO", output)
+        self.assertIn("COOKIE_HEADER", output)
+        self.assertIn("~/.llm-wiki/guazi-sso.env", output)
+        self.assertIn("non-intranet", output)
+        self.assertNotIn("only a one-off fallback", output)
+
     def test_vendored_sso_login_is_discovered_by_default(self):
         export_obsidian = load_export_obsidian()
 
@@ -91,6 +105,17 @@ class ExportObsidianAuthTest(unittest.TestCase):
         self.assertNotIn("--jira-token", command)
         self.assertNotIn("jira-token-123", command)
 
+    def test_max_pages_is_forwarded_to_tree_exporter(self):
+        export_obsidian = load_export_obsidian()
+        args = export_obsidian.parse_args(
+            ["--url", "https://cwiki.guazi.com/pages/viewpage.action?pageId=1", "--project-dir", "/tmp/kb", "--max-pages", "3"]
+        )
+
+        command = export_obsidian.build_command(args)
+
+        self.assertIn("--max-pages", command)
+        self.assertIn("3", command)
+
     def test_auth_env_file_persists_sso_credentials_for_future_runs(self):
         export_obsidian = load_export_obsidian()
         with tempfile.TemporaryDirectory() as tmp:
@@ -103,6 +128,7 @@ class ExportObsidianAuthTest(unittest.TestCase):
                     "GUAZI_SSO_PASSWORD": "secret-password",
                     "GUAZI_SSO_APPLY_PHONE": "13800138000",
                     "JIRA_TOKEN": "jira-token-123",
+                    "COOKIE_HEADER": "JSESSIONID=abc; confluence=xyz",
                 },
             )
 
@@ -113,6 +139,17 @@ class ExportObsidianAuthTest(unittest.TestCase):
         self.assertEqual(loaded["GUAZI_SSO_APPLY_PHONE"], "13800138000")
         self.assertEqual(loaded["GUAZI_SSO_SKILL_ROOT"], "/tmp/guazi-sso-login")
         self.assertEqual(loaded["JIRA_TOKEN"], "jira-token-123")
+        self.assertEqual(loaded["COOKIE_HEADER"], "JSESSIONID=abc; confluence=xyz")
+
+    def test_auth_env_file_applies_cookie_default(self):
+        export_obsidian = load_export_obsidian()
+        args = export_obsidian.parse_args(["--update", "--project-dir", "/tmp/kb"])
+        env = {"COOKIE_HEADER": "JSESSIONID=abc; confluence=xyz"}
+
+        export_obsidian.apply_auth_env_defaults(args, env)
+
+        self.assertEqual(args.cookie, "JSESSIONID=abc; confluence=xyz")
+        self.assertFalse(args.auto_cookie_from_sso)
 
     def test_auth_env_file_applies_jira_token_default(self):
         export_obsidian = load_export_obsidian()

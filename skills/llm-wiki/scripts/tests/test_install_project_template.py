@@ -114,7 +114,36 @@ class InstallProjectTemplateTest(unittest.TestCase):
             self.assertTrue(script.is_file())
             self.assertIn("#!/usr/bin/env bash", text)
             self.assertIn("GUAZI_SSO_USER_NAME", text)
+            self.assertIn("COOKIE_HEADER", text)
+            self.assertIn("Choose auth mode", text)
             self.assertIn(".llm-wiki/guazi-sso.env", text)
+
+    def test_skill_level_auth_init_script_supports_cookie_mode(self):
+        script = Path(__file__).resolve().parents[1] / "init_auth_env.sh"
+        text = script.read_text(encoding="utf-8")
+
+        self.assertIn("GUAZI_SSO_USER_NAME", text)
+        self.assertIn("COOKIE_HEADER", text)
+        self.assertIn("Choose auth mode", text)
+        self.assertIn(".llm-wiki/guazi-sso.env", text)
+
+    def test_project_template_ignores_evidence_caches(self):
+        installer = load_installer()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            stdout = io.StringIO()
+            original_argv = sys.argv
+            try:
+                sys.argv = [str(SCRIPT), "--project", str(project)]
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(installer.main(), 0)
+            finally:
+                sys.argv = original_argv
+
+            gitignore = (project / ".gitignore").read_text(encoding="utf-8")
+            self.assertIn("raw/\n", gitignore)
+            self.assertIn("raw-code/\n", gitignore)
+            self.assertIn("uv.lock\n", gitignore)
 
     def test_main_recommends_llm_wiki_commands_not_internal_script_chain(self):
         installer = load_installer()

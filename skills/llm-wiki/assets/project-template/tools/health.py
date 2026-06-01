@@ -73,6 +73,41 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def normalize_for_stability(value: object) -> object:
+    if isinstance(value, dict):
+        normalized: dict[str, object] = {}
+        for key, item in value.items():
+            if key == "generated_at":
+                continue
+            if key == "project":
+                normalized[key] = "."
+                continue
+            normalized[key] = normalize_for_stability(item)
+        return normalized
+    if isinstance(value, list):
+        return [normalize_for_stability(item) for item in value]
+    return value
+
+
+def stable_output_report(report: dict[str, object]) -> dict[str, object]:
+    stable = dict(report)
+    stable["project"] = "."
+    return stable
+
+
+def write_stable_report(path: Path, report: dict[str, object]) -> None:
+    next_report = stable_output_report(report)
+    if path.is_file():
+        try:
+            current = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            current = None
+        if normalize_for_stability(current) == normalize_for_stability(next_report):
+            return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(next_report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def markdown_pages(project: Path) -> list[Path]:
     wiki = project / "wiki"
     if not wiki.is_dir():
@@ -470,7 +505,7 @@ def build_report(project: Path) -> dict[str, object]:
     ok = content_ok and evidence_ok
     report = {
         "generated_at": utc_now(),
-        "project": str(project),
+        "project": ".",
         "ok": ok,
         "status": "pass" if ok else "fail",
         "has_business_context": business_context["has_business_context"],
@@ -518,11 +553,10 @@ def main() -> int:
     report = build_report(project)
 
     out = project / "staging" / "health" / "latest.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_stable_report(out, report)
 
     if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
+        print(json.dumps(stable_output_report(report), ensure_ascii=False, indent=2))
     else:
         verdict = "pass" if report["ok"] else "fail"
         print(f"health={verdict}")

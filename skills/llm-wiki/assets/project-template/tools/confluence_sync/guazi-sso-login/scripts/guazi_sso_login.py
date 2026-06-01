@@ -401,7 +401,7 @@ def http_request(
     raise LoginError(
       "E_NETWORK_DISCONNECTED",
       f"请求 {redact_url(url)} 时连接被远端断开：{exc}",
-      "这通常是 VPN、内网代理或远端 SSO token 服务问题；请确认公司 VPN/代理后重试。Cwiki 可达不代表 SSO token 服务可达。",
+      "这通常是 VPN、内网代理或远端 SSO token 服务问题；请确认公司 VPN/代理后重试。Cwiki 可达不代表 SSO token 服务可达；llm-wiki 也支持在 ~/.llm-wiki/guazi-sso.env 写入 COOKIE_HEADER 作为全局 Cookie 模式。",
     ) from exc
 
 

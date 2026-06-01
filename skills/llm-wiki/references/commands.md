@@ -122,6 +122,17 @@ Purpose: respond to changes, resume incomplete work, refine affected pages, and 
 
 If the user asks to update the **llm-wiki skill itself** rather than KB content, route to `llm-wiki update-skill` semantics below. Do not mix global skill installation changes into an ordinary KB update unless the user explicitly asked for it.
 
+Shared update protocol:
+
+- `llm-wiki update` defaults to shared mode. Before local deterministic work starts, synchronize the KB git repository with its upstream branch. After deterministic update and hard validation finish, publish the shared KB baseline with a normal git commit and push. Pending source refinement is not a raw/graph/health hard blocker, but `refinement_contract.status=needs_refinement` is a P1 automatic update task: the current agent must run agent-native source refinement before final closure, not merely publish and tell the user to run update later. If more than 10 source pages are pending, use currently available subagents/workers to process disjoint `wiki/sources/*` slices in parallel and try to finish the full queue in the same update. Do not treat a tiny sample, such as five pages, as the default completion target. If hard validation passes but a real blocker, tool limit, context limit, or explicit user stop prevents full refinement completion, publish a `usable-with-gaps` batch checkpoint instead of leaving generated KB artifacts dirty in one local clone.
+- `llm-wiki update --local` or `LLM_WIKI_UPDATE_MODE=local` is the explicit local-only trial mode. Local mode may update the user's working copy without pulling or pushing the shared KB baseline.
+- `--no-auto-raw-sync` and `LLM_WIKI_NO_AUTO_RAW_SYNC=1` are local-mode escape hatches only. Shared mode must reject them before running the update callback; do not publish a baseline built from intentionally stale `raw/` or `raw-code/`.
+- `LLM_WIKI_CWIKI_SMOKE_MAX_PAGES=<n>` and `LLM_WIKI_CWIKI_SMOKE_RSS_MAX_RESULTS=<n>` are local/temp test controls for reducing Cwiki download pressure while still exercising Cwiki authentication and page fetch. They are rejected in shared mode because a truncated `raw/` cache must not be published as a shared baseline.
+- `upstream/wiki-sources.json` restores `raw/`. `upstream/code-sources.json` restores `raw-code/` as engine-managed git checkouts created by `llm-wiki add-code`.
+- `raw/` and `raw-code/` are local evidence caches. They must be ignored by git and excluded from shared publish. Shared publish is allowlisted to KB outputs such as `BUSINESS_CONTEXT.md`, `upstream/**`, `wiki/**`, selected `docs/**`, `staging/**`, `graph/**`, `index/**`, and engine-owned `tools/**` files refreshed from the installed skill template.
+- If the KB repository is missing, has no upstream, diverges, has dirty local changes, or contains unrecognized local commits, fail closed before update or publish. In interactive cases where the failure can safely remain local, ask in Chinese whether to switch to local mode, then rerun local-mode preflight before continuing.
+- If `git pull`, `git fetch`, raw-code checkout pull, or `git push` fails because of permission/authentication, report it in Chinese as missing read/write permission. Use wording like `缺少读取/写入权限，请先申请 KB/代码仓库权限，或检查 SSH Key / Git 凭证。` Do not present permission failures as skippable sync. For raw-code permission failures in shared mode, block before writing raw/wiki/staging outputs; tell the user to either fix code repository access and retry, or explicitly switch to `llm-wiki update --local` / `LLM_WIKI_UPDATE_MODE=local` for a local-only trial.
+
 Common triggers:
 
 - New or edited `raw/**/index.md`.
@@ -151,12 +162,15 @@ Impact analysis:
 - If `raw-code/` changed: update affected codebase pages, endpoint maps, compact upstream artifacts, capability candidates, traceability rows, and graphify status if needed.
 - If `wiki/code/traceability/` changed: verify evidence strength, source anchors, code anchors, and linked capability pages.
 - If docs changed only: update retrieval/build guidance and run link checks.
-- If G+ semantic underfit is reported by `tools/update_wiki.py` or `tools/doctor.py`: do not rebuild `raw/` solely for that reason; run a Codex-native G+ semantic expansion pass over existing source pages.
+- If G+ semantic underfit is reported by `tools/update_wiki.py` or `tools/doctor.py`: do not rebuild `raw/` solely for that reason; run an agent-native G+ semantic expansion pass over existing source pages.
 
 Default update order:
 
-1. Identify changed files and classify the trigger.
-2. Repair project agent query-routing rules when the standard template tooling is available:
+1. Resolve update mode. Default to shared mode unless `--local` or `LLM_WIKI_UPDATE_MODE=local` is present.
+2. In shared mode, run KB git preflight first: evidence caches ignored and untracked, upstream configured, worktree clean, fetch/pull fast-forward only, recognized local shared-update commits pushed if needed, and skip flags rejected. If this fails with an interactive local fallback offer, continue only after the user accepts the switch to local mode.
+3. Restore code evidence first in shared mode: use `upstream/code-sources.json` to clone or pull managed `raw-code/<codebase_id>/` checkouts before any raw/wiki/staging writes. If raw-code is unmanaged, damaged, dirty, missing permissions, or cannot fast-forward, stop the shared update before generating KB outputs. Then use `upstream/wiki-sources.json` to sync `raw/`. Local mode may use `--no-auto-raw-sync`; shared mode may not.
+4. Identify changed files and classify the trigger.
+5. Repair project agent query-routing rules when the standard template tooling is available:
    - Before running a local `tools/update_wiki.py` that may be from an older KB, refresh engine-owned project tooling from the installed skill template:
 
      ```bash
@@ -167,8 +181,9 @@ Default update order:
    - `tools/update_wiki.py` refreshes `AGENTS.md` by default so older KB projects gain the `## Query Routing` rules automatically.
    - use `--no-agent-rules-refresh` only when the user explicitly wants a deterministic update without touching project-level agent instructions.
    - `llm-wiki doctor` should only report missing agent rules; it should not modify files.
-3. Refresh upstream inputs when the project has a declared updater:
+6. Refresh upstream inputs when the project has a declared updater:
    - treat `upstream/wiki-sources.json` as the standard source of truth for upstream inputs; `type: confluence` refreshes full Cwiki pages, `type: rss` refreshes RSS/Atom snapshots
+   - treat `upstream/code-sources.json` as the standard source of truth for code inputs; each source restores one clean managed checkout under `raw-code/<codebase_id>/`
    - keep every wiki relationship in that source object: 0-1 root, later added wiki, source role, depth, RSS URL, output/metadata paths, and `filters.updated_since`
    - if the project has enabled RSS feeds or Cwiki sources, run that upstream sync before the deterministic update
    - when an older repo only has `config/rss-feeds.yaml`, treat it as legacy input and let `tools/update_wiki.py` migrate it into `upstream/wiki-sources.json`
@@ -177,25 +192,34 @@ Default update order:
    - if the project has engine-managed `raw-code/<codebase_id>/` git checkouts, refresh them by default before code wiki rebuild; for the standard template this means auto-running `git pull --ff-only` inside `tools/update_wiki.py`
    - unmanaged, copied, symlinked, or ad-hoc raw-code directories are legacy states and should block update until migrated
    - never silently overwrite dirty `raw-code/*` worktrees; block and report the specific codebase instead
-4. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
+7. Run the deterministic project update command when available, such as `uv run python tools/update_wiki.py`.
    - when upstream sync is enabled in the project, prefer an update command path that includes the raw refresh automatically, for example by auto-running Cwiki sync and `tools/rss_sync.py` inside `tools/update_wiki.py` or by passing `--raw-sync-command`
    - when `raw-code/` codebases are connected through `llm-wiki add-code`, prefer an update command path that includes the code refresh automatically by auto-running `git pull --ff-only` per clean managed codebase inside `tools/update_wiki.py`
    - when the standard template is installed, `update` should refresh `staging/cjira-registry/active.json` after source scan; terminal pages move to `archive.json`
-5. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
+8. Map changed inputs to wiki outputs from the update report, usually `staging/update/latest.md` or `staging/update/latest.json`.
    - Read `staging/refinement-plan.json` and `references/refinement-contract.md`; use them as the write-scope and acceptance contract for semantic refinement.
    - Read `staging/update/latest.json` `gplus_quality`; if `status=needs_attention`, treat it as an update trigger even when `semantic_update_required=false`.
-6. Refresh affected pages:
+   - Before deciding which pending pages need semantic rewrite, run the lightweight historical refinement-state reconcile built into `tools/update_wiki.py`. This repairs source pages whose content is already refined but whose `Source Metadata` or `staging/refinement-status.md` still says pending/applied/missing completed record. It may update only `wiki/sources/*` metadata and `staging/refinement-status.md`; it must not rewrite source prose.
+   - Before dispatching a large semantic queue, choose workers by capability tier instead of by client or model name:
+     - inspect what the current host exposes: no worker support, workers without model/capability controls, or selectable worker tiers
+     - choose the lowest-cost available worker that can safely satisfy the slice
+     - use lightweight workers for deterministic state repair, metadata/status reconciliation, short low-risk source pages, and format-only cleanup
+     - use standard workers for ordinary source refinement and source-to-link updates
+     - use the strongest available worker only for cross-page conflicts, G+ taxonomy/entity redesign, traceability strong-evidence judgments, or high-risk business interpretation
+     - have lightweight/standard workers mark ambiguity, missing evidence, or conflicting facts instead of guessing; reroute only those slices to a stronger worker or the main agent
+     - if the host does not expose worker capability selection, use the default worker or sequential batching and state that capability selection is unavailable
+9. Refresh affected pages:
    - changed `raw/` pages update matching source pages, layered pages, concepts, entities, query readiness, health, and graph
    - changed `raw-code/` files update affected codebase pages, endpoint maps, freshness state, capability/anchor candidates, traceability rows, and graphify status when needed
    - changed `BUSINESS_CONTEXT.md` updates canonical aliases, concepts, entities, conflicts, truth, and retrieval guidance
    - if health or the update report shows remaining `pending` or `stale` source pages, resolve them in the same command when they are in scope or the backlog is small enough to finish safely
    - G+ semantic underfit updates concepts/entities, source Business Links, truth/conflicts/evidence/proposals/operations/reference, query acceptance, and G+ quality audit without rewriting unrelated source summaries
-7. When the same update affects both requirement/source evidence and implementation/code evidence, treat source refinement and code traceability refresh as one integrated update pass:
+10. When the same update affects both requirement/source evidence and implementation/code evidence, treat source refinement and code traceability refresh as one integrated update pass:
    - refine stale affected source pages first
    - immediately update affected `wiki/code/capabilities/` and `wiki/code/traceability/` rows against the refined requirement evidence
    - re-check evidence strength after both sides are updated
    - do not present these as separate optional next commands unless the user explicitly asked to stop after one layer
-8. Continue automatically through all low-risk update completion work:
+11. Continue automatically through all low-risk update completion work:
    - affected source AI refinement
    - affected concept/entity/layer page refresh
    - affected codebase and capability page refresh
@@ -203,19 +227,20 @@ Default update order:
    - G+ semantic expansion when deterministic diagnostics report underfit and the needed facts are already present in source pages
    - broken wikilink fixes
    - health and graph rebuild
-9. Preserve manual edits and refined prose unless directly stale.
-10. Re-run health after AI-native edits, not only after deterministic build.
-11. Rebuild graph after AI-native edits when wikilinks changed.
-12. Run optional traceability anchor check when traceability pages changed.
-13. Update `staging/refinement-status.md`.
-14. Treat validation as part of update completion:
-   - run `tools/check_refinement.py` before health when `staging/refinement-plan.json` says semantic refinement is required
+12. Preserve manual edits and refined prose unless directly stale.
+13. Re-run health after AI-native edits, not only after deterministic build.
+14. Rebuild graph after AI-native edits when wikilinks changed.
+15. Run optional traceability anchor check when traceability pages changed.
+16. Update `staging/refinement-status.md`.
+17. Treat validation as part of update completion:
+   - run or inspect `tools/check_refinement.py` and `staging/update/latest.json.refinement_contract` when `staging/refinement-plan.json` says semantic refinement is required; classify pending source refinement as a P1 automatic update task and process it in the current command before final closure. When more than 10 source pages are pending, dispatch parallel subagent/worker batches with disjoint write scopes, size the plan to cover as much of the full queue as possible, and do not manually stop after a tiny sample.
    - run health before final reporting when `tools/health.py` exists or the project has an equivalent health check
    - rebuild graph before final reporting when `tools/build_graph.py` exists or wikilinks changed
    - run `tools/anchor_check.py` when traceability pages or code anchors changed
-   - if validation fails and the fix is low-risk and in scope, fix it before final reporting
-   - if validation fails and cannot be fixed safely, report the blocker and recommend the smallest safe continuation
-15. For status-sensitive projects, read `staging/cjira-registry/active.json` and `archive.json` during update / doctor / query:
+   - if hard validation fails and the fix is low-risk and in scope, fix it before final reporting
+   - if hard validation fails and cannot be fixed safely, report the blocker and recommend the smallest safe continuation
+18. In shared mode, publish the shared KB after deterministic update and hard validation callbacks finish. P1 source refinement should be attempted before the final user-facing closure, but a remaining `refinement_pending` / `needs_refinement` checkpoint is publishable when health, graph and required anchor checks pass; do not leave allowlisted generated KB artifacts dirty only because semantic refinement still has a remaining queue. Image evidence pending or already checkpointed low-density G+ layers may remain `usable-with-gaps`. Stage exact allowlisted paths only; never broad-add `raw/`, `raw-code/`, credentials, logs, dependencies, or unrecognized local files. If push fails after commit, say in Chinese that the shared KB is committed locally but unpublished, and include read/write permission guidance when applicable.
+19. For status-sensitive projects, read `staging/cjira-registry/active.json` and `archive.json` during update / doctor / query:
    - `doctor` should report stale Jira fetches and low-confidence primary selections
    - `query` should use registry state when answering whether a requirement is `idea`, `in_progress`, or `frozen`
    - when cjira lookup fails but raw contains an explicit `project.guazi-corp.com/browse/<KEY>` link for the same key, treat that legacy link as shipped/frozen historical evidence and set `status_source = legacy_project_jira_reference`
@@ -226,7 +251,7 @@ Project command convention:
 - If the repo has `tools/update_wiki.py`, prefer it over manually chaining `build_wiki.py`, `health.py`, and `build_graph.py`.
 - A template-installed project should also have `scan_code.py`, `graphify_code.py`, `build_traceability.py`, and `anchor_check.py`; use them for 0-1 builds involving code evidence.
 - If the repo does not have a local update command, use the standard deterministic build order and create a brief impact report before AI-native edits.
-- Local scripts may scan files, compare hashes, build manifests, and validate links; semantic summary, entity normalization, and implementation judgment must happen in Codex-native work, not through local model SDK calls.
+- Local scripts may scan files, compare hashes, build manifests, and validate links; semantic summary, entity normalization, and implementation judgment must happen in the current agent or its available workers, not through local model SDK calls.
 
 Do not:
 
@@ -248,12 +273,14 @@ Final report:
 - pages intentionally left untouched
 - validation results
 - G+ semantic quality status: ok / needs_attention, including concept count, concept coverage, manual placeholders, and any P1/P2 underfit findings
+- source refinement contract status: ok / needs_refinement, including processed pages, remaining queue, and whether any batch checkpoint was published
 - readiness: healthy / usable-with-gaps / blocked, with the reason
 - remaining stale or missing evidence
 
 Recommendation rule:
 
 - Do not recommend `llm-wiki update` as the next step when the current `llm-wiki update` can safely finish the remaining source refinement, capability, traceability, health, or graph work. Finish it in the current command.
+- Do not leave P1 `source_refinement_pending` as a plain soft gap. Run agent-native source refinement in the current update. If the queue is too large for one manual pass, use subagents/workers in parallel and target the full queue, not a tiny sample. Checkpoint only after a real blocker, tool/context limit, or explicit user stop, and state exactly what remains.
 - If affected source pages remain stale and affected code traceability also needs refresh but a hard blocker prevents completion, report the blocker and checkpoint, then recommend one combined continuation: `llm-wiki update` to resume the integrated source refinement plus traceability refresh.
 - Traceability-only and source-only refinements still stay under `llm-wiki update`; do not route to separate commands.
 - When validation fails, recommend the smallest safe continuation or fix, phrased as a command the user can run (`llm-wiki update`, `llm-wiki doctor`, or `llm-wiki image`) rather than a script chain.
@@ -301,6 +328,7 @@ Current deterministic passes:
 
 - `drawio`: converts historical `.drawio` / `.dio` files into Mermaid-backed Markdown evidence and links that evidence from raw page indexes.
 - `source_metadata`: patches existing `wiki/sources/*` with Delivery Tracking and Source Metadata without rewriting refined summaries.
+- `refinement_state_reconcile`: repairs historical source refinement state when existing page content is already refined but metadata/status is still pending, applied, complete, or missing a completed record. It records `reconciled_from_existing_content` instead of claiming a new semantic rewrite.
 - `cjira`: rebuilds `staging/cjira-registry/` from historical raw Jira/Cjira/IDEA signals. Since legacy `project.guazi-corp.com` is offline, cjira status refresh does not call it; explicit `project.guazi-corp.com/browse/<KEY>` links in raw are treated as offline legacy references for shipped/frozen historical evidence.
 - `agent_rules`: patches missing project query-routing rules.
 
@@ -583,7 +611,8 @@ Recommendation rules:
 - If required inputs or entry docs are missing, recommend `llm-wiki init` or `llm-wiki update`.
 - If source coverage or refinement is incomplete, recommend `llm-wiki update`.
 - If query acceptance or quality audit artifacts are missing, recommend `llm-wiki update` to refresh them.
-- If G+ semantic underfit is P1/P2, recommend `llm-wiki update` for Codex-native G+ semantic expansion. This is separate from health: a wiki can be structurally healthy and still need G+ expansion.
+- If G+ semantic underfit is P1/P2, recommend `llm-wiki update` for agent-native G+ semantic expansion. This is separate from health: a wiki can be structurally healthy and still need G+ expansion.
+- If there is no P0/P1 and important P2 findings remain, promote the highest-value P2 findings to P1 for the next maintenance pass. Use this for recurring debt such as image evidence unknown, Cjira stale/low-confidence status quality, orphan source pages, or G+ thin layers.
 - If text/G+ is healthy but `raw/` contains image assets and no image evidence pass is recorded, recommend `llm-wiki image` for selective high-value multimodal refinement. Treat this as a non-blocking evidence gap unless core pages depend on diagrams, table screenshots, state screenshots, money/account/risk/permission flows, launch tables, or test conclusions.
 - When recommending `llm-wiki image`, include the top candidate pages from health output or a read-only scan, not only the total image count.
 - If code wiki exists but traceability is thin, recommend `llm-wiki update` for existing code evidence or `llm-wiki add-code` when a new codebase must be connected first.

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
@@ -90,7 +91,7 @@ def rewrite_gitignore(project: Path) -> bool:
 
 def normalize_metadata_dir(value: object, project: Path) -> tuple[str, str | None]:
     text = str(value or "").strip()
-    if not text or text == "staging/wiki-export":
+    if not text or text in {"staging/wiki-export", "raw", "raw/"}:
         return CANONICAL_METADATA_DIR, None
     path_value = Path(text)
     if not path_value.is_absolute():
@@ -123,6 +124,8 @@ def normalize_wiki_sources(project: Path, *, apply: bool) -> tuple[list[str], li
             continue
         if source.get("metadata_dir") == "staging/wiki-export":
             warnings.append("legacy_wiki_export_metadata_dir")
+        if source.get("metadata_dir") in {"raw", "raw/"}:
+            warnings.append("legacy_raw_metadata_dir")
         if source.get("metadata_dir") != metadata_dir:
             source["metadata_dir"] = metadata_dir
             changed = True
@@ -155,6 +158,85 @@ def copy_legacy_state(project: Path) -> list[str]:
             actions.append(f"copied:{legacy_dir / 'export-state.json'}")
         if copy_if_missing(legacy_dir / "progress", canonical / "progress"):
             actions.append(f"copied:{legacy_dir / 'progress'}")
+    return actions
+
+
+def flatten_legacy_pages_path(value: object) -> tuple[str, bool]:
+    text = str(value or "").strip()
+    match = re.match(r"^pages-\d+/(.+)$", text)
+    if not match:
+        return text, False
+    return match.group(1), True
+
+
+def normalize_legacy_progress_page_paths(project: Path, *, apply: bool) -> list[str]:
+    actions: list[str] = []
+    progress_dirs = [
+        project / "raw" / "progress",
+        project / CANONICAL_METADATA_DIR / "progress",
+    ]
+    for progress_dir in progress_dirs:
+        if not progress_dir.is_dir():
+            continue
+        for progress_file in sorted(progress_dir.glob("*.json")):
+            payload = read_json(progress_file)
+            page_paths = payload.get("page_paths")
+            if not isinstance(page_paths, dict):
+                continue
+            changed = False
+            next_paths: dict[str, object] = {}
+            for page_id, raw_path in page_paths.items():
+                next_path, flattened = flatten_legacy_pages_path(raw_path)
+                next_paths[page_id] = next_path
+                changed = changed or flattened
+            if changed:
+                payload["page_paths"] = next_paths
+                actions.append(f"normalized_legacy_page_paths:{progress_file.relative_to(project).as_posix()}")
+                if apply:
+                    write_json(progress_file, payload)
+    return actions
+
+
+def copy_missing_tree(src: Path, dst: Path) -> int:
+    copied = 0
+    for source_path in sorted(src.rglob("*")):
+        if source_path.is_dir():
+            continue
+        relative = source_path.relative_to(src)
+        target_path = dst / relative
+        if target_path.exists():
+            continue
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, target_path)
+        copied += 1
+    return copied
+
+
+def merge_and_remove_legacy_pages_roots(project: Path, *, apply: bool) -> list[str]:
+    actions: list[str] = []
+    raw = project / "raw"
+    if not raw.is_dir():
+        return actions
+    for legacy_root in sorted(raw.glob("pages-*")):
+        if not legacy_root.is_dir() or not re.fullmatch(r"pages-\d+", legacy_root.name):
+            continue
+        page_dirs = [path for path in legacy_root.iterdir() if path.is_dir()]
+        if not page_dirs:
+            actions.append(f"removed_legacy_pages_root:{legacy_root.relative_to(project).as_posix()}")
+            if apply:
+                shutil.rmtree(legacy_root)
+            continue
+        copied_total = 0
+        for legacy_page_dir in page_dirs:
+            flat_page_dir = raw / legacy_page_dir.name
+            if apply:
+                flat_page_dir.mkdir(parents=True, exist_ok=True)
+                copied_total += copy_missing_tree(legacy_page_dir, flat_page_dir)
+        if copied_total:
+            actions.append(f"merged_legacy_pages_root_files:{legacy_root.relative_to(project).as_posix()}:{copied_total}")
+        actions.append(f"removed_legacy_pages_root:{legacy_root.relative_to(project).as_posix()}")
+        if apply:
+            shutil.rmtree(legacy_root)
     return actions
 
 
@@ -200,6 +282,8 @@ def check_project(project: Path) -> dict[str, object]:
         warnings.append("raw_not_ignored")
     if not raw_index_exists(project):
         warnings.append("raw_index_missing")
+    actions.extend(normalize_legacy_progress_page_paths(project, apply=False))
+    actions.extend(merge_and_remove_legacy_pages_roots(project, apply=False))
     source_warnings, source_blockers = normalize_wiki_sources(project, apply=False)
     warnings.extend(source_warnings)
     blockers.extend(source_blockers)
@@ -221,6 +305,8 @@ def apply_project(project: Path, *, allow_dirty: bool = False) -> dict[str, obje
     warnings.extend(source_warnings)
     blockers.extend(source_blockers)
     actions.extend(copy_legacy_state(project))
+    actions.extend(normalize_legacy_progress_page_paths(project, apply=True))
+    actions.extend(merge_and_remove_legacy_pages_roots(project, apply=True))
     if not raw_index_exists(project):
         warnings.append("raw_index_missing")
     status = "blocked" if blockers else "applied"

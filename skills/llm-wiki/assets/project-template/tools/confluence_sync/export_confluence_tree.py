@@ -39,6 +39,10 @@ RATE_LIMIT_RETRIES = 5
 RATE_LIMIT_BACKOFF_SECONDS = 3.0
 REQUEST_INTERVAL_SECONDS = 1.0
 ASSET_REQUEST_INTERVAL_SECONDS = 0.0
+DEFAULT_MAX_IMAGE_DOWNLOAD_BYTES = 5 * 1024 * 1024
+MAX_IMAGE_DOWNLOAD_BYTES = int(
+    os.environ.get("LLM_WIKI_MAX_IMAGE_DOWNLOAD_BYTES", str(DEFAULT_MAX_IMAGE_DOWNLOAD_BYTES))
+)
 BLOCK_TAGS = {
     "article",
     "blockquote",
@@ -120,14 +124,14 @@ def cookie_refresh_help(reason: str) -> str:
             reason,
             "",
             "Wiki authentication needs a valid local login state.",
-            "Recommended path: provide Guazi username, password, and phone so the bundled login helper can cache a local Cwiki login state.",
-            "The llm-wiki skill does not upload credentials or write them into the KB project; persistent SSO values live only on this computer in ~/.llm-wiki/guazi-sso.env.",
-            "guazi-sso-login exchanges those credentials for a local Cookie/login cache and reuses it until it expires.",
+            "Supported auth setup paths:",
+            "1. SSO mode: provide Guazi username, password, and phone so the bundled login helper can cache a local Cwiki login state.",
+            "2. Cookie mode: paste a full COOKIE_HEADER into ~/.llm-wiki/guazi-sso.env when the SSO token service is unreachable, for example outside non-intranet/VPN access.",
+            "The llm-wiki skill does not upload credentials or write them into the KB project; persistent auth values live only on this computer in ~/.llm-wiki/guazi-sso.env.",
             "",
-            "Terminal setup: run `bash tools/confluence_sync/init_auth_env.sh` from the KB project root, then retry the sync.",
+            "Terminal setup: run `bash tools/confluence_sync/init_auth_env.sh` from the KB project root, choose SSO or Cookie mode, then retry the sync.",
             "If the project template is not installed yet, run `bash ${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/init_auth_env.sh`.",
             "",
-            "COOKIE_HEADER is still supported as a one-off emergency credential, but it is not the recommended path.",
             "Do not commit credentials or paste them into project files.",
         ]
     )
@@ -179,13 +183,15 @@ def load_json(path: Path, default: Any) -> Any:
 def sso_env_setup_help() -> str:
     return "\n".join(
         [
-            "To enable auto-login, run `bash tools/confluence_sync/init_auth_env.sh` or export SSO credentials in the current environment:",
+            "To enable auto-login, run `bash tools/confluence_sync/init_auth_env.sh` and choose SSO or Cookie mode.",
+            "SSO mode can also be set by exporting credentials in the current environment:",
             "Optional for Jira CHDSSO auto-refresh:",
             "  export GUAZI_CHDSSO_TEST_PHONE='<phone>'",
             "  export GUAZI_CHDSSO_TEST_CODE='<code>'",
             "  # or PRE/ONLINE variants:",
             "  export GUAZI_CHDSSO_PRE_PHONE='...'; export GUAZI_CHDSSO_PRE_CODE='...'",
             "  export GUAZI_CHDSSO_ONLINE_PHONE='...'; export GUAZI_CHDSSO_ONLINE_CODE='...'",
+            "Cookie mode can be set globally in ~/.llm-wiki/guazi-sso.env as COOKIE_HEADER='<full cookie header>'.",
         ]
     )
 
@@ -1267,7 +1273,7 @@ def crawl_pages(
     max_pages: Optional[int] = None,
     depth_one_child_filter: Optional[Callable[[dict[str, Any]], bool]] = None,
 ) -> dict[str, PageNode]:
-    if progress_file:
+    if progress_file and max_pages is None:
         state = load_progress_state(progress_file, root_page_id=root_page_id, depth_limit=depth_limit)
     else:
         state = None
@@ -1657,6 +1663,35 @@ def build_page_paths(
     return paths
 
 
+def is_legacy_root_pages_path(path_value: str | Path) -> bool:
+    path = Path(path_value)
+    first_part = path.parts[0] if path.parts else ""
+    return bool(re.fullmatch(r"pages-\d+", first_part))
+
+
+def normalize_page_path_overrides(
+    pages: dict[str, PageNode],
+    output_dir: Path,
+    *,
+    pages_dir_name: str,
+    page_path_overrides: dict[str, str | Path],
+) -> dict[str, str | Path]:
+    if pages_dir_name:
+        return dict(page_path_overrides)
+    normalized: dict[str, str | Path] = {}
+    for page_id, override in page_path_overrides.items():
+        if is_legacy_root_pages_path(override):
+            page = pages.get(page_id)
+            if page is not None:
+                normalized[page_id] = path_relative_to_base(
+                    page_output_dir(output_dir, page, pages_dir_name="") / "index.md",
+                    output_dir,
+                )
+            continue
+        normalized[page_id] = override
+    return normalized
+
+
 def relpath_from(source: Path, target: Path) -> str:
     return os.path.relpath(target, start=source.parent).replace(os.sep, "/")
 
@@ -1783,21 +1818,45 @@ def download_page_images(
             asset_map[image_url] = image_path.name
             image_links[image_url] = f"assets/{image_path.name}"
             continue
-        response = send_request(
-            session,
-            image_url,
-            stream=True,
-            accept="*/*",
-            request_interval_override=getattr(session, "asset_request_interval", 0.0),
-        )
+        try:
+            response = send_request(
+                session,
+                image_url,
+                stream=True,
+                accept="*/*",
+                request_interval_override=getattr(session, "asset_request_interval", 0.0),
+            )
+        except requests.RequestException:
+            continue
         if response.status_code >= 400:
             continue
-        with image_path.open("wb") as file_obj:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    file_obj.write(chunk)
-        asset_map[image_url] = image_path.name
-        image_links[image_url] = f"assets/{image_path.name}"
+        content_length = getattr(response, "headers", {}).get("Content-Length", "").strip()
+        if content_length:
+            try:
+                if int(content_length) > MAX_IMAGE_DOWNLOAD_BYTES:
+                    continue
+            except ValueError:
+                pass
+        downloaded = 0
+        try:
+            with image_path.open("wb") as file_obj:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        downloaded += len(chunk)
+                        if downloaded > MAX_IMAGE_DOWNLOAD_BYTES:
+                            file_obj.close()
+                            image_path.unlink(missing_ok=True)
+                            break
+                        file_obj.write(chunk)
+                else:
+                    asset_map[image_url] = image_path.name
+                    image_links[image_url] = f"assets/{image_path.name}"
+                    continue
+        except requests.RequestException:
+            image_path.unlink(missing_ok=True)
+            continue
+        image_path.unlink(missing_ok=True)
+        continue
     save_asset_map(page_dir, asset_map)
     return image_links
 
@@ -2653,6 +2712,12 @@ def complete_page_path_overrides(
     pages_dir_name: str,
     page_path_overrides: dict[str, str | Path],
 ) -> dict[str, str]:
+    page_path_overrides = normalize_page_path_overrides(
+        pages,
+        output_dir,
+        pages_dir_name=pages_dir_name,
+        page_path_overrides=page_path_overrides,
+    )
     page_paths = build_page_paths(
         pages,
         output_dir,
@@ -2725,6 +2790,12 @@ def update_root_from_rss(
     effective_page_paths: dict[str, str | Path] = dict(state.get("page_paths") or {})
     if page_path_overrides:
         effective_page_paths.update(page_path_overrides)
+    effective_page_paths = normalize_page_path_overrides(
+        pages,
+        output_dir,
+        pages_dir_name=effective_pages_dir_name,
+        page_path_overrides=effective_page_paths,
+    )
     feed_entries = fetch_rss_entries(session, rss_url)
     updated_page_ids: list[str] = []
     skipped_page_ids: list[str] = []
@@ -3214,6 +3285,9 @@ def root_states_from_saved_state(metadata_dir: Path, *, raw_output_dir: Optional
 
 def main() -> int:
     args = parse_args()
+    auth_env = load_auth_env_file()
+    if not str(getattr(args, "cookie", "") or "").strip() and auth_env.get("COOKIE_HEADER"):
+        args.cookie = auth_env["COOKIE_HEADER"]
     updated_since = parse_updated_since(args.updated_since)
     if not args.url and not args.update:
         raise SystemExit("--url is required unless --update is used with a saved output directory.")
