@@ -180,7 +180,7 @@ qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
 
 ## 二级 Skill
 
-这些 `$llm-wiki-*` 是二级 skill，也就是常用命令的短入口 wrapper。它们让 Codex skill 列表里能直接发现具体能力，但不复制一套规则；真正的执行协议仍来自 `skills/llm-wiki/SKILL.md` 和 `skills/llm-wiki/references/commands.md`。
+这些 `$llm-wiki-*` 是二级 skill，也就是常用命令的短入口 wrapper。它们让 Codex skill 列表里能直接发现具体能力；执行协议来自 `skills/llm-wiki/references/core-rules.md` 与 `skills/llm-wiki/references/commands/`（按命令拆分，索引见 `commands.md`）。子入口**不要**再反向加载完整 `SKILL.md`。
 
 | 二级 skill | 等价命令 | 适用场景 |
 | --- | --- | --- |
@@ -301,7 +301,7 @@ qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
 
 ## 维护约定
 
-- 修改主协议时，优先更新 `skills/llm-wiki/SKILL.md` 和 `skills/llm-wiki/references/commands.md`。
+- 修改主协议时，更新 `skills/llm-wiki/references/commands/<command>.md` 与 `references/core-rules.md`；跨命令共享部分更新 `references/commands/_shared.md`；仅路由/阅读顺序变更时再改 `SKILL.md`。
 - 新增常用命令时，增加对应 `skills/llm-wiki-*/SKILL.md` wrapper，并同步更新本 README 的二级 skill 表。
 - 修改安装行为时，同步更新 `install.sh`、`tests/` 和安装说明。
 - 修改需求评审能力时，同步更新 `skills/requirement-review/` 和兼容入口 `skills/llm-wiki-review-requirement/`。

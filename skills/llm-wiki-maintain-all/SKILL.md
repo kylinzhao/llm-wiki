@@ -24,6 +24,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --prune-missing
 
 ## 执行规则
 
+- 读取 **llm-wiki** 包内 `references/core-rules.md`、`references/commands/_shared.md` 与 `references/commands/maintain-all.md`（不要加载完整 `SKILL.md`）。
 - 先解析当前安装的 `llm-wiki` skill 根目录，不要写死个人路径。
 - 默认 dry-run，不修改 KB。
 - 用户明确确认后才加 `--apply`。

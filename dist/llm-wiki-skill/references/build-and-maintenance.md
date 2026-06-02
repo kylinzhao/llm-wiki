@@ -289,7 +289,8 @@ graphify 是代码图谱增强层，不是业务语义基线。
 
 默认策略：
 
-- 有 `raw-code/` 且用户希望构建代码 wiki 时，优先考虑 graphify
+- 有 `raw-code/` 且用户希望构建代码 wiki 时，先做上游 `docs/wiki` 适配、确定性扫描、freshness 和候选生成；再判断 graphify 是否必要
+- 如果完整 `docs/wiki`、source-map 和 scan anchors 已足够生成候选，graphify 可以正常跳过，并在 update report 中记录 decision
 - 必须先在 `docs/tooling-dependencies.md` 或最终输出中说明依赖：Python 3.10+、`uv` 必需，`graphify` 可选
 - 每个 codebase 单独运行或单独归档输出
 - 输出放在 `staging/code-graph/<codebase_id>/graphify-out/`

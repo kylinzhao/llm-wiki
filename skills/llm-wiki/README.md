@@ -65,7 +65,7 @@
 
 `llm-wiki maintain-all` 使用本机 `~/.llm-wiki/projects.json` registry。常用操作包括 `--discover <dir>` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，以及用户确认后的 `--apply` 批量执行完整 backfill/update 维护；默认不加 `--apply` 时只输出 dry-run 计划。
 
-这些 wrapper 只负责路由。完整规则仍以 `SKILL.md` 和 [commands.md](./references/commands.md) 为准。
+这些 wrapper 只负责路由。完整规则以 `references/core-rules.md`、按命令拆分的 [references/commands/](./references/commands/) 为准；索引见 [commands.md](./references/commands.md)。子入口**不要**再反向加载完整 `SKILL.md`。
 
 ### A. 新项目 0-1
 

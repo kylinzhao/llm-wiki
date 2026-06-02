@@ -9,8 +9,8 @@ description: LLM Wiki skill bundle 自更新入口。用于显式更新本机安
 
 语言要求：本短入口的用户回答必须默认使用中文，除非用户明确要求其他语言。
 
-1. 读取 **llm-wiki** skill 包根目录下的 `SKILL.md`（路径由当前环境的 skill 安装位置解析，勿写死本机绝对路径）。
-2. 读取同包内 `references/commands.md` 的 `llm-wiki update-skill` 小节。
+1. 读取 **llm-wiki** skill 包内 `references/core-rules.md`（子入口必读；**不要**加载完整 `SKILL.md`）。
+2. 读取 `references/commands/_shared.md` 与 `references/commands/update-skill.md`。
 3. 将 `$llm-wiki-update-skill` 后面的用户文本作为 `llm-wiki update-skill` 参数。
 4. 只更新已安装的 llm-wiki skill bundle 本体；不要更新当前 KB 的 `raw/`、`wiki/`、`raw-code/` 或项目构建产物。
 5. 默认使用安全备份安装语义：`--backup`，不要使用 `--force`，除非用户明确要求丢弃旧安装。备份目录默认落在 `~/.llm-wiki-skill-backups/`（可用 `--backup-dir` 覆盖），避免把备份留在 skills 扫描目录。

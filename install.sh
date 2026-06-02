@@ -9,7 +9,7 @@ CLIENT="auto"
 DEST_OVERRIDE=""
 BACKUP_DIR_OVERRIDE=""
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC_DIR="$ROOT_DIR/skills"
+SRC_DIR="${LLM_WIKI_SKILL_SRC_DIR:-$ROOT_DIR/skills}"
 DEPRECATED_SKILLS=(
   "llm-wiki-audit"
   "llm-wiki-build-code"

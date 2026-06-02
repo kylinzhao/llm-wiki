@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Requirement Review"
+  short_description: "兼容入口，转向独立需求评审 skill"
+  default_prompt: "用 $llm-wiki-new-review-requirement review 这个需求："

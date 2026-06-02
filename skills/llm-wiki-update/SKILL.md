@@ -9,8 +9,8 @@ description: LLM Wiki 增量维护入口。用于 raw/、BUSINESS_CONTEXT.md、r
 
 语言要求：本短入口的用户回答和生成/改写的 LLM Wiki Markdown 文档必须默认使用中文，除非用户明确要求其他语言。
 
-1. 读取 **llm-wiki** skill 包根目录下的 `SKILL.md`（路径由当前环境的 skill 安装位置解析，勿写死本机绝对路径）。
-2. 读取同包内 `references/commands.md`。
+1. 读取 **llm-wiki** skill 包内 `references/core-rules.md`（子入口必读；**不要**加载完整 `SKILL.md`）。
+2. 读取 `references/commands/_shared.md` 与 `references/commands/update.md`。
 3. 将 `$llm-wiki-update` 后面的用户文本作为 `llm-wiki update` 参数。
 4. 默认协作模式：`llm-wiki update` 默认先同步共享 KB git 基线，再恢复 `raw/` / `raw-code/` 证据缓存，完成结构校验后发布共享 KB 产物。只有用户显式使用 `--local` 或 `LLM_WIKI_UPDATE_MODE=local` 时，才跳过 pull/push。共享模式不得使用 `--no-auto-raw-sync` 或 `LLM_WIKI_NO_AUTO_RAW_SYNC=1` 发布基线。
    - 如果 `git pull` / `git push` 因权限失败，中文说明缺少读取/写入权限，并提示用户申请仓库权限或检查 SSH Key / Git 凭证。

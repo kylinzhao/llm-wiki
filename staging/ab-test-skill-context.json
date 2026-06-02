@@ -1,0 +1,133 @@
+{
+  "dcn_kb": "/Users/zhaoliang/guazi/work/multi-knowledge-base-space/dcn-llm-wiki",
+  "scenarios": [
+    {
+      "scenario": "doctor (protocol + full KB list in doctor.md)",
+      "old_protocol_b": 93819,
+      "new_protocol_b": 15372,
+      "kb_b": 936814,
+      "old_total_b": 1030633,
+      "new_total_b": 952186,
+      "saved_b": 78447,
+      "saved_pct": 7.6,
+      "old_missing": [],
+      "new_missing": []
+    },
+    {
+      "scenario": "doctor (protocol + lite KB)",
+      "old_protocol_b": 93819,
+      "new_protocol_b": 15372,
+      "kb_b": 26598,
+      "old_total_b": 120417,
+      "new_total_b": 41970,
+      "saved_b": 78447,
+      "saved_pct": 65.1,
+      "old_missing": [],
+      "new_missing": []
+    },
+    {
+      "scenario": "query",
+      "old_protocol_b": 103268,
+      "new_protocol_b": 21457,
+      "kb_b": 81490,
+      "old_total_b": 184758,
+      "new_total_b": 102947,
+      "saved_b": 81811,
+      "saved_pct": 44.3,
+      "old_missing": [],
+      "new_missing": []
+    }
+  ],
+  "doctor": {
+    "schemaVersion": "doctor.v1",
+    "generated_at": "2026-06-02T08:57:36+00:00",
+    "project": ".",
+    "summary": "No blocking LLM Wiki issues found.",
+    "findings": [
+      {
+        "severity": "P1",
+        "blocking": false,
+        "title": "image_evidence_status_unknown",
+        "detail": "raw/ contains 1326 image asset(s), 164 image note(s) exist, but image evidence status is still unknown. Run `llm-wiki image` after source refinement to screen high-value visual evidence. Promoted from P2 because no P1 issue is currently active.",
+        "promote_when_no_p1": true,
+        "promoted_from": "P2"
+      },
+      {
+        "severity": "P1",
+        "blocking": false,
+        "title": "cjira_status_quality_gaps",
+        "detail": "Cjira registry has 43 stale status page(s) and 30 low-confidence primary selection(s). Refresh Jira auth/status and review low-confidence mappings before relying on lifecycle answers. Promoted from P2 because no P1 issue is currently active.",
+        "promote_when_no_p1": true,
+        "promoted_from": "P2"
+      },
+      {
+        "severity": "P1",
+        "blocking": false,
+        "title": "orphan_source_pages",
+        "detail": "3 source page(s) are not mapped back to a raw source. Sample: [\"wiki/sources/667367812-需求文档dcn源头找车v111-浏览记录-assets-html.zip.prototype.md\", \"wiki/sources/670135149-需求文档dcn源头找车v112-频道页优化-assets-prototypes-source-car-find-delivery-package-source-car-find-delivery-package-component-usage.md\", \"wiki/sources/670135149-需求文档dcn源头找车v112-频道页优化-assets-source-car-find-delivery-package.zip.prototype.md\"] Promoted from P2 because no P1 issue is currently active.",
+        "promote_when_no_p1": true,
+        "promoted_from": "P2"
+      }
+    ],
+    "maxSeverity": "P1",
+    "p0Count": 0,
+    "health": {
+      "ok": true,
+      "status": "pass",
+      "wiki_pages": 448,
+      "source_pages": 381,
+      "raw_drawio_assets": 0,
+      "drawio_repair": {
+        "drawio_count": 0,
+        "missing_evidence_count": 0,
+        "missing_evidence": [],
+        "last_report": {
+          "generated_at": "2026-05-31T03:00:28+00:00",
+          "converted_count": 0,
+          "unparsed_count": 0,
+          "changed_count": 0
+        }
+      }
+    },
+    "gplus_quality": {
+      "status": "ok",
+      "metrics": {
+        "source_pages": 381,
+        "non_index_concept_pages": 10,
+        "non_index_entity_pages": 10,
+        "concept_linked_source_pages": 373,
+        "entity_linked_source_pages": 361,
+        "concept_coverage": 0.979,
+        "entity_coverage": 0.9475,
+        "manual_link_placeholders": 0,
+        "low_density_layers": []
+      },
+      "findings": []
+    },
+    "refinement_contract": {
+      "status": "ok",
+      "semantic_update_required": false,
+      "required_count": 0,
+      "pending_count": 0,
+      "pending_status_record_count": 0,
+      "pending_marker_count": 0,
+      "missing_page_count": 0,
+      "missing_raw_path_evidence_count": 0,
+      "pending_pages": []
+    },
+    "agent_rules": {
+      "path": "AGENTS.md",
+      "exists": true,
+      "has_query_routing": true,
+      "ok": true
+    }
+  },
+  "query_smoke": {
+    "q1_business": true,
+    "q2_impl": true
+  },
+  "compliance": {
+    "old_requires_main_skill": true,
+    "new_forbids_main_skill": true
+  }
+}

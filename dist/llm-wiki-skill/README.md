@@ -65,7 +65,7 @@
 
 `llm-wiki maintain-all` 使用本机 `~/.llm-wiki/projects.json` registry。常用操作包括 `--discover <dir>` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，以及用户确认后的 `--apply` 批量执行完整 backfill/update 维护；默认不加 `--apply` 时只输出 dry-run 计划。
 
-这些 wrapper 只负责路由。完整规则仍以 `SKILL.md` 和 [commands.md](./references/commands.md) 为准。
+这些 wrapper 只负责路由。完整规则以 `references/core-rules.md`、按命令拆分的 [references/commands/](./references/commands/) 为准；索引见 [commands.md](./references/commands.md)。子入口**不要**再反向加载完整 `SKILL.md`。
 
 ### A. 新项目 0-1
 
@@ -218,7 +218,9 @@
 - 输出到 `staging/code-graph/<codebase_id>/graphify-out/`
 - 由 `llm-wiki` 将图谱结果转成可审计 Markdown
 
-`graphify` 不替代 `llm-wiki` 的业务语义协议，也不替代由 wikilink 生成的项目 `graph/`。
+如果 `raw-code/<codebase_id>/docs/wiki` 存在且签名完整，优先把它当作上游代码导航层：解析 topic、concept、source-map，再结合 `scan_code.py` 的 endpoint、route、symbol 生成候选。此时 `graphify` 默认按需运行；只有结构证据缺失、结构性变更、graphify 输出过期或查询明确需要调用/依赖关系时才运行。
+
+`graphify` 不替代 `llm-wiki` 的业务语义协议，也不替代由 wikilink 生成的项目 `graph/`。`docs/wiki` 与 graphify 都不能单独证明 `strong` traceability；强证据仍需要需求锚点和直接源码锚点。
 
 ## 7. 文档结构
 
@@ -378,10 +380,10 @@ uv run python tools/graphify_code.py --all
 依赖约定：
 
 - 必需：Python 3.10+、`uv`
-- 可选：`graphify`，用于代码图谱提取，输出归档到 `staging/code-graph/<codebase_id>/graphify-out/`
+- 可选：`graphify`，用于代码图谱提取，输出归档到 `staging/code-graph/<codebase_id>/graphify-out/`；当上游 `docs/wiki` 和 scan anchors 已足够时可正常跳过
 - 本地脚本不得调用模型 SDK；语义 summary、实体归一和能力判断可由 Codex / subagent 辅助。traceability 的模型步骤必须走 `docs/traceability-contract.md`：当前 agent 或外部 agent worker 输出 `staging/traceability/runs/<run_id>/proposals.json`，确定性工具合并到 `staging/traceability/state.json` 并渲染 Markdown。
 
-代码 wiki 的构建可以是 AI-native 编排任务，不要求一开始就写入仓库脚本。执行时先识别 codebase，再按确定性扫描、graphify 图谱、Markdown 精修、跨层链接的顺序推进。
+代码 wiki 的构建可以是 AI-native 编排任务，不要求一开始就写入仓库脚本。执行时先识别 codebase，再按上游 `docs/wiki` 适配、确定性扫描、候选生成、必要时 graphify、Markdown 精修、跨层链接的顺序推进。
 
 ## 9. 查询逻辑
 

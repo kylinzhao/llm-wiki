@@ -59,7 +59,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 `BUSINESS_CONTEXT.md` 是 0-1 构建、`fast`、`init` 和 `update` 的硬性前置。模板自带的 TODO 占位文件不算有效业务上下文；如果缺失、为空或仍是占位内容，必须先提醒用户补齐业务边界、规范实体、规则约束和证据优先级，再继续构建。
 
-若仓库**只提交了构建后的 `wiki/`**，而 `raw/` / `raw-code/` 由单独流程同步：先读 `staging/health/latest.json` 的 `evidence_gaps` / `recommended_actions`。当工具报 `missing_raw_evidence` 或 `missing_raw_code_evidence` 时，**主动提示用户**拉取原始证据后再执行 `update`；新代码库接入才使用 `add-code`，不要假装可以完整重建。只读 `query` / `doctor` 仍可按 `references/commands.md` 的 Evidence preflight 规则进行。
+若仓库**只提交了构建后的 `wiki/`**，而 `raw/` / `raw-code/` 由单独流程同步：先读 `staging/health/latest.json` 的 `evidence_gaps` / `recommended_actions`。当工具报 `missing_raw_evidence` 或 `missing_raw_code_evidence` 时，**主动提示用户**拉取原始证据后再执行 `update`；新代码库接入才使用 `add-code`，不要假装可以完整重建。只读 `query` / `doctor` 仍可按 `references/commands/_shared.md` 的 Evidence preflight 规则进行。
 
 如果项目根目录存在 `raw-code/`：
 
@@ -91,14 +91,12 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 ### 新项目 / 构建任务
 
-- `README.md`（llm-wiki 包内）
 - `references/bootstrapping.md`
 - `references/build-and-maintenance.md`
 - 如果存在 `raw-code/`：`references/code-wiki.md`
 
 ### 已有项目 / 查询任务
 
-- `README.md`（llm-wiki 包内）
 - `docs/retrieval-playbook.md`
 - `docs/build-and-maintenance.md`
 - 如果问题涉及代码实现或项目存在 `wiki/code/`：`references/code-wiki.md`
@@ -109,7 +107,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `references/wiki-structure.md`
 - `references/architecture-and-retrieval.md`
 - `references/query-logic.md`
-- `references/commands.md`
+- `references/commands/`（单命令只读 `_shared.md` + 对应文件；索引见 `commands.md`）
 - `references/subagent-handoff.md`
 - `references/image-evidence.md`
 - `references/fe-req-review-skill.md`
@@ -139,7 +137,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 ### 0. 二级命令路由
 
-`llm-wiki` 是统一入口，但推荐用二级命令降低提示词长度。看到这些命令时，先读取 llm-wiki 包内 `references/commands.md`：
+`llm-wiki` 是统一入口，但推荐用二级命令降低提示词长度。看到这些命令时，先读取 `references/commands/_shared.md` 与 `references/commands/<command>.md`：
 
 - `llm-wiki fast`：新项目一口气完成标准首轮，从输入检查到 health / graph 收口；适合用户明确希望一次性跑完。
 - `llm-wiki init`：0-1 初始化，可分阶段汇报。
@@ -156,39 +154,9 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `llm-wiki review-requirement`：对新 PRD、Cwiki 页面或需求文档做证据型需求评审，纳入 raw 原文、图片、zip 原型、前端评审和代码能力证据。
 - `llm-wiki image`：高价值图片证据补充。
 
-### 1. 阶段模型
+### 1. 阶段模型与任务模式
 
-默认阶段：
-
-1. 阶段 A：输入与状态检查
-2. 阶段 B：项目骨架初始化
-3. 阶段 C：确定性构建
-4. 阶段 D：health 初检
-5. 阶段 E：AI-native source 全量精修
-6. 阶段 F：代码 wiki / 联合知识层（当 `raw-code/` 存在且任务需要）
-7. 阶段 G：graph 构建与首轮验收
-8. 阶段 G+：综合层二次校准、查询验收、质量审查
-9. 阶段 H：选择性高价值图片证据补充
-10. 阶段 I：发布 / 提交 / 远端同步
-11. 阶段 M：后续增量维护
-
-阶段 I 的共享发布硬门禁是证据同步、health、graph、必要 anchor check 和发布范围安全。`check_refinement.py` 的 pending 或 `refinement_contract.status=needs_refinement` 不是 raw/graph/health 硬阻断，但它是 P1 自动精修任务：`update` 必须在同轮进入 agent-native source 精修队列，不能只发布后提醒用户下次处理。pending source 队列超过 10 页时，应默认使用当前环境可用的 subagent / worker 并行分片尽可能处理完整队列，分片只改互不重叠的 `wiki/sources/*`，主 agent 统一写 `staging/refinement-status.md` 并收口验证；不得把 5 页或少量样本当作默认完成策略。只有真实 blocker、工具限制、上下文耗尽或用户要求停止时才允许 checkpoint。图片证据待筛选或已 checkpoint 的语义层待加厚可作为 `usable-with-gaps` 发布。raw-code 权限失败、非受管、损坏、dirty 或不能 fast-forward 是硬阻断，应在写入 raw/wiki/staging 产物前停止，并让用户先修权限/凭证或显式切换本机模式。
-
-### 2. 新项目优先构建，不优先查询
-
-如果项目还没有 `wiki/` 骨架，应先做：
-
-1. 检查 `raw/` 和 `BUSINESS_CONTEXT.md`
-2. 初始化目录结构
-3. 运行确定性构建
-4. 对全量语料完成首轮大模型 summary 与 AI-native 精修
-5. 如果存在 `raw-code/`，构建代码 wiki 与需求-代码跨层链接
-6. 默认进入阶段 G+：二次校准 concepts/entities/truth/conflicts/evidence/proposals/reference/operations，生成或刷新 query acceptance 与 G+ quality audit
-7. 运行健康检查
-8. 最后构建 graph
-
-这里的“首轮大模型 summary 与 AI-native 精修”是 0-1 初始化的必要环节，不应只停留在骨架、索引和占位页。
-可以按 `sources -> layered pages -> concepts/entities -> G+ 综合层` 分层推进，但默认应在同一轮里一口气完成，而不是把全量精修或 G+ 加厚留到后续再补。只有 hard blocker 或用户显式要求“只建骨架/跳过 G+”时，0-1 才能停在 G+ 之前，并且最终报告必须把 G+ 标为 pending。
+见 `references/stage-model.md`。各 `$llm-wiki-*` 子入口读 `references/core-rules.md` 摘要即可。
 
 ### 3. 已有项目优先读 BUSINESS_CONTEXT
 
@@ -371,127 +339,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 
 ## 输出要求
 
-### 构建任务
+各任务类型的报告字段见 `references/output-formats.md`。
 
-至少说明：
 
-1. 当前处于哪个阶段
-2. 缺什么输入
-3. 先执行哪些命令
-4. 首轮是否包含全量 summary / AI-native 精修
-5. 是否存在 `raw-code/`，会纳入哪些 `codebase_id`
-6. 是否使用 `graphify`，输出位置在哪里
-7. 哪些需求页面、代码页面和能力页面会在本轮被一口气做完，哪些只能明确留待后续
-8. 当前是否是续跑；如果是，说明从哪个 checkpoint 或状态文件继续
-
-### 查询任务
-
-至少说明：
-
-1. 查询类型
-2. 检索路径
-3. 结论
-4. 支撑页面
-5. 未决点
-6. 如果涉及代码，区分“需求文档证明”“代码实现证明”“推断”“缺失证据”
-
-### 审查任务
-
-必须 findings first。
-
-### Doctor 任务
-
-只读诊断，至少说明：
-
-1. 当前阶段和整体 verdict
-2. 输入层：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`
-3. 文档层：sources、layered pages、concepts、entities、G+ 产物
-4. 代码层：codebases、capabilities、traceability、graphify
-5. 校验层：health、broken links、graph、可选 anchor check
-6. 风险与缺口
-7. 优先级建议和下一步命令
-8. 图片证据层：`raw/` 图片资产数量、`staging/image-notes/` 状态、是否应进入阶段 H、优先候选页面
-9. G+ semantic thickness：source 数与非 index concepts/entities 数、source-to-concept/entity 覆盖率、manual concept/entity placeholder、truth/evidence/proposals/operations/reference 是否 index-only 或低密度；这些问题按 P1/P2 报告，不因 health pass 而忽略
-10. P2 消化规则：如果 doctor / update 当前没有 P0/P1，重要 P2（图片证据 unknown、Cjira 状态质量、orphan source、G+ 薄层等）应提权为 P1，避免长期沉底
-
-### G+ 任务
-
-至少说明：
-
-1. source 精修是否已完成
-2. concepts/entities/truth/conflicts/evidence/proposals/reference/operations 的二次校准状态
-3. `docs/query-acceptance.md` 状态
-4. `docs/gplus-quality-audit.md` 状态
-5. health / broken wikilinks / graph 状态
-6. 图片证据层是否仍待阶段 H；若待处理，给出 `llm-wiki image` 作为建议下一步
-7. 如果 `tools/update_wiki.py` 或 `tools/doctor.py` 报 `gplus_quality.status=needs_attention`，必须说明是 P1/P2 语义层欠拟合还是可接受的窄域薄层；P1/P2 时优先在本轮 update 完成 G+ semantic expansion。若没有其他 P0/P1，重要 P2 欠拟合提权为 P1 处理
-
-### 代码 wiki 任务
-
-至少说明：
-
-1. codebases discovered
-2. graphify status
-3. pages created or updated
-4. capability coverage
-5. frontend-backend mappings
-6. requirement evidence linked
-7. code evidence linked
-8. inference-only links
-9. missing evidence
-10. validation results
-
-### 追踪矩阵任务
-
-至少说明：
-
-1. 覆盖的业务能力和需求点
-2. 需求来源
-3. 前端页面 / 组件 / URI
-4. Controller / Dubbo / Service / Method
-5. 配置 / 表字段 / 消息 / 任务
-6. 证据强度：`strong`、`partial`、`inferred`、`external`、`missing`
-7. 关键代码锚点
-8. 外部系统边界和缺口
-
-## 推荐入口
-
-### 中文短入口
-
-`用 $llm-wiki fast 从 raw/ 和 BUSINESS_CONTEXT.md 初始化新项目，并按标准顺序一次性完成首轮构建、精修、代码 wiki、验收、health 和 graph。`
-
-`用 $llm-wiki doctor 诊断整个 LLM Wiki 站点状态，告诉我哪里健康、哪里缺口最大、下一步建议怎么做。`
-
-`用 $llm-wiki update 响应这次文档或代码变更。先判断影响范围；如果项目已配置 raw 或接入了 raw-code codebase，就先默认刷新它们，再只更新受影响的 source、concept/entity、code/capability/traceability 页面，最后跑 health 和 graph。`
-
-`用 $llm-wiki add-wiki 添加这个文档目录或 wiki URL 到当前项目。保持 raw 不可变，把来源关系、层级、RSS 和筛选条件统一写入 upstream/wiki-sources.json；如果是 wiki URL，尝试推导 RSS，失败则要求我手动提供 RSS。`
-
-`用 $llm-wiki add-code 添加这个代码项目到当前项目。把它作为 raw-code 下独立 codebase，构建代码 wiki 和必要的能力链接。`
-
-`用 $llm-wiki update 继续维护这个项目。先读 BUSINESS_CONTEXT.md 和当前状态，从未完成阶段续跑，不要重建已完成内容。`
-
-`用 $llm-wiki update 刷新需求+代码联合 wiki 和需求到代码追踪矩阵，说明需求点、前端、后端、Service、表、消息和证据强度。`
-
-`用 $llm-wiki 查询这个问题。先读 BUSINESS_CONTEXT.md，说明查询类型、检索路径、结论、支撑页面和未决点。`
-
-### 新项目初始化
-
-`Use $llm-wiki to bootstrap a new LLM Wiki project from raw/ and BUSINESS_CONTEXT.md. Explain the phases first, then initialize the structure, build deterministic outputs, and tell me what still needs AI-native refinement.`
-
-`Use $llm-wiki to bootstrap a new LLM Wiki project from raw/ and BUSINESS_CONTEXT.md. Treat first-pass full-corpus summary and AI-native refinement as part of the initial build, not as an optional later cleanup. You may process it layer by layer, but finish the full first-round corpus build in one run if feasible.`
-
-### 查询已有 wiki
-
-`Use $llm-wiki against this project. Read BUSINESS_CONTEXT.md first, state the query type and retrieval path, then answer with supporting wiki pages and unresolved points. If the question is business-only, do not include detailed code evidence unless necessary.`
-
-### 质量审查
-
-`Use $llm-wiki doctor to review this wiki project. Check entry usability, semantic consistency, retrieval usefulness, layered-page quality, and concept/entity conflicts. Put findings first with file paths and a final usability verdict.`
-
-### 需求 + 代码联合 wiki
-
-`Use $llm-wiki to build a joint business-and-code LLM Wiki. Read BUSINESS_CONTEXT.md first, treat raw/ as immutable business evidence, treat raw-code/* as separate codebases, use graphify when available for code graph extraction, then create wiki/code/codebases and wiki/code/capabilities pages that link code facts back to concepts, entities, and source documents.`
-
-### 代码实现查询
-
-`Use $llm-wiki against this project. Read BUSINESS_CONTEXT.md first, then answer this implementation question by checking wiki/code/codebases, wiki/code/capabilities, concepts/entities, and source documents. Clearly separate requirement evidence, code evidence, inference, and missing evidence.`
+> 人类读者概览见包内 `README.md`；agent 执行单条 `$llm-wiki-*` 时不必为协议读取 README。

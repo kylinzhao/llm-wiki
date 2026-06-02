@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Update"
+  short_description: "按影响范围更新 raw、raw-code 和相关 wiki 页面"
+  default_prompt: "用 $llm-wiki-new-update 更新当前项目。"

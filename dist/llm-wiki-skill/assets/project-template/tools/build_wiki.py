@@ -164,6 +164,8 @@ def source_page(source: dict[str, object], project: Path) -> str:
         "primary_cjira": cjira["primary_cjira"],
         "supporting_cjira": cjira["supporting_cjira"],
         "primary_cjira_status": cjira["primary_cjira_status"],
+        "cjira_status_source": cjira["status_source"],
+        "primary_cjira_legacy_project_jira_reference": cjira["primary_cjira_legacy_project_jira_reference"],
         "last_checked_at": cjira["last_checked_at"],
         "cjira_confidence": cjira["confidence"],
         "ai_refinement_state": "pending",
@@ -186,6 +188,7 @@ def source_page(source: dict[str, object], project: Path) -> str:
 - Primary Jira: `{cjira['primary_cjira'] or 'none'}`
 - Supporting Jira: {supporting}
 - Jira Status: `{cjira['primary_cjira_status']}`
+- Jira Status Source: `{cjira['status_source']}`
 - Last Checked: `{cjira['last_checked_at']}`
 - Confidence: `{cjira['confidence']}`
 
@@ -249,6 +252,7 @@ def delivery_tracking_block(cjira: dict[str, object]) -> str:
         f"- Primary Jira: `{cjira['primary_cjira'] or 'none'}`\n"
         f"- Supporting Jira: {supporting}\n"
         f"- Jira Status: `{cjira['primary_cjira_status']}`\n"
+        f"- Jira Status Source: `{cjira['status_source']}`\n"
         f"- Last Checked: `{cjira['last_checked_at']}`\n"
         f"- Confidence: `{cjira['confidence']}`\n"
     )
@@ -271,6 +275,8 @@ def source_metadata_payload(
             "primary_cjira": cjira["primary_cjira"],
             "supporting_cjira": cjira["supporting_cjira"],
             "primary_cjira_status": cjira["primary_cjira_status"],
+            "cjira_status_source": cjira["status_source"],
+            "primary_cjira_legacy_project_jira_reference": cjira["primary_cjira_legacy_project_jira_reference"],
             "last_checked_at": cjira["last_checked_at"],
             "cjira_confidence": cjira["confidence"],
             "ai_refinement_state": metadata.get("ai_refinement_state", "pending"),

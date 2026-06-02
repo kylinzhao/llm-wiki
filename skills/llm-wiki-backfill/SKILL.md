@@ -15,14 +15,15 @@ description: LLM Wiki 存量知识库历史证据补全入口。用于老版本 
 
 ## 执行顺序
 
-1. 解析当前安装的 `llm-wiki` skill 包根目录，不要写死个人本机路径。
-2. 先刷新项目 engine-owned 工具和 agent rules：
+1. 读取 **llm-wiki** 包内 `references/core-rules.md`、`references/commands/_shared.md` 与 `references/commands/backfill.md`（不要加载完整 `SKILL.md`）。
+2. 解析当前安装的 `llm-wiki` skill 包根目录，不要写死个人本机路径。
+3. 先刷新项目 engine-owned 工具和 agent rules：
 
    ```bash
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD" --engine-only --refresh-agent-rules
    ```
 
-3. 运行项目内 backfill 工具：
+4. 运行项目内 backfill 工具：
 
    ```bash
    uv run python tools/backfill.py
@@ -34,14 +35,14 @@ description: LLM Wiki 存量知识库历史证据补全入口。用于老版本 
    python3 tools/backfill.py
    ```
 
-4. 读取 `staging/backfill/latest.json` 和 `latest.md`。
-5. 如果 `refinement_absorption_required=true`，默认继续执行 `llm-wiki update` 语义，吸收新增证据：
+5. 读取 `staging/backfill/latest.json` 和 `latest.md`。
+6. 如果 `refinement_absorption_required=true`，默认继续执行 `llm-wiki update` 语义，吸收新增证据：
    - 精修受影响 `wiki/sources/*`。
    - 刷新相关 concepts/entities。
    - 刷新 truth/conflicts/evidence/proposals/operations/reference。
    - 刷新 query acceptance 和 G+ quality audit。
    - 运行 health、graph 和必要 anchor checks。
-6. 如果 backfill 没有产生证据变化，运行或建议 `llm-wiki doctor` 做只读确认即可。
+7. 如果 backfill 没有产生证据变化，运行或建议 `llm-wiki doctor` 做只读确认即可。
 
 ## Backfill 范围
 

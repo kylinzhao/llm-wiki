@@ -2,14 +2,16 @@
 
 ## 1. 默认顺序
 
-1. 判断问题类型
-2. 读取 `BUSINESS_CONTEXT.md`
-3. 提取关键词与近义词
-4. 选择优先目录层
-5. 扩展 `concepts / entities`
-6. 回到 `sources`
-7. 必要时回 `raw/`
-8. 只有当问题明确涉及代码实现、系统架构、接口、调用链、落地状态、测试追踪或用户调用 `query-plus` 时，才进入 `wiki/code/`
+1. 读取 `BUSINESS_CONTEXT.md`，把它作为业务语义基线。
+2. 判断查询意图，不要直接从模型记忆、单个 `rg` 命中或孤立代码片段下结论。
+3. 先查 `wiki/overview.md`，确认站点范围、主链路和已知缺口。
+4. 按查询意图选择专项目录层：`truth`、`conflicts`、`evidence`、`proposals`、`reference`、`operations`。
+5. 使用 `concepts / entities` 作为通用扩展层，扩展主题、实体、别名和相关来源。
+6. 回到 `sources` 找直接需求/业务证据。
+7. 必要时回 `raw/` 核验原始证据。
+8. 只有当问题明确涉及代码实现、系统架构、接口、调用链、落地状态、测试追踪或用户调用 `query-plus` 时，才进入 `wiki/code/`。
+
+`concepts / entities` 不是最终证据层，也不替代 `evidence / operations / proposals / reference / truth / conflicts`。前者负责跨来源导航、实体归一和别名扩展；后者负责按问题意图定位候选事实视图。最终结论仍要回到 `sources` 或 `raw/` 支撑。
 
 ## 2. 查询模式
 
@@ -17,7 +19,7 @@
 
 默认按问题意图分流：
 
-- **业务知识 / 产品规则 / 需求口径 / 术语解释**：只回答业务与需求结论，优先使用 `BUSINESS_CONTEXT.md`、`concepts`、`entities`、`truth`、`reference`、`sources`、`conflicts`、`evidence`、`proposals`、`operations`。不要主动展开代码实现细节；如需说明实现相关性，只用一句话标注“本回答未核验代码实现”或“如需代码落地证据请使用 `llm-wiki query-plus`”。
+- **业务知识 / 产品规则 / 需求口径 / 术语解释**：只回答业务与需求结论，优先使用 `BUSINESS_CONTEXT.md`、`overview`、按问题类型命中的专项目录层、`concepts`、`entities`、`sources`。不要主动展开代码实现细节；如需说明实现相关性，只用一句话标注“本回答未核验代码实现”或“如需代码落地证据请使用 `llm-wiki query-plus`”。
 - **代码实现 / 接口 / 架构 / 调用链 / 源码位置 / 前后端映射 / 实现状态**：正常进入 `wiki/code/`，按代码证据回答规则输出需求证据、代码证据、推断和缺失证据。
 - **业务逻辑是否已实现 / 需求落在哪里 / 线上行为和代码是否一致**：这是业务与代码交叉问题，`query` 可以进入 `wiki/code/`，但回答应比 `query-plus` 更克制，只输出完成结论所需的关键代码证据。
 
@@ -44,6 +46,8 @@
 - 基于命名、图谱或矩阵的推断
 
 ## 3. 优先目录层
+
+先用问题类型选择专项目录层，再用 `concepts / entities` 扩展和归一，最后回到 `sources` 或 `raw/` 核验证据。
 
 ### 问题 / 风险
 
@@ -76,8 +80,8 @@
 ### 代码实现 / 架构 / 调用链
 
 - `wiki/code/traceability`
-- `wiki/code/codebases`
 - `wiki/code/capabilities`
+- `wiki/code/codebases`
 - `concepts`
 - `entities`
 - `sources`
@@ -107,7 +111,7 @@
 1. 不默认列出 `wiki/code/` 页面
 2. 不展开 service / controller / endpoint / class / table / job 等实现细节
 3. 不把“代码里有某接口”作为业务结论的主要证据
-4. 结论优先来自业务上下文、需求文档、来源页、概念页、实体页、truth/reference/operations 等业务层页面
+4. 结论优先来自业务上下文、需求文档、来源页、按意图命中的专项目录层、概念页和实体页
 5. 如业务证据不足，可以说明“业务证据不足”，不要用代码实现补成业务规则
 6. 如用户需要实现落地验证，建议改用 `llm-wiki query-plus`
 

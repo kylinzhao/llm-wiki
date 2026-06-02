@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Query"
+  short_description: "按意图回答 wiki 问题，业务问题默认少带代码证据"
+  default_prompt: "用 $llm-wiki-new-query 回答这个问题："

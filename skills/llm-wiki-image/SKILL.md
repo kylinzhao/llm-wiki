@@ -9,8 +9,8 @@ description: LLM Wiki 图片证据入口。用于用户明确要求在文本层�
 
 语言要求：本短入口的用户回答和生成/改写的 LLM Wiki Markdown 文档必须默认使用中文，除非用户明确要求其他语言。
 
-1. 读取 **llm-wiki** skill 包根目录下的 `SKILL.md`（路径由当前环境的 skill 安装位置解析，勿写死本机绝对路径）。
-2. 读取同包内 `references/commands.md`。
+1. 读取 **llm-wiki** skill 包内 `references/core-rules.md`（子入口必读；**不要**加载完整 `SKILL.md`）。
+2. 读取 `references/commands/_shared.md` 与 `references/commands/image.md`。
 3. 读取同包内 `references/image-evidence.md`。
 4. 若候选页面或图片较多，读取同包内 `references/subagent-handoff.md`，并优先使用 subagent 并发处理互不重叠的页面/图片批次。
 5. 将 `$llm-wiki-image` 后面的用户文本作为 `llm-wiki image` 参数。

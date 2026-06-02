@@ -19,6 +19,17 @@ def load_export_confluence_tree():
 
 
 class ExportConfluenceJiraAuthTest(unittest.TestCase):
+    def test_cookie_refresh_help_includes_persistent_cookie_fallback(self):
+        export_confluence = load_export_confluence_tree()
+
+        output = export_confluence.cookie_refresh_help("expired")
+
+        self.assertIn("SSO", output)
+        self.assertIn("COOKIE_HEADER", output)
+        self.assertIn("~/.llm-wiki/guazi-sso.env", output)
+        self.assertIn("non-intranet", output)
+        self.assertNotIn("one-off emergency", output)
+
     def test_jira_chdsso_is_not_auto_resolved_unless_enabled(self):
         export_confluence = load_export_confluence_tree()
 

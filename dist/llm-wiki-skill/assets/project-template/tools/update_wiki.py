@@ -18,13 +18,19 @@ from urllib.parse import urlparse
 
 import yaml
 from agent_rules import refresh_agent_rules
+from backfill import pass_refinement_state_reconcile
+from graphify_code import decide_graphify_action
 from gplus_quality import inspect_gplus_quality
+from raw_code_manager import RawCodeManagerError, is_permission_error, managed_code_sync_specs as declared_code_sync_specs, read_codebase_metadata
+from refinement_contract import summarize_refinement_contract
 from project_registry import best_effort_register_current_project
-from raw_code_manager import read_codebase_metadata
+import shared_update
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
 
 CANONICAL_WIKI_EXPORT_METADATA_DIR = "staging/wiki-export-state"
+CWIKI_SMOKE_MAX_PAGES_ENV = "LLM_WIKI_CWIKI_SMOKE_MAX_PAGES"
+CWIKI_SMOKE_RSS_MAX_RESULTS_ENV = "LLM_WIKI_CWIKI_SMOKE_RSS_MAX_RESULTS"
 
 
 def utc_now() -> str:
@@ -55,6 +61,27 @@ def run_command(command: str | Sequence[str], cwd: Path) -> int:
     return subprocess.call(command, cwd=cwd, shell=shell)
 
 
+class CommandResult:
+    def __init__(self, returncode: int, stdout: str = "", stderr: str = ""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def run_captured_command(command: str | Sequence[str], cwd: Path) -> CommandResult:
+    if isinstance(command, str):
+        display = command
+        shell = True
+    else:
+        display = shlex.join(command)
+        shell = False
+    print("+ " + display)
+    result = subprocess.run(command, cwd=cwd, shell=shell, capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout, end="")
+    return CommandResult(result.returncode, result.stdout, result.stderr)
+
+
 def load_yaml_dict(path: Path) -> dict:
     if not path.is_file():
         return {}
@@ -72,6 +99,22 @@ def read_json_if_present(path: Path) -> object | None:
 def write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def positive_int_env(name: str, env: dict[str, str] | None = None) -> int | None:
+    values = os.environ if env is None else env
+    raw = str(values.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
+def cwiki_smoke_limits_active(env: dict[str, str] | None = None) -> bool:
+    return positive_int_env(CWIKI_SMOKE_MAX_PAGES_ENV, env) is not None or positive_int_env(CWIKI_SMOKE_RSS_MAX_RESULTS_ENV, env) is not None
 
 
 def write_failure_report(project: Path, failed_step: str, returncode: int, details: dict[str, object] | None = None) -> None:
@@ -104,17 +147,26 @@ def write_failure_report(project: Path, failed_step: str, returncode: int, detai
     (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_success_report(project: Path, skipped_steps: list[str] | None = None) -> None:
+def write_success_report(
+    project: Path,
+    skipped_steps: list[str] | None = None,
+    graphify_decisions: list[dict[str, object]] | None = None,
+    auto_reconcile: dict[str, object] | None = None,
+) -> None:
     report_dir = project / "staging" / "update"
     report_dir.mkdir(parents=True, exist_ok=True)
     health = read_json_if_present(project / "staging" / "health" / "latest.json")
     gplus_quality = inspect_gplus_quality(project, health if isinstance(health, dict) else {})
+    refinement_contract = summarize_refinement_contract(project)
     payload = {
         "version": 1,
         "status": "ok",
         "generated_at": utc_now(),
         "skipped_steps": skipped_steps or [],
+        "graphify_decisions": graphify_decisions or [],
+        "auto_reconcile": auto_reconcile or {},
         "gplus_quality": gplus_quality,
+        "refinement_contract": refinement_contract,
     }
     (report_dir / "latest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     lines = [
@@ -129,6 +181,26 @@ def write_success_report(project: Path, skipped_steps: list[str] | None = None) 
     if skipped_steps:
         for step in skipped_steps:
             lines.append(f"- `{step}`")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Auto Reconcile", ""])
+    if auto_reconcile:
+        lines.append(f"- Status: `{auto_reconcile.get('status', 'unknown')}`")
+        lines.append(f"- Changed source pages: `{auto_reconcile.get('changed_count', 0)}`")
+        reconciled = list(auto_reconcile.get("reconciled_source_pages") or [])
+        if reconciled:
+            lines.append("- Reconciled source pages: " + ", ".join(f"`{item}`" for item in reconciled[:20]))
+        else:
+            lines.append("- Reconciled source pages: none")
+    else:
+        lines.append("- None")
+    lines.extend(["", "## Graphify Decisions", ""])
+    if graphify_decisions:
+        for decision in graphify_decisions:
+            lines.append(
+                f"- `{decision.get('codebase_id', 'unknown')}`: `{decision.get('decision', 'unknown')}` "
+                f"(should_run=`{decision.get('should_run', False)}`) - {decision.get('reason', '')}"
+            )
     else:
         lines.append("- None")
     lines.extend(
@@ -155,7 +227,36 @@ def write_success_report(project: Path, skipped_steps: list[str] | None = None) 
         )
     else:
         lines.append("- No G+ semantic underfit finding from deterministic heuristics.")
+    lines.extend(["", "## Source Refinement Contract", ""])
+    if refinement_contract["status"] == "needs_refinement":
+        lines.extend(
+            [
+                "- Status: `needs_refinement`",
+                f"- Required source pages: `{refinement_contract['required_count']}`",
+                f"- Pending source pages: `{refinement_contract['pending_count']}`",
+                "",
+                "Next action: the current `llm-wiki update` agent must run Codex-native source refinement for these pages before final closure; this is a P1 automatic update task, not a user follow-up.",
+            ]
+        )
+    else:
+        lines.append(f"- Status: `{refinement_contract['status']}`")
     (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def collect_graphify_decisions(project: Path, requested: bool = False) -> list[dict[str, object]]:
+    raw_code = project / "raw-code"
+    if not raw_code.is_dir():
+        return []
+    return [
+        decide_graphify_action(project, path.name, requested=requested)
+        for path in sorted(raw_code.iterdir())
+        if path.is_dir()
+    ]
+
+
+def run_update_reconcile(project: Path) -> dict[str, object]:
+    """Repair old source refinement state anomalies without running full backfill."""
+    return pass_refinement_state_reconcile(project)
 
 
 def health_failure_details(project: Path) -> dict[str, object]:
@@ -398,8 +499,17 @@ def source_updated_since(source: dict[str, object]) -> str:
     return str(filters.get("updated_since") or source.get("updated_since") or "").strip()
 
 
+def output_dir_has_confluence_pages(output_dir: Path) -> bool:
+    """Return true when the ignored raw cache contains exported page bodies."""
+    if not output_dir.is_dir():
+        return False
+    return any(path.is_file() for path in output_dir.glob("*/index.md"))
+
+
 def has_saved_confluence_progress(metadata_dir: Path, output_dir: Path, page_id: str, depth: int) -> bool:
-    """Return true when an RSS update has a crawl progress state to resume from."""
+    """Return true when an RSS update has both progress state and raw pages."""
+    if not output_dir_has_confluence_pages(output_dir):
+        return False
     candidates = [
         metadata_dir / "progress" / f"{page_id}.json",
         output_dir / "progress" / f"{page_id}.json",
@@ -596,6 +706,12 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         rss_url = str(source.get("rss_url") or "").strip()
         if page_id and rss_url:
             command.extend(["--rss-url", f"{page_id}={rss_url}"])
+        smoke_max_pages = positive_int_env(CWIKI_SMOKE_MAX_PAGES_ENV)
+        if smoke_max_pages is not None:
+            command.extend(["--max-pages", str(smoke_max_pages)])
+        smoke_rss_max = positive_int_env(CWIKI_SMOKE_RSS_MAX_RESULTS_ENV)
+        if smoke_rss_max is not None:
+            command.extend(["--rss-max-results", str(smoke_rss_max)])
         commands.append(command)
 
     for metadata_dir, grouped_sources in sorted(saved_state_groups.items()):
@@ -626,6 +742,9 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
                 command.extend(["--rss-url", f"{page_id}={rss_url}"])
         if any(source.get("rss_include_new") is not False for source in grouped_sources):
             command.append("--rss-include-new")
+        smoke_rss_max = positive_int_env(CWIKI_SMOKE_RSS_MAX_RESULTS_ENV) or positive_int_env(CWIKI_SMOKE_MAX_PAGES_ENV)
+        if smoke_rss_max is not None:
+            command.extend(["--rss-max-results", str(smoke_rss_max)])
         commands.append(command)
     return commands
 
@@ -673,7 +792,7 @@ def iter_codebases(project: Path) -> list[Path]:
     return sorted(path for path in raw_code.iterdir() if path.is_dir())
 
 
-def managed_code_sync_specs(project: Path) -> tuple[list[dict[str, object]], str | None]:
+def legacy_managed_code_sync_specs(project: Path) -> tuple[list[dict[str, object]], str | None]:
     specs: list[dict[str, object]] = []
     for path in iter_codebases(project):
         metadata = read_codebase_metadata(path)
@@ -685,11 +804,30 @@ def managed_code_sync_specs(project: Path) -> tuple[list[dict[str, object]], str
     return specs, None
 
 
-def run_code_sync(project: Path) -> int:
-    specs, error = managed_code_sync_specs(project)
-    if error:
-        print(error, file=sys.stderr)
-        return 2
+def run_code_sync(project: Path, shared_mode: bool = False) -> int:
+    manifest_backed = any(
+        [
+            (project / "upstream" / "code-sources.json").is_file(),
+            (project / "wiki" / "code").exists(),
+            (project / "staging" / "code-graph").exists(),
+        ]
+    )
+    if manifest_backed:
+        try:
+            specs = declared_code_sync_specs(project, shared_mode=shared_mode)
+        except RawCodeManagerError as exc:
+            if exc.code == "code_source_config_failed":
+                print(f"{exc.code}: 代码证据源配置无效：{exc.message}", file=sys.stderr)
+            elif exc.code == "evidence_failed":
+                print(f"{exc.code}: 代码证据恢复失败：{exc.message}", file=sys.stderr)
+            else:
+                print(f"{exc.code}: {exc.message}", file=sys.stderr)
+            return 2
+    else:
+        specs, error = legacy_managed_code_sync_specs(project)
+        if error:
+            print(error, file=sys.stderr)
+            return 2
     for spec in specs:
         cwd = spec["cwd"]
         assert isinstance(cwd, Path)
@@ -705,9 +843,21 @@ def run_code_sync(project: Path) -> int:
             return 2
         command = spec["command"]
         assert isinstance(command, (str, list))
-        code = run_command(command, cwd)
-        if code != 0:
-            return code
+        result = run_captured_command(command, cwd)
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            if is_permission_error(detail):
+                message = f"代码仓库同步失败：请先获取代码仓库读取权限后重试。详情：{detail}"
+                if shared_mode:
+                    message += (
+                        "\n共享模式已阻断，本轮不会继续生成或发布 KB 产物。"
+                        "请先申请代码仓库权限或检查 SSH Key / Git 凭证；"
+                        "如果只想在本机试跑，请显式使用 LLM_WIKI_UPDATE_MODE=local 或 $llm-wiki-update --local。"
+                    )
+                print(message, file=sys.stderr)
+            else:
+                print(f"代码仓库同步失败：请检查网络、分支或 fast-forward 状态。详情：{detail}", file=sys.stderr)
+            return result.returncode
     return 0
 
 
@@ -774,20 +924,46 @@ def main() -> int:
         action="store_true",
         help="Skip automatic AGENTS.md query-routing rule maintenance.",
     )
+    parser.add_argument("--local", action="store_true", help="Run as an explicit local-only update.")
+    parser.add_argument("--shared", action="store_true", help="Run as a shared update. This is the default.")
     args = parser.parse_args()
 
     project = Path(args.project).resolve()
+    raw_sync_command = args.raw_sync_command.strip()
+    no_auto_raw_sync = args.no_auto_raw_sync or os.environ.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
+    update_mode = "local" if args.local or os.environ.get("LLM_WIKI_UPDATE_MODE") == "local" else "shared"
+    if args.shared:
+        update_mode = "shared"
+    shared_mode = update_mode == "shared"
+
+    if shared_mode:
+        if cwiki_smoke_limits_active():
+            print(
+                "Cwiki smoke 限流只允许用于本机/临时测试。共享模式会发布 KB 基线，"
+                "请移除限流环境变量或显式使用 --local / LLM_WIKI_UPDATE_MODE=local。",
+                file=sys.stderr,
+            )
+            return 2
+        preflight = shared_update.shared_preflight(project, no_auto_raw_sync, interactive=False)
+        if preflight.status != "ok":
+            print(preflight.message, file=sys.stderr)
+            return 2
+
     best_effort_register_current_project(project)
     if not args.no_agent_rules_refresh:
         print(f"agent_rules={refresh_agent_rules(project)}")
 
     tools = project / "tools"
-    raw_sync_command = args.raw_sync_command.strip()
-    no_auto_raw_sync = args.no_auto_raw_sync or os.environ.get("LLM_WIKI_NO_AUTO_RAW_SYNC") == "1"
     skipped_steps: list[str] = []
     if no_auto_raw_sync:
         skipped_steps.append("auto_raw_sync")
         skipped_steps.append("confluence_sync")
+
+    code = run_code_sync(project, shared_mode=shared_mode)
+    if code != 0:
+        if not shared_mode:
+            write_failure_report(project, "code_sync", code)
+        return code
 
     code, failed_step = prepare_raw_evidence(project, raw_sync_command, no_auto_raw_sync)
     if code != 0:
@@ -804,11 +980,6 @@ def main() -> int:
     code = run_drawio_repair(project)
     if code != 0:
         write_failure_report(project, "drawio_repair", code)
-        return code
-
-    code = run_code_sync(project)
-    if code != 0:
-        write_failure_report(project, "code_sync", code)
         return code
 
     steps = deterministic_steps(tools, graphify=bool(args.graphify))
@@ -832,7 +1003,19 @@ def main() -> int:
             if script.name != "health.py":
                 break
     if exit_code == 0:
-        write_success_report(project, skipped_steps=skipped_steps)
+        auto_reconcile = run_update_reconcile(project)
+        write_success_report(
+            project,
+            skipped_steps=skipped_steps,
+            graphify_decisions=collect_graphify_decisions(project, requested=bool(args.graphify)),
+            auto_reconcile=auto_reconcile,
+        )
+        if shared_mode:
+            publish = shared_update.publish_shared_baseline(project)
+            if publish.message:
+                print(publish.message)
+            if publish.status not in {"published", "no_changes"}:
+                return 2
     return exit_code
 
 

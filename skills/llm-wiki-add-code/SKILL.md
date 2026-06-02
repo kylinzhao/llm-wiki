@@ -9,8 +9,8 @@ description: LLM Wiki 添加代码库入口。用于把另一个本地项目、�
 
 语言要求：本短入口的用户回答和生成/改写的 LLM Wiki Markdown 文档必须默认使用中文，除非用户明确要求其他语言。
 
-1. 读取 **llm-wiki** skill 包根目录下的 `SKILL.md`（路径由当前环境的 skill 安装位置解析，勿写死本机绝对路径）。
-2. 读取同包内 `references/commands.md`。
+1. 读取 **llm-wiki** skill 包内 `references/core-rules.md`（子入口必读；**不要**加载完整 `SKILL.md`）。
+2. 读取 `references/commands/_shared.md` 与 `references/commands/add-code.md`。
 3. 将 `$llm-wiki-add-code` 后面的用户文本作为代码路径和 `llm-wiki add-code` 参数。
 4. 代码证据只能通过受管 git checkout 形式落在 `raw-code/<codebase_id>/`，不要混入 `raw/`，也不要复制、软链或登记外部路径来凑协议。
 5. 如果发现仓库权限缺失、clone/fetch 无法读取、或目标目录已存在且不干净，必须立即终止，不要写半成品 raw-code。

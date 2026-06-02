@@ -23,9 +23,19 @@ def test_query_logic_documents_remote_source_and_local_snapshot_policy():
         assert "Cwiki 评论稿" in query_logic
 
 
+def _command_reference_corpus(root: str) -> str:
+    base = ROOT / root / "references"
+    parts = [read(f"{root}/references/commands.md")]
+    commands_dir = base / "commands"
+    if commands_dir.is_dir():
+        for path in sorted(commands_dir.glob("*.md")):
+            parts.append(path.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
 def test_command_docs_and_project_agent_rules_include_query_link_policy():
-    commands = read("skills/llm-wiki/references/commands.md")
-    dist_commands = read("dist/llm-wiki-skill/references/commands.md")
+    commands = _command_reference_corpus("skills/llm-wiki")
+    dist_commands = _command_reference_corpus("dist/llm-wiki-skill")
     agent_rules = read("skills/llm-wiki/assets/project-template/tools/agent_rules.py")
     dist_agent_rules = read("dist/llm-wiki-skill/assets/project-template/tools/agent_rules.py")
     template_agents = read("skills/llm-wiki/assets/project-template/AGENTS.md")

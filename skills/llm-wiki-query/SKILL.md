@@ -9,8 +9,8 @@ description: LLM Wiki 证据型查询入口。用于按意图回答业务、产�
 
 语言要求：本短入口的用户回答和生成/改写的 LLM Wiki Markdown 文档必须默认使用中文，除非用户明确要求其他语言。
 
-1. 读取 **llm-wiki** skill 包根目录下的 `SKILL.md`（路径由当前环境的 skill 安装位置解析，勿写死本机绝对路径）。
-2. 读取同包内 `references/commands.md`。
+1. 读取 **llm-wiki** skill 包内 `references/core-rules.md`（子入口必读；**不要**加载完整 `SKILL.md`）。
+2. 读取 `references/commands/_shared.md` 与 `references/commands/query.md`。
 3. 将 `$llm-wiki-query` 后面的用户文本作为问题和 `llm-wiki query` 参数。
 4. 如果问题是在询问 llm-wiki skill / bundle 的版本、当前版本、skill 版本或 engine 版本，包括通过 `$llm-wiki-query` 或 `/llm-wiki-query` 提问，读取主 skill 包根目录下的 `VERSION` 文件并直接回答；不要进入当前 KB 项目的 `BUSINESS_CONTEXT.md`、`wiki/` 或 `raw/` 检索。如果 `VERSION` 缺失但同目录存在 `manifest.json`，回退读取其中的 `version` 字段并说明 engine version 未声明。
 5. 读取同包内 `references/query-logic.md`。

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LLM Wiki Traceability Worker Proposals",
+  "type": "object",
+  "required": ["links"],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "worker": {
+      "type": "string",
+      "description": "current-agent, external-agent, or another worker identifier"
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["requirement", "source", "code", "strength", "status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^tr_[A-Za-z0-9_-]+$"
+          },
+          "requirement": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "code": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "strength": {
+            "type": "string",
+            "enum": ["strong", "partial", "inferred", "external", "missing"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["proposed"]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
