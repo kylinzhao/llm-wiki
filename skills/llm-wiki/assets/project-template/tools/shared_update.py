@@ -135,6 +135,17 @@ def run_git_bytes(args: list[str], cwd: Path) -> GitBytesResult:
     return GitBytesResult(result.returncode, result.stdout, result.stderr.decode("utf-8", errors="replace"))
 
 
+def tracked_evidence_cache_entries(project: Path, prefix: str) -> list[tuple[str, str]]:
+    tracked = run_git(["ls-files", "-s", "--", prefix], cwd=project)
+    entries: list[tuple[str, str]] = []
+    for line in tracked.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        entries.append((parts[0], parts[-1]))
+    return entries
+
+
 def check_evidence_cache_hygiene(project: Path) -> PreflightResult:
     paths = ["raw/"]
     raw_code_needed = any(
@@ -149,12 +160,21 @@ def check_evidence_cache_hygiene(project: Path) -> PreflightResult:
         paths.append("raw-code/")
 
     for path in paths:
-        tracked = run_git(["ls-files", "--", path], cwd=project)
-        if tracked.stdout.strip():
-            first = tracked.stdout.splitlines()[0]
+        tracked_entries = tracked_evidence_cache_entries(project, path)
+        if tracked_entries:
+            mode, first = tracked_entries[0]
+            if path == "raw-code/" and mode == "160000":
+                return PreflightResult(
+                    "evidence_cache_tracked_failed",
+                    "证据缓存 "
+                    f"{first} 以 git submodule/gitlink 被跟踪。共享 KB 不允许把 raw-code 提交为 submodule；"
+                    "请运行 `uv run python tools/migrate_raw_code.py --apply`，补齐 "
+                    "`upstream/code-sources.json`，再重试共享更新。",
+                )
             return PreflightResult(
                 "evidence_cache_tracked_failed",
-                f"证据缓存 {first} 已被 git 跟踪。请先从仓库中移除 raw/raw-code 缓存文件。",
+                f"证据缓存 {first} 已被 git 跟踪。请先从仓库中移除 raw/raw-code 缓存文件，"
+                "并确保 `.gitignore` 忽略 `raw/` 与 `raw-code/`。",
             )
         ignored = run_git(["check-ignore", "-q", path], cwd=project)
         if ignored.returncode != 0:
