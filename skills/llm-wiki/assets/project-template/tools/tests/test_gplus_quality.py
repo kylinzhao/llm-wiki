@@ -237,6 +237,26 @@ class GPlusQualityTest(unittest.TestCase):
             self.assertEqual(findings["gplus_concept_coverage_low"]["severity"], "P1")
             self.assertEqual(findings["gplus_concept_coverage_low"]["promoted_from"], "P2")
 
+    def test_doctor_cjira_gap_message_skips_auth_prompt_when_local_auth_exists(self):
+        doctor = load_module("doctor")
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            write_page(project / "AGENTS.md", "# Rules\n\n## Query Routing\n")
+            doctor.run_health = lambda _: {
+                "ok": True,
+                "status": "pass",
+                "source_pages": 10,
+                "wiki_pages": 12,
+                "cjira_registry": {"stale_status_pages": 2, "low_confidence_pages": 1},
+            }
+            doctor.local_jira_auth_configured = lambda: True
+
+            report = doctor.build_report(project)
+
+            findings = {item["title"]: item for item in report["findings"]}
+            self.assertNotIn("Refresh Jira auth/status", findings["cjira_status_quality_gaps"]["detail"])
+            self.assertIn("Run `llm-wiki update`", findings["cjira_status_quality_gaps"]["detail"])
+
     def test_update_success_report_records_gplus_quality(self):
         update_wiki = load_module("update_wiki")
         with tempfile.TemporaryDirectory() as tmp:
