@@ -62,7 +62,7 @@ class ExportObsidianAuthTest(unittest.TestCase):
         output = stderr.getvalue()
         self.assertIn("SSO", output)
         self.assertIn("COOKIE_HEADER", output)
-        self.assertIn("~/.llm-wiki-new/guazi-sso.env", output)
+        self.assertIn("~/.llm-wiki/guazi-sso.env", output)
         self.assertIn("non-intranet", output)
         self.assertNotIn("only a one-off fallback", output)
 
@@ -167,6 +167,21 @@ class ExportObsidianAuthTest(unittest.TestCase):
 
         self.assertTrue(args.auto_cookie_from_sso)
         self.assertEqual(args.jira_token, "jira-token-123")
+
+    def test_existing_sso_cache_enables_auto_cookie_default(self):
+        export_obsidian = load_export_obsidian()
+        with mock.patch.dict(os.environ, {}, clear=True):
+            args = export_obsidian.parse_args(["--update", "--project-dir", "/tmp/kb"])
+
+        with mock.patch.object(export_obsidian, "discover_sso_skill_root", return_value="/tmp/guazi-sso-login"), mock.patch.object(
+            export_obsidian,
+            "load_sso_cache_status",
+            return_value={"hasCredentials": True, "todayRecords": []},
+        ):
+            export_obsidian.apply_auth_env_defaults(args, {})
+
+        self.assertTrue(args.auto_cookie_from_sso)
+        self.assertEqual(args.sso_skill_root, "/tmp/guazi-sso-login")
 
     def test_noninteractive_auto_sso_does_not_print_missing_auth_instructions(self):
         export_obsidian = load_export_obsidian()

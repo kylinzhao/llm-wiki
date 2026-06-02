@@ -31,6 +31,17 @@ from drawio_diagram import drawio_to_mermaid
 
 DEFAULT_DEPTH = 3
 DEFAULT_RSS_MAX_RESULTS = 200
+
+
+def normalize_confluence_depth_limit(value: object, *, fallback: int = DEFAULT_DEPTH) -> int:
+    """Treat missing/invalid/zero depth as the configured default (3 by default)."""
+    try:
+        parsed = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return fallback
+    return parsed if parsed > 0 else fallback
+
+
 AUTO_RSS_MIN_RESULTS = 50
 AUTO_RSS_RESULTS_PER_DAY = 50
 AUTO_RSS_MAX_RESULTS = 200
@@ -75,7 +86,7 @@ class WikiAuthenticationError(RuntimeError):
     pass
 
 
-AUTH_ENV_FILE = Path(os.environ.get("LLM_WIKI_AUTH_ENV_FILE", "~/.llm-wiki-new/guazi-sso.env")).expanduser()
+AUTH_ENV_FILE = Path(os.environ.get("LLM_WIKI_AUTH_ENV_FILE", "~/.llm-wiki/guazi-sso.env")).expanduser()
 SSO_ENV_KEYS = (
     "GUAZI_SSO_USER_NAME",
     "GUAZI_SSO_PASSWORD",
@@ -126,8 +137,8 @@ def cookie_refresh_help(reason: str) -> str:
             "Wiki authentication needs a valid local login state.",
             "Supported auth setup paths:",
             "1. SSO mode: provide Guazi username, password, and phone so the bundled login helper can cache a local Cwiki login state.",
-            "2. Cookie mode: paste a full COOKIE_HEADER into ~/.llm-wiki-new/guazi-sso.env when the SSO token service is unreachable, for example outside non-intranet/VPN access.",
-            "The llm-wiki skill does not upload credentials or write them into the KB project; persistent auth values live only on this computer in ~/.llm-wiki-new/guazi-sso.env.",
+            "2. Cookie mode: paste a full COOKIE_HEADER into ~/.llm-wiki/guazi-sso.env when the SSO token service is unreachable, for example outside non-intranet/VPN access.",
+            "The llm-wiki skill does not upload credentials or write them into the KB project; persistent auth values live only on this computer in ~/.llm-wiki/guazi-sso.env.",
             "",
             "Terminal setup: run `bash tools/confluence_sync/init_auth_env.sh` from the KB project root, choose SSO or Cookie mode, then retry the sync.",
             "If the project template is not installed yet, run `bash ${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki-new/scripts/init_auth_env.sh`.",
@@ -191,7 +202,7 @@ def sso_env_setup_help() -> str:
             "  # or PRE/ONLINE variants:",
             "  export GUAZI_CHDSSO_PRE_PHONE='...'; export GUAZI_CHDSSO_PRE_CODE='...'",
             "  export GUAZI_CHDSSO_ONLINE_PHONE='...'; export GUAZI_CHDSSO_ONLINE_CODE='...'",
-            "Cookie mode can be set globally in ~/.llm-wiki-new/guazi-sso.env as COOKIE_HEADER='<full cookie header>'.",
+            "Cookie mode can be set globally in ~/.llm-wiki/guazi-sso.env as COOKIE_HEADER='<full cookie header>'.",
         ]
     )
 
@@ -3025,6 +3036,9 @@ def load_export_state(metadata_dir: Path, *, raw_output_dir: Optional[Path] = No
 
 def save_export_state(metadata_dir: Path, root_states: list[dict[str, Any]]) -> None:
     metadata_dir.mkdir(parents=True, exist_ok=True)
+    for root in root_states:
+        if isinstance(root, dict):
+            root["depth_limit"] = normalize_confluence_depth_limit(root.get("depth_limit"))
     payload = {
         "version": EXPORT_STATE_VERSION,
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -3034,6 +3048,49 @@ def save_export_state(metadata_dir: Path, root_states: list[dict[str, Any]]) -> 
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def depth_limit_from_progress(metadata_dir: Path, root_page_id: str) -> int | None:
+    progress_file = root_progress_file_path(metadata_dir, root_page_id)
+    if not progress_file.is_file():
+        return None
+    try:
+        payload = json.loads(progress_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if str(payload.get("root_page_id") or "") != str(root_page_id):
+        return None
+    try:
+        depth = int(payload.get("depth_limit", -1))
+    except (TypeError, ValueError):
+        return None
+    return depth if depth > 0 else None
+
+
+def repair_export_state_depth_limits(metadata_dir: Path, *, fallback: int = DEFAULT_DEPTH) -> bool:
+    """Align export-state.json depth_limit with progress/upstream defaults."""
+    payload = load_export_state(metadata_dir)
+    roots = payload.get("roots")
+    if not isinstance(roots, list):
+        return False
+    changed = False
+    for root in roots:
+        if not isinstance(root, dict):
+            continue
+        page_id = str(root.get("page_id") or "").strip()
+        if not page_id:
+            continue
+        progress_depth = depth_limit_from_progress(metadata_dir, page_id)
+        effective = normalize_confluence_depth_limit(
+            progress_depth if progress_depth is not None else root.get("depth_limit"),
+            fallback=fallback,
+        )
+        if int(root.get("depth_limit", -1)) != effective:
+            root["depth_limit"] = effective
+            changed = True
+    if changed:
+        save_export_state(metadata_dir, roots)
+    return changed
 
 
 def project_root_for_output(output_dir: Path) -> Optional[Path]:
@@ -3094,7 +3151,7 @@ def write_upstream_wiki_sources(
                 "page_id": page_id,
                 "url": str(root_state.get("url") or ""),
                 "site_base": str(root_state.get("site_base") or ""),
-                "depth": int(root_state.get("depth_limit", 0) or 0),
+                "depth": normalize_confluence_depth_limit(root_state.get("depth_limit")),
                 "weekly_from_title": str(root_state.get("weekly_from_title") or ""),
                 "space_key": str(root_state.get("space_key") or ""),
                 "rss_url": str(root_state.get("rss_url") or ""),
@@ -3345,6 +3402,7 @@ def main() -> int:
         raise SystemExit(f"Failed to resolve Jira CHDSSO: {exc}") from exc
 
     if args.update:
+        repair_export_state_depth_limits(metadata_dir, fallback=normalize_confluence_depth_limit(args.depth))
         if args.url:
             root_specs = build_root_specs(args.url, weekly_from_map, depth_map, args.depth)
             root_states = root_states_from_specs(
@@ -3383,7 +3441,11 @@ def main() -> int:
         for root_state in root_states:
             root_page_id = str(root_state["page_id"])
             site_base = str(root_state["site_base"])
-            depth_limit = int(root_state.get("depth_limit", args.depth))
+            depth_limit = normalize_confluence_depth_limit(
+                depth_limit_from_progress(metadata_dir, root_page_id) or root_state.get("depth_limit"),
+                fallback=normalize_confluence_depth_limit(args.depth),
+            )
+            root_state["depth_limit"] = depth_limit
             rss_url = str(root_state.get("rss_url") or "")
             rss_max_results = resolve_rss_max_results(root_state, args.rss_max_results)
             if not rss_url:

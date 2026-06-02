@@ -19,7 +19,7 @@ def utc_now() -> str:
 
 
 def default_registry_path() -> Path:
-    return Path(os.environ.get("LLM_WIKI_PROJECT_REGISTRY", "~/.llm-wiki-new/projects.json")).expanduser()
+    return Path(os.environ.get("LLM_WIKI_PROJECT_REGISTRY", "~/.llm-wiki/projects.json")).expanduser()
 
 
 def load_registry(path: Path) -> dict[str, Any]:

@@ -26,7 +26,7 @@ class ExportConfluenceJiraAuthTest(unittest.TestCase):
 
         self.assertIn("SSO", output)
         self.assertIn("COOKIE_HEADER", output)
-        self.assertIn("~/.llm-wiki-new/guazi-sso.env", output)
+        self.assertIn("~/.llm-wiki/guazi-sso.env", output)
         self.assertIn("non-intranet", output)
         self.assertNotIn("one-off emergency", output)
 

@@ -4,7 +4,7 @@ Purpose: maintain local registered LLM Wiki KB projects in batches without silen
 
 Registry:
 
-- Local KBs are tracked in `~/.llm-wiki-new/projects.json`.
+- Local KBs are tracked in `~/.llm-wiki/projects.json`.
 - Project template install, project-local update, and project-local backfill register the current KB best-effort.
 - The registry stores paths and maintenance status only; it must not store credentials, cookies, tokens, or KB evidence content.
 
@@ -40,5 +40,5 @@ Safety boundaries:
 
 Reports:
 
-- Batch reports are written under `~/.llm-wiki-new/maintenance-runs/<run_id>.json` and `.md`.
+- Batch reports are written under `~/.llm-wiki/maintenance-runs/<run_id>.json` and `.md`.
 - Final user reporting must include counts for successes, skipped projects, failures, pruned missing entries, and report paths.

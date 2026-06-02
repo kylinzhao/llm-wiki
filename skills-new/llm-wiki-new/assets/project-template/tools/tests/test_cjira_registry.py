@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -494,6 +495,28 @@ class CjiraRegistryStatusRefreshTest(unittest.TestCase):
             self.assertEqual(active_payload["records"][0]["doc_status"], "in_progress")
             self.assertTrue(cache_payload["CTB-7850"]["fetch_failed"])
             self.assertFalse(cache_payload["CTB-7850"].get("legacy_project_jira_reference", False))
+
+    def test_main_uses_auth_env_file_for_refresh_defaults(self):
+        registry = load_cjira_registry()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            auth_env = project / "guazi-sso.env"
+            auth_env.write_text("JIRA_TOKEN='jira-token-123'\n", encoding="utf-8")
+            registry.AUTH_ENV_FILE = auth_env
+
+            with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
+                registry, "discover_project_sources", return_value=[]
+            ), mock.patch.object(
+                registry, "update_registry_for_sources", return_value={"generated_at": "2026-06-02T00:00:00+00:00"}
+            ) as update_registry:
+                exit_code = registry.main(["--project", str(project), "--refresh"])
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(update_registry.call_args.kwargs["refresh_status"])
+            self.assertEqual(
+                update_registry.call_args.kwargs["headers"],
+                {"Accept": "application/json", "Authorization": "Bearer jira-token-123"},
+            )
 
 
 class CjiraRegistryEndToEndTest(unittest.TestCase):

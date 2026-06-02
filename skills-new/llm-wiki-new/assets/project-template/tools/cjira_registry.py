@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,7 +43,7 @@ DEFAULT_TERMINAL_STATUSES = {
     "已关闭",
     "已解决",
 }
-AUTH_ENV_FILE = Path(os.environ.get("LLM_WIKI_AUTH_ENV_FILE", "~/.llm-wiki-new/guazi-sso.env")).expanduser()
+AUTH_ENV_FILE = Path(os.environ.get("LLM_WIKI_AUTH_ENV_FILE", "~/.llm-wiki/guazi-sso.env")).expanduser()
 SSO_SKILL_CANDIDATES = (
     Path(__file__).with_name("guazi-sso-login"),
     Path("~/.codex/skills/guazi-sso-login").expanduser(),
@@ -492,7 +493,8 @@ def update_registry_for_sources(
     }
 
 
-def load_auth_env_file(path: Path = AUTH_ENV_FILE) -> dict[str, str]:
+def load_auth_env_file(path: Path | None = None) -> dict[str, str]:
+    path = AUTH_ENV_FILE if path is None else path
     if not path.is_file():
         return {}
     values: dict[str, str] = {}
@@ -501,8 +503,24 @@ def load_auth_env_file(path: Path = AUTH_ENV_FILE) -> dict[str, str]:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        values[key.strip()] = value.strip().strip("'\"")
+        key = key.strip()
+        try:
+            parsed = shlex.split(value, posix=True)
+            values[key] = parsed[0] if parsed else ""
+        except ValueError:
+            values[key] = value.strip().strip("'\"")
     return values
+
+
+def apply_auth_env_defaults(args: argparse.Namespace) -> None:
+    auth_env = load_auth_env_file()
+    if not str(getattr(args, "jira_token", "") or "").strip() and auth_env.get("JIRA_TOKEN"):
+        args.jira_token = auth_env["JIRA_TOKEN"]
+    if not str(getattr(args, "jira_cookie", "") or "").strip():
+        if auth_env.get("JIRA_COOKIE"):
+            args.jira_cookie = auth_env["JIRA_COOKIE"]
+        elif auth_env.get("COOKIE_HEADER"):
+            args.jira_cookie = auth_env["COOKIE_HEADER"]
 
 
 def discover_sso_skill_root() -> Path | None:
@@ -609,6 +627,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    apply_auth_env_defaults(args)
     project = Path(args.project).resolve()
     sources = discover_project_sources(project)
     resolved_chdsso = resolve_jira_chdsso(

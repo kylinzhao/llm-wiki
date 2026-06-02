@@ -63,7 +63,7 @@
 | `$llm-wiki-new-image` | `llm-wiki-new image` | 补充高价值图片证据。 |
 | `$llm-wiki-new-review-requirement` | 兼容入口 | 兼容旧调用；实际转向 `$requirement-review`。 |
 
-`llm-wiki-new maintain-all` 使用本机 `~/.llm-wiki-new/projects.json` registry。常用操作包括 `--discover <dir>` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，以及用户确认后的 `--apply` 批量执行完整 backfill/update 维护；默认不加 `--apply` 时只输出 dry-run 计划。
+`llm-wiki-new maintain-all` 使用本机 `~/.llm-wiki/projects.json` registry。常用操作包括 `--discover <dir>` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，以及用户确认后的 `--apply` 批量执行完整 backfill/update 维护；默认不加 `--apply` 时只输出 dry-run 计划。
 
 这些 wrapper 只负责路由。完整规则以 `references/core-rules.md`、按命令拆分的 [references/commands/](./references/commands/) 为准；索引见 [commands.md](./references/commands.md)。子入口**不要**再反向加载完整 `SKILL.md`。
 

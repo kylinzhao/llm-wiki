@@ -11,5 +11,9 @@ if [[ ! -d "$LLM_WIKI_SKILL_SRC_DIR" ]]; then
 fi
 
 # Reuse install.sh with overridden source directory (only llm-wiki-new* names → no conflict)
+if (("$#")); then
+  exec env LLM_WIKI_SKILL_SRC_DIR="$LLM_WIKI_SKILL_SRC_DIR" \
+    "$ROOT_DIR/install.sh" "$@"
+fi
 exec env LLM_WIKI_SKILL_SRC_DIR="$LLM_WIKI_SKILL_SRC_DIR" \
-  "$ROOT_DIR/install.sh" "$@" --client "${LLM_WIKI_NEW_CLIENT:-cursor}"
+  "$ROOT_DIR/install.sh" --client "${LLM_WIKI_NEW_CLIENT:-cursor}"

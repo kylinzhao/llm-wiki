@@ -5,7 +5,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DCN_KB="${LLM_WIKI_NEW_VALIDATION_KB:-/Users/zhaoliang/guazi/work/multi-knowledge-base-space/dcn-llm-wiki}"
 SKILLS_NEW="$ROOT_DIR/skills-new"
-CURSOR_SKILLS="${CURSOR_HOME:-$HOME/.cursor}/skills"
+SKILLS_CLIENT="${LLM_WIKI_NEW_CLIENT:-cursor}"
+case "$SKILLS_CLIENT" in
+  claude) INSTALL_SKILLS="${CLAUDE_HOME:-$HOME/.claude}/skills" ;;
+  cursor) INSTALL_SKILLS="${CURSOR_HOME:-$HOME/.cursor}/skills" ;;
+  codex)  INSTALL_SKILLS="${CODEX_HOME:-$HOME/.codex}/skills" ;;
+  *)      INSTALL_SKILLS="${CURSOR_HOME:-$HOME/.cursor}/skills" ;;
+esac
 
 echo "== 1. Repo tests =="
 cd "$ROOT_DIR"
@@ -38,17 +44,17 @@ print("  OK: sub-entry does not require full main SKILL.md")
 PY
 
 echo ""
-echo "== 3. Installed skill names (cursor) =="
+echo "== 3. Installed skill names ($SKILLS_CLIENT) =="
 for name in llm-wiki-new llm-wiki-new-doctor llm-wiki-new-update; do
-  if [[ -e "$CURSOR_SKILLS/$name" ]]; then
-    echo "  OK $CURSOR_SKILLS/$name"
+  if [[ -e "$INSTALL_SKILLS/$name" ]]; then
+    echo "  OK $INSTALL_SKILLS/$name"
   else
-    echo "  MISSING $name — run ./install-llm-wiki-new.sh --link" >&2
+    echo "  MISSING $name — run ./install-llm-wiki-new.sh --link --client $SKILLS_CLIENT" >&2
     exit 1
   fi
 done
-if [[ -e "$CURSOR_SKILLS/llm-wiki-doctor" ]]; then
-  echo "  OK existing llm-wiki-doctor untouched"
+if [[ -e "$INSTALL_SKILLS/llm-wiki-doctor" ]]; then
+  echo "  OK existing llm-wiki-doctor present at $INSTALL_SKILLS"
 fi
 
 echo ""

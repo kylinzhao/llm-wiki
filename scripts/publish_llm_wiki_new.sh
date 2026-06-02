@@ -67,7 +67,6 @@ TOKEN_REPLACEMENTS = sorted(
         ("llm-wiki skills", "llm-wiki-new skills"),
         ("$LLM_WIKI_SKILL_ROOT", "$LLM_WIKI_NEW_SKILL_ROOT"),
         ("LLM_WIKI_SKILL_ROOT", "LLM_WIKI_NEW_SKILL_ROOT"),
-        ("~/.llm-wiki/", "~/.llm-wiki-new/"),
         ("llm-wiki-skill", "llm-wiki-new-skill"),
     ],
     key=lambda item: -len(item[0]),

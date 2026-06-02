@@ -241,3 +241,48 @@ class HealthBusinessContextTest(unittest.TestCase):
             self.assertEqual(report["raw_drawio_assets"], 1)
             self.assertEqual(report["drawio_repair"]["missing_evidence_count"], 1)
             self.assertIn("draw.io", " ".join(report["image_evidence_gaps"]))
+
+    def test_health_does_not_repeat_auth_setup_when_local_jira_auth_exists(self):
+        health = load_health()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            write_minimal_project(project)
+            (project / "BUSINESS_CONTEXT.md").write_text(
+                "# BUSINESS_CONTEXT\n\n- 项目名称：二手车知识库\n- 目标用户/角色：运营\n- 核心业务目标：统一需求口径。\n",
+                encoding="utf-8",
+            )
+            registry_dir = project / "staging" / "cjira-registry"
+            registry_dir.mkdir(parents=True)
+            (registry_dir / "active.json").write_text(
+                json.dumps({"generated_at": "2026-05-26T00:00:00+00:00", "records": []}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (registry_dir / "archive.json").write_text(
+                json.dumps({"generated_at": "2026-05-26T00:00:00+00:00", "records": []}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (registry_dir / "cache.json").write_text(
+                json.dumps(
+                    {
+                        "PSP-40038": {
+                            "issue_key": "PSP-40038",
+                            "status": "",
+                            "terminal": False,
+                            "last_checked_at": "2026-05-26T00:00:00+00:00",
+                            "fetch_failed": True,
+                        }
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            auth_env = project / "guazi-sso.env"
+            auth_env.write_text("JIRA_TOKEN='jira-token-123'\n", encoding="utf-8")
+            health.AUTH_ENV_FILE = auth_env
+
+            report = health.build_report(project)
+
+            joined_actions = "\n".join(report["recommended_actions"])
+            self.assertIn("Refresh active cjira statuses with `llm-wiki-new update`.", joined_actions)
+            self.assertNotIn("configure local SSO/Jira auth first", joined_actions)

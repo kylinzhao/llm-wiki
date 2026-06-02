@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import os
 import shlex
 import subprocess
@@ -15,7 +16,7 @@ from urllib.parse import parse_qs, urlparse
 
 EXPORTER_SCRIPT = Path(__file__).with_name("export_confluence_tree.py")
 DEFAULT_RSS_MAX_RESULTS = 200
-AUTH_ENV_FILE = Path(os.environ.get("LLM_WIKI_AUTH_ENV_FILE", "~/.llm-wiki-new/guazi-sso.env")).expanduser()
+AUTH_ENV_FILE = Path(os.environ.get("LLM_WIKI_AUTH_ENV_FILE", "~/.llm-wiki/guazi-sso.env")).expanduser()
 SSO_ENV_KEYS = (
     "GUAZI_SSO_SKILL_ROOT",
     "GUAZI_SSO_USER_NAME",
@@ -249,7 +250,7 @@ def print_auth_instructions() -> None:
         "Security boundary:\n"
         "- The llm-wiki skill does not upload your username, password, phone, Jira token, Cookie, or token.\n"
         "- It does not write secrets into the KB project. Persistent auth values are written only to your computer.\n"
-        "- The local env file is ~/.llm-wiki-new/guazi-sso.env with user-only permissions, and is loaded by future llm-wiki updates.\n"
+        "- The local env file is ~/.llm-wiki/guazi-sso.env with user-only permissions, and is loaded by future llm-wiki updates.\n"
         "- SSO mode stores username/password/phone locally, then guazi-sso-login exchanges them for a local Cookie/login cache.\n"
         "- Cookie mode stores a full COOKIE_HEADER locally. Use it when the SSO token service is unreachable, for example outside non-intranet/VPN access.\n"
         "- Secrets are not written to raw/, wiki/, upstream/, staging reports, command arguments, or git files by this skill.\n"
@@ -284,7 +285,8 @@ def shell_quote_env_value(value: str) -> str:
     return shlex.quote(value)
 
 
-def load_auth_env_file(path: Path = AUTH_ENV_FILE) -> dict[str, str]:
+def load_auth_env_file(path: Path | None = None) -> dict[str, str]:
+    path = AUTH_ENV_FILE if path is None else path
     if not path.is_file():
         return {}
     values: dict[str, str] = {}
@@ -301,6 +303,42 @@ def load_auth_env_file(path: Path = AUTH_ENV_FILE) -> dict[str, str]:
             except ValueError:
                 values[key] = value.strip().strip("'\"")
     return {key: value for key, value in values.items() if value}
+
+
+def sso_cache_file(env: dict[str, str] | None = None) -> Path:
+    env = env or os.environ
+    cache_file = str(env.get("GUAZI_SSO_CACHE_FILE") or "").strip()
+    if cache_file:
+        cache_path = Path(cache_file).expanduser()
+        return cache_path if cache_path.is_absolute() else (Path(env.get("GUAZI_SSO_CACHE_DIR") or "~/.agents/cache/guazi-sso-login").expanduser() / cache_path)
+    cache_dir = Path(str(env.get("GUAZI_SSO_CACHE_DIR") or "~/.agents/cache/guazi-sso-login")).expanduser()
+    return cache_dir / "sso-cache.json"
+
+
+def load_sso_cache_status(env: dict[str, str] | None = None) -> dict[str, object]:
+    path = sso_cache_file(env)
+    if not path.is_file():
+        return {"cacheExists": False, "hasCredentials": False, "todayRecords": []}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"cacheExists": True, "hasCredentials": False, "todayRecords": []}
+    credentials = payload.get("credentials") if isinstance(payload, dict) else {}
+    has_credentials = (
+        isinstance(credentials, dict)
+        and bool(credentials.get("userName"))
+        and bool(credentials.get("password"))
+        and bool(credentials.get("applyPhone"))
+    )
+    records = payload.get("records") if isinstance(payload, dict) else {}
+    today_records = [
+        key for key, value in records.items() if isinstance(value, dict) and value.get("data")
+    ] if isinstance(records, dict) else []
+    return {
+        "cacheExists": True,
+        "hasCredentials": has_credentials,
+        "todayRecords": today_records,
+    }
 
 
 def discover_sso_skill_root(env: dict[str, str] | None = None) -> str:
@@ -348,6 +386,10 @@ def apply_auth_env_defaults(args: argparse.Namespace, env: dict[str, str]) -> No
             env["GUAZI_SSO_SKILL_ROOT"] = discovered
     if all(env.get(key) for key in SSO_ENV_KEYS):
         args.auto_cookie_from_sso = True
+    elif not str(getattr(args, "cookie", "") or "").strip() and str(getattr(args, "sso_skill_root", "") or "").strip():
+        cache_status = load_sso_cache_status(env)
+        if bool(cache_status.get("hasCredentials")):
+            args.auto_cookie_from_sso = True
     if not str(getattr(args, "jira_token", "") or "").strip() and env.get("JIRA_TOKEN"):
         args.jira_token = env["JIRA_TOKEN"]
 

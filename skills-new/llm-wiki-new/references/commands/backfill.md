@@ -50,7 +50,7 @@ Do not:
 - Treat backfill as a full rebuild.
 - Rewrite `raw/` source text, except deterministic evidence-link sections managed by the backfill pass.
 - Stop after deterministic backfill when new evidence changed source/G+ behavior; continue into refinement absorption unless blocked.
-- Silently ignore Jira auth failures. Offline key extraction can continue, but status refresh blockers must be reported. Do not hardcode Jira tokens into the skill bundle; use local environment variables or `~/.llm-wiki-new/guazi-sso.env`.
+- Silently ignore Jira auth failures. Offline key extraction can continue, but status refresh blockers must be reported. Do not hardcode Jira tokens into the skill bundle; use local environment variables or `~/.llm-wiki/guazi-sso.env`.
 
 Final report:
 

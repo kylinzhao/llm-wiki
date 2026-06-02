@@ -2,6 +2,8 @@
 
 与全局 `llm-wiki-*` **并行安装**，用于验证上下文瘦身改动；通过验证前不要替换生产 skill。
 
+**分支策略**：在 `optimize-skill-context` 上开发；`main` 有新改动时执行 `git merge main`（或 `git merge 28d25b0`），再 `./scripts/publish_llm_wiki_new.sh` 重装。**不要**先把本分支 merge 进 `main`，除非你已验收完毕。
+
 ## 位置
 
 | 项 | 路径 |
