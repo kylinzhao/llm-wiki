@@ -22,7 +22,7 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki add-code` | Add or refresh implementation evidence, code wiki, capabilities, and traceability | raw-code codebase plus code wiki and mappings |
 | `llm-wiki query` | Answer a business or implementation question; business-only questions should not include detailed code evidence by default | Evidence-grounded answer with intent-based evidence scope |
 | `llm-wiki query-plus` | Answer with business/requirement evidence and code implementation evidence together | Detailed business+code evidence analysis |
-| `llm-wiki review-requirement` | Review a new PRD, Cwiki page, Markdown requirement, or prototype package against wiki, raw, image, zip, frontend, and code evidence | Findings-first requirement review and Cwiki comment draft |
+| `llm-wiki review-requirement` | KB-enhanced requirement review: gather wiki/raw/code evidence, run upstream `prd-review-max`, append impact scope and historical conflicts | Findings-first review and Cwiki comment draft |
 | `llm-wiki image` | Add high-value image evidence after text completion | image notes and linked facts |
 
 ## Skill Version Queries

@@ -1,105 +1,71 @@
 ---
 name: requirement-review
-description: 独立需求评审 skill。用于对 PRD、Spec、Cwiki 页面、Markdown 需求、产品方案、图片截图、图表、zip/HTML 原型、前端交互说明、以及含 raw/wiki/raw-code 的 LLM Wiki 项目做 evidence-first review；当用户要求需求 review、产品评审、评分概览、查漏补缺、判断是否能开发、输出 P0/P1/P2 findings、生成 Cwiki 评论稿、检查前端 UI/交互/状态/埋点完整性时使用。
+description: LLM Wiki 知识库增强的需求评审。先按项目 raw/wiki/raw-code 检索业务与代码证据，再加载并执行上游 prd-review-max 做 PRD/Spec 业务与 UX 诊断；当用户要求需求 review、产品评审、评分概览、影响范围分析、历史冲突检查、Cwiki 评论稿时使用。
 ---
 
-# Requirement Review
+# Requirement Review（KB + prd-review-max）
 
 ## Overview
 
-Use this skill to review requirements as product evidence, not as a normal Q&A task. Lead with findings, distinguish evidence from inference, and produce a report that product, design, frontend, backend, QA, and operations can act on.
+本 skill 是 **LLM Wiki 知识库证据层** 与 **上游 `prd-review-max`** 的组合入口：
 
-This skill is standalone. Do not require `$llm-wiki`; if the current project happens to contain `BUSINESS_CONTEXT.md`, `raw/`, `wiki/`, `raw-code/`, or `wiki/code/`, use those files as evidence directly.
+- **知识库证据**：`BUSINESS_CONTEXT.md`、`raw/`、`wiki/`、`raw-code/`、`wiki/code/` —— 用于影响范围、历史规则冲突、已有实现差异与合理性判断。
+- **prd-review-max**：来自 `c2b-fe/pre-code` 的独立 skill，负责 PRD/Spec 通用基础检测、业务评审与 UX 评审。**不得修改其包内任何文件。**
 
-## Load References
+若当前目录不是 LLM Wiki 项目，行为退化为：确保安装 `prd-review-max` → 按其 SKILL.md 执行。
 
-Always read:
+语言：用户可见输出默认中文，除非用户明确要求其他语言。
 
-- `references/review-protocol.md`
-- `references/output-template.md`
-- `references/prd-quality-gate.md`
+## 第一步：确保 prd-review-max 可用
 
-Read when the selected mode needs role review or historical data review:
+1. 检查 Agent 环境 skills 目录是否存在 `prd-review-max/SKILL.md`。
+2. 若不存在，在 llm-wiki-skill 仓库根目录执行：
 
-- `references/multi-role-review.md`
-- `references/historical-data-analysis.md`
+   ```bash
+   ./scripts/install_prd_review_max.sh --link --client auto
+   ```
 
-Read when frontend is involved or may be involved:
+3. 安装后再次确认；仍失败则报告上游地址并停止：
+   `https://git.guazi-corp.com/c2b-fe/pre-code/tree/master/prd-review-max`
 
-- `references/fe-prd-review.md`
-- `../../references/fe-req-signal-noise.md`（仓库根目录：有效信息 / 噪声 / 按页映射；与作者是否使用 AI 无关）
-- `../../references/fe-req-design-deliverables.md`（仓库根目录：ToC / 中台后台设计交付物分层）
+## 第二步：读取本 skill 桥接规则
 
-Frontend is involved when the project has frontend code, routes, UI screenshots, HTML prototypes, app/web/H5/console pages, or the requirement mentions pages, buttons, forms, dialogs, user interactions, tracking, or visual states.
+始终读取：
 
-## Workflow
+- `references/kb-evidence-bridge.md`
 
-1. Identify the target requirement: Cwiki URL/pageId, Markdown/doc path, `raw/**/index.md`, attached images, zip prototype, or free-form pasted PRD.
-2. Build the evidence scope from local project files when available:
-   - `BUSINESS_CONTEXT.md`
-   - target requirement source
-   - `raw/`, `wiki/`, `docs/retrieval-playbook.md`
-   - `wiki/concepts/`, `wiki/entities/`, `wiki/truth/`, `wiki/conflicts/`, `wiki/evidence/`, `wiki/proposals/`, `wiki/reference/`, `wiki/operations/`
-   - `raw-code/`, `wiki/code/capabilities/`, `wiki/code/traceability/`
-3. If the target is a Cwiki URL/pageId and the current project has `raw/`, check whether the page already exists in `raw/**/index.md` via `page_id` or `source_url`. If not, use the project's documented Cwiki/raw sync flow when available; otherwise mark the raw state as `只读外部页面` and keep reviewing from available evidence.
-4. Analyze every requirement-relevant image with multimodal reasoning. Treat screenshots, flows, tables, annotations, and diagrams as first-class requirement evidence.
-5. Inspect every relevant zip as a likely HTML prototype. Unzip into a temporary location, find HTML entry points/assets/scripts/mock data, and review visible UI and interactions.
-6. Apply frontend review rules if frontend is involved. If frontend is involved but the requirement has no UI, interaction, state, or tracking description, create a prominent finding requiring product/design to complete that scope.
-7. Select the review mode:
-   - `完整评审`: default for formal/first review; cover all 16 dimensions, multi-role review, existing implementation diff, and historical data analysis when applicable.
-   - `产品评审`: when the user asks from product/PM perspective; cover product dimensions 1,2,3,5,6,7,13,14,15,16 and only the product manager role.
-   - `快速评审`: when the user specifies dimensions, concerns, or role angle; cover only the relevant dimensions and roles.
-   - `评分概览`: when the user wants a quick score or version comparison; output only the dimension scorecard.
-   If the user already states the mode, use it directly. Otherwise, infer the smallest mode that satisfies the request; do not stop for mode confirmation unless the request is materially ambiguous.
-8. Cross-check business rules, historical requirements, code capability, state machines, money/accounting, roles, data migration, notifications, operations, metrics, and rollback guards.
-9. Apply the PRD quality gate before scoring dimensions: document structure, research evidence, lifecycle deliverables, use cases, business flow diagrams, glossary/entities, field sources, state/断点, data/tracking/statistics, permissions/messages/launch validation.
-10. Score every in-scope dimension as `完整` / `部分` / `缺失`, with one concise reason. Do not skip in-scope dimensions.
-11. Output findings first, then the mode-aware scorecard and evidence-first report.
+不要读取本包内已废弃的旧评审协议（`review-protocol.md`、`output-template.md`、`prd-quality-gate.md`、`multi-role-review.md`、`historical-data-analysis.md`、`fe-prd-review.md`）。
 
-## Safety And Evidence Rules
+## 第三步：按桥接流程执行
 
-- Do not mutate source evidence in `raw/` by hand.
-- Do not silently replace Cwiki/raw versions when pageId conflicts.
-- If starting any local preview/dev server in a workspace where port collisions are common (for example many repositories checked out under one parent folder), run the local port registry guard first.
-- Never put local paths such as `/Users/...`, `raw/...`, or `wiki/sources/...` in the Cwiki comment draft.
-- Code evidence may support a finding, but "code already implements something the PRD omitted" is not by itself a frontend缺失 finding. Put it in notes as: `代码已有实现，建议 PRD 补录与代码对齐`.
-- When evidence is missing, say it is missing. Do not upgrade inference to fact.
+严格按 `kb-evidence-bridge.md` 四阶段执行：
 
-## Output Contract
+1. **阶段 A**：需求证据就位（raw 同步、图片、zip 原型）
+2. **阶段 B**：知识库证据检索与「知识库上下文摘要」
+3. **阶段 C**：加载并执行 **prd-review-max**（读取其 `SKILL.md` 与 `references/**`，遵守其输出顺序）
+4. **阶段 D**：追加 LLM Wiki 专属章节（证据范围、MECE 影响范围、历史冲突、实现差异、Cwiki 评论版、建议下一步）
 
-Use this shape unless the user asks for a shorter version. Keep `一、P0/P1/P2 问题` first even when also using the scorecard from `references/output-template.md`.
+## 与 llm-wiki 的关系
 
-```text
-一、P0/P1/P2 问题
-二、结论
-三、证据范围
-四、PRD 质量门禁（见 `references/prd-quality-gate.md`）
-五、评审模式与维度评分卡（见 `references/output-template.md`）
-六、全局定位
-七、前后变化
-八、MECE 影响范围
-九、已有实现差异对照表（完整/快速评审需要；产品评审按需备注）
-十、历史数据分析报告（触发条件见 `references/historical-data-analysis.md`）
-十一、16 维度详情（按模式裁剪；产品评审只含产品维度）
-十二、多角色评审（见 `references/multi-role-review.md`；产品评审只输出产品经理视角）
-十三、前端需求完整性审查（须先含「信息结构与噪声」小节，规则见仓库根 `references/fe-req-signal-noise.md`；再按 `fe-prd-review.md` 逐页输出）
-十四、图片与 zip 原型证据
-十五、建议目标模型
-十六、验收清单
-十七、指标护栏
-十八、待决问题
-十九、证据链接
-二十、Cwiki 评论版
-二十一、建议下一步
-```
+- 独立 skill：不依赖 `$llm-wiki` 命令协议。
+- 兼容入口 `$llm-wiki-review-requirement` 会转向本 skill。
+- 当项目是 LLM Wiki 项目时，**必须**完成阶段 B/D；不得只做 prd-review-max 文本评审而跳过知识库检索。
 
-Every finding must include:
+## 评审范围与模式
 
-```text
-标题：
-等级：
-证据：
-影响：
-建议决策：
-是否阻塞开发：
-```
+以 **prd-review-max** 的「评审范围 / 评审模式」为准；桥接层只做说法映射（见 `kb-evidence-bridge.md` 阶段 C 表格）。用户已指定时直接执行，未指定时用 prd-review-max 默认：
+
+- 评审范围：业务评审 + 用户体验评审
+- 评审模式：产品
+
+## 安全
+
+- 不修改 `raw/` 与 `prd-review-max` 上游文件
+- Cwiki 评论稿不含本地路径
+- 本地预览前使用 local-port-registry（多仓库共用工作区时）
+
+## Output
+
+最终输出 = **prd-review-max 按 routing 组织的完整结果** + **阶段 D 知识库增量章节**。
+
+Findings 仍优先 P0/P1/P2；知识库交叉验证的 finding 须在证据字段标明 wiki/raw/code 来源。

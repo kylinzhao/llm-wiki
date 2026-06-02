@@ -61,7 +61,7 @@
 | `$llm-wiki-query` | `llm-wiki query` | 按意图回答业务或实现问题；业务知识默认不展开大量代码证据。 |
 | `$llm-wiki-query-plus` | `llm-wiki query-plus` | 同时回答业务/需求口径与代码实现证据，适合需要更详尽联动分析的问题。 |
 | `$llm-wiki-image` | `llm-wiki image` | 补充高价值图片证据。 |
-| `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧调用；实际转向 `$requirement-review`。 |
+| `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧调用；KB 证据 + `$prd-review-max`。 |
 
 `llm-wiki maintain-all` 使用本机 `~/.llm-wiki/projects.json` registry。常用操作包括 `--discover <dir>` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，以及用户确认后的 `--apply` 批量执行完整 backfill/update 维护；默认不加 `--apply` 时只输出 dry-run 计划。
 

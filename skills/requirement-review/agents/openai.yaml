@@ -1,4 +1,4 @@
 interface:
   display_name: "Requirement Review"
-  short_description: "证据型评审 PRD、Cwiki、图片和 HTML 原型"
+  short_description: "KB 证据 + prd-review-max 评审 PRD/Cwiki/原型"
   default_prompt: "用 $requirement-review review 这个需求："

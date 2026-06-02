@@ -20,6 +20,7 @@ https://git.guazi-corp.com/c2b-fe/llm-wiki
   - `qoder` -> `${QODER_HOME:-$HOME/.qoder}/skills`
   - `auto`（默认）会按当前机器上已存在的客户端目录自动选择目标；`all` 强制安装到三者。
 - **可选**：`graphify`（仅当需要代码图谱增强时）。**可选**：`local-port-registry` skill——仅在 `requirement-review` 流程里要起本地预览服且担心端口冲突时使用；本 bundle 未内置该 skill。
+- **需求评审依赖**：`prd-review-max`（上游只读，来自 `c2b-fe/pre-code`）。安装本 bundle 后需额外执行 `./scripts/install_prd_review_max.sh`；`$requirement-review` 会在缺失时提示自动安装。
 
 ## 这是什么
 
@@ -85,7 +86,8 @@ python3 scripts/release_version.py \
 | --- | --- |
 | `skills/llm-wiki/` | 主 skill，包含完整生命周期协议、二级命令路由、references、项目模板脚本和 agent handoff 规则。 |
 | `skills/llm-wiki-*/` | 常用命令的短入口 wrapper，便于在 Codex skill 列表里直接发现和调用。 |
-| `skills/requirement-review/` | 独立需求评审 skill，可脱离 `llm-wiki` 使用。 |
+| `skills/requirement-review/` | KB 证据桥接 + 调用上游 `prd-review-max` 的需求评审 skill。 |
+| `scripts/install_prd_review_max.sh` | 从 `c2b-fe/pre-code` 安装/链接 `prd-review-max`（不修改上游内容）。 |
 | `install.sh` | 把本 bundle 安装到 Codex / Claude Code / Cursor 的 skills 目录（可用 `--client` 选择目标）。 |
 | `tests/` | 安装脚本和 bundle 结构测试。 |
 | `INSTRUCTION_AND_RELEASE_PLAN.md` | 指令拆分、update 收口和发布方案说明。 |
@@ -196,15 +198,23 @@ qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
 | `$llm-wiki-query` | `llm-wiki query` | 按意图回答业务、产品、需求、实现或代码问题；业务知识默认不展开大量代码证据。 |
 | `$llm-wiki-query-plus` | `llm-wiki query-plus` | 同时回答业务/需求口径与代码实现证据，适合需要更详尽联动分析的问题。 |
 | `$llm-wiki-image` | `llm-wiki image` | 文本层完成后补充高价值图片、截图、图表或附件证据；默认不批量分析低价值截图。 |
-| `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧的 `llm-wiki review-requirement` 调用；实际转向 `$requirement-review` 做 evidence-first 需求评审。 |
+| `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧的 `llm-wiki review-requirement` 调用；转向 `$requirement-review`（KB 证据 + `$prd-review-max`）。 |
 
 `llm-wiki maintain-all` 使用本机 `~/.llm-wiki/projects.json` registry。常用操作包括 `--discover <dir>` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，以及用户确认后的 `--apply` 批量执行完整 backfill/update 维护；默认不加 `--apply` 时只输出 dry-run 计划。
 
 ## 独立需求评审 Skill
 
-`$requirement-review` 是独立 skill，可脱离 `$llm-wiki` 使用。它用于评审 PRD、Cwiki 页面、Markdown 需求、图片、zip/HTML 原型和前端交互说明。
+需求评审由两层组成：
 
-当当前项目本身是 LLM Wiki 项目时，`$requirement-review` 可以把 `BUSINESS_CONTEXT.md`、`raw/`、`wiki/`、`raw-code/`、`wiki/code/` 作为证据层；但它不再依赖 `$llm-wiki` 主 skill 的命令协议。
+1. **`$prd-review-max`**（上游，只读）：PRD/Spec 通用基础检测、业务评审、UX 评审。来源：<https://git.guazi-corp.com/c2b-fe/pre-code/tree/master/prd-review-max>。安装：
+
+   ```bash
+   ./scripts/install_prd_review_max.sh --link --client auto
+   ```
+
+2. **`$requirement-review`**（本 bundle）：在调用 `prd-review-max` 前后接入 LLM Wiki 知识库——检索 `BUSINESS_CONTEXT.md`、`raw/`、`wiki/`、`raw-code/`、`wiki/code/`，输出 MECE 影响范围、历史规则冲突、已有实现差异与 Cwiki 评论稿。
+
+可脱离 `$llm-wiki` 主 skill 使用；但不要修改 `prd-review-max` 包内文件，增量规则写在 `skills/requirement-review/references/kb-evidence-bridge.md`。
 
 ## 适用场景
 
@@ -304,4 +314,4 @@ qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
 - 修改主协议时，更新 `skills/llm-wiki/references/commands/<command>.md` 与 `references/core-rules.md`；跨命令共享部分更新 `references/commands/_shared.md`；仅路由/阅读顺序变更时再改 `SKILL.md`。
 - 新增常用命令时，增加对应 `skills/llm-wiki-*/SKILL.md` wrapper，并同步更新本 README 的二级 skill 表。
 - 修改安装行为时，同步更新 `install.sh`、`tests/` 和安装说明。
-- 修改需求评审能力时，同步更新 `skills/requirement-review/` 和兼容入口 `skills/llm-wiki-review-requirement/`。
+- 修改需求评审能力时：KB 桥接更新 `skills/requirement-review/` 与 `skills/llm-wiki-review-requirement/`；`prd-review-max` 规则变更在上游仓库维护，本仓库只更新 `install_prd_review_max.sh` 与桥接文档。

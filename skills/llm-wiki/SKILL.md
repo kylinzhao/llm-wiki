@@ -151,7 +151,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `llm-wiki add-code`：把另一个项目代码库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout，作为唯一受支持的代码证据接入方式，并构建代码 wiki、capability 和 traceability。
 - `llm-wiki query`：按意图分流回答业务或代码问题；业务知识默认不展开大量代码实现证据。
 - `llm-wiki query-plus`：同时拉通业务/需求证据和代码实现证据，输出更详尽的联合答案。
-- `llm-wiki review-requirement`：对新 PRD、Cwiki 页面或需求文档做证据型需求评审，纳入 raw 原文、图片、zip 原型、前端评审和代码能力证据。
+- `llm-wiki review-requirement`：对新 PRD、Cwiki 页面或需求文档做知识库增强的需求评审——先检索 raw/wiki/raw-code 证据，再调用上游 `prd-review-max` 做业务与 UX 诊断，并输出影响范围与历史冲突。
 - `llm-wiki image`：高价值图片证据补充。
 
 ### 1. 阶段模型与任务模式
