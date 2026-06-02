@@ -200,6 +200,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "(YYYY-MM-DD or ISO-8601 datetime)."
         ),
     )
+    parser.add_argument(
+        "--exclude-author",
+        action="append",
+        default=[],
+        help=(
+            "Skip exporting pages whose creator display name contains this fragment. "
+            "Repeat for multiple patterns (case-insensitive substring match)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -501,6 +510,10 @@ def build_command(args: argparse.Namespace) -> list[str]:
         command.append("--auto-cookie-from-sso")
     if getattr(args, "updated_since", "").strip():
         command.extend(["--updated-since", args.updated_since.strip()])
+    for author in getattr(args, "exclude_author", []) or []:
+        author_text = str(author).strip()
+        if author_text:
+            command.extend(["--exclude-author", author_text])
     if args.jira_token.strip():
         # Passed through the child environment instead of argv so tokens do not appear in process lists.
         pass

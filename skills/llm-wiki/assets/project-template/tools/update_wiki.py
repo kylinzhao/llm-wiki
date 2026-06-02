@@ -533,6 +533,15 @@ def source_updated_since(source: dict[str, object]) -> str:
     return str(filters.get("updated_since") or source.get("updated_since") or "").strip()
 
 
+def source_exclude_authors(source: dict[str, object]) -> list[str]:
+    filters = source_filters(source)
+    raw = filters.get("exclude_authors")
+    if isinstance(raw, list):
+        return [str(value).strip() for value in raw if str(value).strip()]
+    single = str(filters.get("exclude_author") or "").strip()
+    return [single] if single else []
+
+
 def output_dir_has_confluence_pages(output_dir: Path) -> bool:
     """Return true when the ignored raw cache contains exported page bodies."""
     if not output_dir.is_dir():
@@ -739,6 +748,8 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         updated_since = source_updated_since(source)
         if updated_since:
             command.extend(["--updated-since", updated_since])
+        for author in source_exclude_authors(source):
+            command.extend(["--exclude-author", author])
         rss_url = str(source.get("rss_url") or "").strip()
         if page_id and rss_url:
             command.extend(["--rss-url", f"{page_id}={rss_url}"])
@@ -771,6 +782,13 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         }
         if len(updated_since_values) == 1:
             command.extend(["--updated-since", next(iter(updated_since_values))])
+        exclude_author_values: list[str] = []
+        for source in grouped_sources:
+            for author in source_exclude_authors(source):
+                if author not in exclude_author_values:
+                    exclude_author_values.append(author)
+        for author in exclude_author_values:
+            command.extend(["--exclude-author", author])
         for source in grouped_sources:
             page_id = str(source.get("page_id") or "").strip()
             rss_url = str(source.get("rss_url") or "").strip()

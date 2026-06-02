@@ -11,7 +11,7 @@
 uv run python tools/update_wiki.py
 ```
 
-`upstream/wiki-sources.json` is the single source of truth for upstream wiki relationships. It stores the 0-1 root wiki, later added wiki sources, relationship role, depth, RSS URL, output/metadata paths, and filters such as `filters.updated_since`.
+`upstream/wiki-sources.json` is the single source of truth for upstream wiki relationships. It stores the 0-1 root wiki, later added wiki sources, relationship role, depth, RSS URL, output/metadata paths, and filters such as `filters.updated_since` and `filters.exclude_authors` (case-insensitive substring fragments matched against the page creator `displayName`, for example `张丹-出海业务` excludes `张丹-出海业务-出海产品与增长部`).
 
 `upstream/code-sources.json` is the single source of truth for code repositories added by `llm-wiki add-code`. It records enough repository metadata to restore `raw-code/<codebase_id>/` as an engine-managed git checkout on another machine.
 

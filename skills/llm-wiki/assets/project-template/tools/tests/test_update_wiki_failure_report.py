@@ -1103,6 +1103,44 @@ class UpdateFailureReportTest(unittest.TestCase):
             self.assertIn("--updated-since", commands[0])
             self.assertIn("2026-01-01", commands[0])
 
+    def test_confluence_exclude_authors_filter_is_forwarded(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            exporter = project / "tools" / "confluence_sync" / "export_obsidian_wiki.py"
+            exporter.parent.mkdir(parents=True)
+            exporter.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            (project / "upstream").mkdir(parents=True)
+            (project / "upstream" / "wiki-sources.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "sources": [
+                            {
+                                "type": "confluence",
+                                "enabled": True,
+                                "source_id": "cwiki-1",
+                                "relationship": {"role": "primary"},
+                                "page_id": "1",
+                                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=1",
+                                "depth": 2,
+                                "filters": {"exclude_authors": ["Noise Author"]},
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            commands = update_wiki.confluence_sync_commands(project)
+
+            self.assertIn("--exclude-author", commands[0])
+            self.assertIn("Noise Author", commands[0])
+
     def test_confluence_sync_allows_interactive_auth_by_default(self):
         import tempfile
 
