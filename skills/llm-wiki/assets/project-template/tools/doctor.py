@@ -17,6 +17,7 @@ from typing import Any
 
 from agent_rules import inspect_agent_rules
 from gplus_quality import inspect_gplus_quality
+from health import local_jira_auth_configured
 from refinement_contract import summarize_refinement_contract
 
 
@@ -299,15 +300,23 @@ def build_report(project: Path) -> dict[str, Any]:
         stale_status_pages = int(cjira_registry.get("stale_status_pages") or 0)
         low_confidence_pages = int(cjira_registry.get("low_confidence_pages") or 0)
         if stale_status_pages or low_confidence_pages:
+            if local_jira_auth_configured():
+                detail = (
+                    f"Cjira registry has {stale_status_pages} stale status page(s) and "
+                    f"{low_confidence_pages} low-confidence primary selection(s). Run `llm-wiki update` "
+                    "to refresh stale statuses and review low-confidence mappings before relying on lifecycle answers."
+                )
+            else:
+                detail = (
+                    f"Cjira registry has {stale_status_pages} stale status page(s) and "
+                    f"{low_confidence_pages} low-confidence primary selection(s). Refresh Jira auth/status "
+                    "and review low-confidence mappings before relying on lifecycle answers."
+                )
             findings.append(
                 finding(
                     "P2",
                     "cjira_status_quality_gaps",
-                    (
-                        f"Cjira registry has {stale_status_pages} stale status page(s) and "
-                        f"{low_confidence_pages} low-confidence primary selection(s). Refresh Jira auth/status "
-                        "and review low-confidence mappings before relying on lifecycle answers."
-                    ),
+                    detail,
                     promote_when_no_p1=True,
                 )
             )

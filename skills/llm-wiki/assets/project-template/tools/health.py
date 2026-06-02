@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import shlex
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,6 +36,7 @@ FENCED_CODE_RE = re.compile(r"(^|\n)(```|~~~).*?(?:\n\2|$)", re.DOTALL)
 INLINE_CODE_RE = re.compile(r"(?<!`)`(?!`)[^`\n]*`")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 DIAGRAM_EXTENSIONS = {".drawio", ".dio"}
+AUTH_ENV_FILE = Path(os.environ.get("LLM_WIKI_AUTH_ENV_FILE", "~/.llm-wiki/guazi-sso.env")).expanduser()
 IMAGE_VALUE_KEYWORDS = {
     "流程": 5,
     "流程图": 8,
@@ -400,6 +403,37 @@ def cjira_registry_status(project: Path) -> dict[str, object]:
     }
 
 
+def load_auth_env_file(path: Path | None = None) -> dict[str, str]:
+    path = AUTH_ENV_FILE if path is None else path
+    if not path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        try:
+            parsed = shlex.split(value, posix=True)
+            values[key] = parsed[0] if parsed else ""
+        except ValueError:
+            values[key] = value.strip().strip("'\"")
+    return {key: value for key, value in values.items() if value}
+
+
+def local_jira_auth_configured() -> bool:
+    auth_env = load_auth_env_file()
+    jira_chdsso_keys = (
+        "JIRA_CHDSSO",
+        "GUAZI_CHDSSO_TEST",
+        "GUAZI_CHDSSO_PRE",
+        "GUAZI_CHDSSO_ONLINE",
+    )
+    direct_keys = ("JIRA_TOKEN", "JIRA_COOKIE", "COOKIE_HEADER")
+    return any(str(os.environ.get(key) or auth_env.get(key) or "").strip() for key in (*direct_keys, *jira_chdsso_keys))
+
+
 def build_report(project: Path) -> dict[str, object]:
     project = project.resolve()
     missing = [rel for rel in REQUIRED_PATHS if not (project / rel).exists()]
@@ -494,9 +528,12 @@ def build_report(project: Path) -> dict[str, object]:
     code_intelligence = code_intelligence_status(project)
     cjira_registry = cjira_registry_status(project)
     if cjira_registry["stale_status_pages"]:
-        recommended_actions.append(
-            "Refresh active cjira statuses with `llm-wiki update`; if Jira auth is missing, configure local SSO/Jira auth first."
-        )
+        if local_jira_auth_configured():
+            recommended_actions.append("Refresh active cjira statuses with `llm-wiki update`.")
+        else:
+            recommended_actions.append(
+                "Refresh active cjira statuses with `llm-wiki update`; if Jira auth is missing, configure local SSO/Jira auth first."
+            )
     wiki_built = (project / "wiki" / "index.md").is_file()
     query_may_work_without_full_evidence = wiki_built and bool(evidence_gaps)
 
