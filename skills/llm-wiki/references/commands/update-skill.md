@@ -26,8 +26,15 @@ Default behavior:
    ```
 
 3. The updater runs `git pull --ff-only` in the bundle checkout when it is a git worktree, then runs `install.sh` with backup semantics.
-4. Do not use `--force` unless the user explicitly accepts discarding the previous installed copy.
-5. After updating the installed skill, existing KB projects keep their project-local tools until refreshed. To preview batch refresh/backfill for registered KBs, run:
+4. After a successful bundle install, the updater also refreshes the upstream **`prd-review-max`** dependency:
+
+   ```bash
+   ./scripts/install_prd_review_max.sh --link --upgrade --client auto
+   ```
+
+   This pulls `c2b-fe/pre-code` into `~/.cache/llm-wiki-skill/prd-review-max-upstream/` and keeps the installed skill link current. Pass `--skip-prd-review-max` to `update_installed_skill.py` only when the user explicitly opts out.
+5. Do not use `--force` unless the user explicitly accepts discarding the previous installed copy.
+6. After updating the installed skill, existing KB projects keep their project-local tools until refreshed. To preview batch refresh/backfill for registered KBs, run:
 
    ```bash
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py"
@@ -39,7 +46,7 @@ Default behavior:
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/maintain_all.py" --discover /Users/zhaoliang/guazi/work
    ```
 
-6. If the current directory is an LLM Wiki KB project and the user wants only this project refreshed, run:
+7. If the current directory is an LLM Wiki KB project and the user wants only this project refreshed, run:
 
    ```bash
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$PWD" --engine-only --refresh-agent-rules

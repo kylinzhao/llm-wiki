@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install prd-review-max from c2b-fe/pre-code (read-only upstream; do not patch).
+# Install or upgrade prd-review-max from c2b-fe/pre-code (read-only upstream; do not patch).
 set -euo pipefail
 
 REPO_URL="${PRD_REVIEW_MAX_REPO_URL:-https://git.guazi-corp.com/c2b-fe/pre-code.git}"
@@ -9,11 +9,12 @@ CLIENT="auto"
 MODE="--link"
 DRY_RUN=0
 FORCE=0
+UPGRADE=0
 DEST_OVERRIDE=""
 
 usage() {
   cat <<'EOF' >&2
-Usage: install_prd_review_max.sh [--copy|--link] [--dry-run] [--force]
+Usage: install_prd_review_max.sh [--copy|--link] [--upgrade] [--dry-run] [--force]
                                   [--client auto|codex|claude|cursor|qoder|all]
                                   [--dest <skills_dir>]
 
@@ -23,6 +24,8 @@ Installs prd-review-max from:
 Defaults:
   --client auto
   --link
+
+  --upgrade   Pull latest upstream and refresh install (used by update-skill)
 EOF
 }
 
@@ -79,9 +82,19 @@ find_existing_prd_review_max() {
   return 1
 }
 
+target_points_to_staging() {
+  local target="$1"
+  local expected="$2"
+  [[ -L "$target" ]] || return 1
+  local resolved
+  resolved="$(cd "$(dirname "$target")" && readlink "$(basename "$target")" || true)"
+  [[ "$resolved" == "$expected" ]] || [[ "$(readlink -f "$target" 2>/dev/null || true)" == "$(readlink -f "$expected" 2>/dev/null || true)" ]]
+}
+
 while (($#)); do
   case "$1" in
     --copy|--link) MODE="$1" ;;
+    --upgrade) UPGRADE=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --force) FORCE=1 ;;
     --client)
@@ -111,57 +124,98 @@ if ((${#DEST_DIRS[@]} == 0)); then
   exit 2
 fi
 
-if existing="$(find_existing_prd_review_max "${DEST_DIRS[@]}")"; then
-  echo "prd-review-max already installed: $existing"
-  exit 0
-fi
-
 CACHE_DIR="${PRD_REVIEW_MAX_CACHE_DIR:-$HOME/.cache/llm-wiki-skill/prd-review-max-upstream}"
 STAGING="$CACHE_DIR/checkout"
+UPSTREAM_SKILL="$STAGING/$SKILL_SUBDIR"
+
+pull_upstream() {
+  mkdir -p "$CACHE_DIR"
+  if [[ ! -d "$STAGING/.git" ]]; then
+    git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$STAGING"
+  else
+    git -C "$STAGING" fetch --depth 1 origin "$REPO_REF"
+    git -C "$STAGING" checkout "$REPO_REF"
+    git -C "$STAGING" pull --ff-only origin "$REPO_REF" || true
+  fi
+  if [[ ! -f "$UPSTREAM_SKILL/SKILL.md" ]]; then
+    echo "Missing upstream skill at $UPSTREAM_SKILL/SKILL.md" >&2
+    exit 1
+  fi
+}
+
+print_upstream_version() {
+  if [[ -f "$UPSTREAM_SKILL/manifest.json" ]]; then
+    python3 - <<'PY' "$UPSTREAM_SKILL/manifest.json"
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+print(f"prd-review-max version: {data.get('version', 'unknown')}")
+PY
+  fi
+  if [[ -d "$STAGING/.git" ]]; then
+    echo "prd-review-max commit: $(git -C "$STAGING" rev-parse --short HEAD)"
+  fi
+}
+
+install_target() {
+  local dest_dir="$1"
+  local target="$dest_dir/prd-review-max"
+
+  if [[ -e "$target" ]]; then
+    if [[ "$MODE" == "--link" ]] && target_points_to_staging "$target" "$UPSTREAM_SKILL"; then
+      echo "prd-review-max link up to date: $target"
+      return 0
+    fi
+    if [[ "$FORCE" -eq 1 ]]; then
+      rm -rf "$target"
+    else
+      echo "Refusing to overwrite existing $target (use --force or --upgrade with --copy)" >&2
+      exit 1
+    fi
+  fi
+
+  case "$MODE" in
+    --copy)
+      cp -R "$UPSTREAM_SKILL" "$target"
+      echo "copied prd-review-max -> $target"
+      ;;
+    --link)
+      ln -s "$UPSTREAM_SKILL" "$target"
+      echo "linked prd-review-max -> $target"
+      ;;
+  esac
+}
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   for dest_dir in "${DEST_DIRS[@]}"; do
-    echo "dry-run: would $MODE prd-review-max into $dest_dir/prd-review-max"
+    if [[ "$UPGRADE" -eq 1 ]]; then
+      echo "dry-run: would pull upstream and refresh prd-review-max in $dest_dir"
+    else
+      echo "dry-run: would $MODE prd-review-max into $dest_dir/prd-review-max"
+    fi
   done
   echo "dry-run: would fetch from $REPO_URL ($REPO_REF)"
   exit 0
 fi
 
-mkdir -p "$CACHE_DIR"
-if [[ ! -d "$STAGING/.git" ]]; then
-  git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$STAGING"
-else
-  git -C "$STAGING" fetch --depth 1 origin "$REPO_REF"
-  git -C "$STAGING" checkout "$REPO_REF"
-  git -C "$STAGING" pull --ff-only origin "$REPO_REF" || true
+if [[ "$UPGRADE" -eq 1 ]]; then
+  pull_upstream
+  for dest_dir in "${DEST_DIRS[@]}"; do
+    install_target "$dest_dir"
+  done
+  print_upstream_version
+  echo "Upgraded prd-review-max from upstream (unchanged content in cache)."
+  exit 0
 fi
 
-if [[ ! -f "$STAGING/$SKILL_SUBDIR/SKILL.md" ]]; then
-  echo "Missing upstream skill at $STAGING/$SKILL_SUBDIR/SKILL.md" >&2
-  exit 1
+if existing="$(find_existing_prd_review_max "${DEST_DIRS[@]}")"; then
+  echo "prd-review-max already installed: $existing"
+  echo "Run with --upgrade to pull latest upstream (or use llm-wiki update-skill)."
+  exit 0
 fi
 
+pull_upstream
 for dest_dir in "${DEST_DIRS[@]}"; do
-  mkdir -p "$dest_dir"
-  target="$dest_dir/prd-review-max"
-  if [[ -e "$target" ]]; then
-    if [[ "$FORCE" -eq 1 ]]; then
-      rm -rf "$target"
-    else
-      echo "Refusing to overwrite existing $target (use --force)" >&2
-      exit 1
-    fi
-  fi
-  case "$MODE" in
-    --copy)
-      cp -R "$STAGING/$SKILL_SUBDIR" "$target"
-      echo "copied prd-review-max -> $target"
-      ;;
-    --link)
-      ln -s "$STAGING/$SKILL_SUBDIR" "$target"
-      echo "linked prd-review-max -> $target"
-      ;;
-  esac
+  install_target "$dest_dir"
 done
-
+print_upstream_version
 echo "Installed prd-review-max from upstream (unchanged)."

@@ -212,6 +212,12 @@ qoder  -> ${QODER_HOME:-$HOME/.qoder}/skills
    ./scripts/install_prd_review_max.sh --link --client auto
    ```
 
+   **升级**：随 `llm-wiki update-skill` 自动执行（`install_prd_review_max.sh --upgrade`）；也可单独运行：
+
+   ```bash
+   ./scripts/install_prd_review_max.sh --upgrade --client auto
+   ```
+
 2. **`$requirement-review`**（本 bundle）：在调用 `prd-review-max` 前后接入 LLM Wiki 知识库——检索 `BUSINESS_CONTEXT.md`、`raw/`、`wiki/`、`raw-code/`、`wiki/code/`，输出 MECE 影响范围、历史规则冲突、已有实现差异与 Cwiki 评论稿。
 
 可脱离 `$llm-wiki` 主 skill 使用；但不要修改 `prd-review-max` 包内文件，增量规则写在 `skills/requirement-review/references/kb-evidence-bridge.md`。

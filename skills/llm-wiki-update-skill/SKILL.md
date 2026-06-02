@@ -1,6 +1,6 @@
 ---
 name: llm-wiki-update-skill
-description: LLM Wiki skill bundle 自更新入口。用于显式更新本机安装的 llm-wiki skills、模板脚本和命令协议；不更新当前 KB 内容。
+description: LLM Wiki skill bundle 自更新入口。用于显式更新本机安装的 llm-wiki skills、模板脚本和命令协议，并**默认同时升级上游 prd-review-max**；不更新当前 KB 内容。
 ---
 
 # LLM Wiki Update Skill
@@ -19,7 +19,7 @@ description: LLM Wiki skill bundle 自更新入口。用于显式更新本机安
    - 如果当前 installed skill 是软链或可从脚本路径推断 bundle checkout，使用推断出的本地 checkout，并在其中执行 `git pull --ff-only`。
    - 如果无法推断来源，允许 updater 使用公司 GitLab 默认地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` 下载到本地 cache 后安装；可用 `--git-url` 或 `LLM_WIKI_SKILL_GIT_URL` 覆盖。
    - 只有用户明确要求离线或传入 `--no-download` 时，才在无法推断来源时询问用户提供本地 `llm-wiki-skill` checkout 路径。
-7. 默认命令形态：
+7. 默认命令形态（**会自动升级 prd-review-max，无需单独命令**）：
 
    ```bash
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --client auto --backup
@@ -31,5 +31,6 @@ description: LLM Wiki skill bundle 自更新入口。用于显式更新本机安
    python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --source /path/to/llm-wiki-skill --client auto --backup
    ```
 
-8. 更新完成后报告：使用的 source/cache、是否执行了 clone 或 `git pull --ff-only`、安装目标 client、备份/覆盖策略、是否还需要对某个 KB 运行 `llm-wiki update` 以刷新项目内工具。
-9. 最后输出 `建议下一步`。
+8. 更新完成后报告：使用的 source/cache、是否执行了 clone 或 `git pull --ff-only`、安装目标 client、备份/覆盖策略、**是否已刷新 prd-review-max（版本/commit）**、是否还需要对某个 KB 运行 `llm-wiki update` 以刷新项目内工具。
+9. 默认在 bundle 安装成功后自动执行 `./scripts/install_prd_review_max.sh --upgrade`；只有用户明确要求跳过时才加 `--skip-prd-review-max`。
+10. 最后输出 `建议下一步`。

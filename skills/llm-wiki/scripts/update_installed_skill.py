@@ -145,6 +145,19 @@ def is_git_worktree(path: Path) -> bool:
     return result.returncode == 0
 
 
+def update_prd_review_max(bundle_root: Path, client: str, mode: str) -> int:
+    script = bundle_root / "scripts" / "install_prd_review_max.sh"
+    if not script.is_file():
+        print("Warning: missing scripts/install_prd_review_max.sh; skipped prd-review-max update.")
+        return 0
+
+    command = [str(script), mode, "--upgrade", "--client", client]
+    if mode == "--copy":
+        command.append("--force")
+    print("Updating upstream prd-review-max dependency...")
+    return run(command, bundle_root)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -177,6 +190,11 @@ def main() -> int:
     )
     parser.add_argument("--no-pull", action="store_true", help="Do not git pull the source checkout before installing.")
     parser.add_argument("--no-download", action="store_true", help="Fail instead of cloning from GitLab when no local source is found.")
+    parser.add_argument(
+        "--skip-prd-review-max",
+        action="store_true",
+        help="Do not install or upgrade the upstream prd-review-max dependency after updating llm-wiki.",
+    )
     args = parser.parse_args()
 
     if args.backup and args.force:
@@ -199,14 +217,23 @@ def main() -> int:
         install_command.append("--backup")
 
     code = run(install_command, bundle_root)
-    if code == 0:
-        print(
-            "Installed llm-wiki skill updated. Existing KB projects keep their project-local tools until refreshed."
-        )
-        print(
-            "Run `llm-wiki maintain-all` / `$llm-wiki-maintain-all` to preview batch backfill/update for registered KBs."
-        )
-    return code
+    if code != 0:
+        return code
+
+    if not args.skip_prd_review_max:
+        code = update_prd_review_max(bundle_root, args.client, args.mode)
+        if code != 0:
+            return code
+
+    print(
+        "Installed llm-wiki skill updated. Existing KB projects keep their project-local tools until refreshed."
+    )
+    print(
+        "Run `llm-wiki maintain-all` / `$llm-wiki-maintain-all` to preview batch backfill/update for registered KBs."
+    )
+    if not args.skip_prd_review_max:
+        print("Upstream prd-review-max was refreshed via scripts/install_prd_review_max.sh --upgrade.")
+    return 0
 
 
 if __name__ == "__main__":
