@@ -34,7 +34,7 @@ If `VERSION` is missing, fall back to `manifest.json` in the same directory when
 
 ## Evidence preflight (partial clone / git without raw)
 
-Many teams **commit the built `wiki/`** but **do not commit** `raw/` or `raw-code/` (submodule, sparse checkout, or internal sync). The deterministic tools detect that situation and **block rebuild/update** until evidence is restored.
+Many teams **commit the built `wiki/`** but keep `raw/` and `raw-code/` as **ignored local evidence caches** restored from `upstream/wiki-sources.json` and `upstream/code-sources.json`. Shared KB must **not** commit `raw-code/` as git submodules or gitlinks; that layout fails shared preflight with `evidence_cache_tracked_failed`. Legacy submodule layouts should be migrated with `uv run python tools/migrate_raw_code.py --apply` before shared update. When evidence caches are missing locally (sparse checkout, fresh clone), deterministic tools **block rebuild/update** until `raw/` / managed `raw-code/` checkouts are restored.
 
 **Heuristics**
 

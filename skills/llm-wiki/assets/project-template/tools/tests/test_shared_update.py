@@ -82,6 +82,40 @@ class SharedUpdateTests(unittest.TestCase):
             self.assertEqual(result.status, "evidence_cache_tracked_failed")
             self.assertIn("raw/page.md", result.message)
 
+    def test_evidence_cache_hygiene_rejects_tracked_raw_code_gitlink(self):
+        shared = load_shared_update()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            git(project, "init", "-b", "main")
+            git(project, "config", "user.name", "Codex")
+            git(project, "config", "user.email", "codex@example.com")
+            (project / ".gitignore").write_text("raw/\n", encoding="utf-8")
+            (project / "wiki" / "code").mkdir(parents=True)
+            codebase = project / "raw-code" / "demo-app"
+            codebase.mkdir(parents=True)
+            git(codebase, "init", "-b", "main")
+            git(codebase, "config", "user.name", "Codex")
+            git(codebase, "config", "user.email", "codex@example.com")
+            (codebase / "README.md").write_text("# demo\n", encoding="utf-8")
+            git(codebase, "add", "README.md")
+            git(codebase, "commit", "-m", "init")
+            sha = subprocess.check_output(
+                ["git", "-C", str(codebase), "rev-parse", "HEAD"],
+                text=True,
+            ).strip()
+            subprocess.run(
+                ["git", "update-index", "--add", "--cacheinfo", f"160000,{sha},raw-code/demo-app"],
+                cwd=project,
+                check=True,
+            )
+            git(project, "commit", "-m", "track gitlink")
+
+            result = shared.check_evidence_cache_hygiene(project)
+
+            self.assertEqual(result.status, "evidence_cache_tracked_failed")
+            self.assertIn("submodule/gitlink", result.message)
+            self.assertIn("migrate_raw_code.py", result.message)
+
     def test_evidence_cache_hygiene_checks_raw_code_when_declared(self):
         shared = load_shared_update()
         with tempfile.TemporaryDirectory() as tmp:
