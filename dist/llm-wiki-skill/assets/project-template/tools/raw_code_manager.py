@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import subprocess
 from pathlib import Path
 
 import yaml
+from git_auth import permission_message, run_git
 
 
 METADATA_FILENAME = ".llm-wiki-codebase.yaml"
@@ -30,10 +30,6 @@ class RawCodeManagerError(RuntimeError):
 
     def __str__(self) -> str:
         return self.message
-
-
-def run_git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=cwd, check=False, capture_output=True, text=True)
 
 
 def read_code_sources_manifest(project: Path) -> dict[str, object]:
@@ -258,7 +254,7 @@ def ensure_managed_checkout(project: Path, source: dict[str, object]) -> Path:
         clone_repo(str(source["repo_url"]), target)
     except RawCodeManagerError as exc:
         if is_permission_error(exc.message):
-            raise RawCodeManagerError("evidence_failed", f"无法访问代码证据仓库。请先获取代码仓库读取权限后重试。详情：{exc.message}") from exc
+            raise RawCodeManagerError("evidence_failed", f"无法访问代码证据仓库。{permission_message('pull')} 详情：{exc.message}") from exc
         raise RawCodeManagerError("evidence_failed", f"代码证据仓库克隆失败。请检查仓库地址、网络或分支配置。详情：{exc.message}") from exc
 
     for args, message in [

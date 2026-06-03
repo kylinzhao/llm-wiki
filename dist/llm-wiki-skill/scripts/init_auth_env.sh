@@ -16,6 +16,15 @@ append_env_value() {
   fi
 }
 
+read_gitlab_token() {
+  echo
+  echo "GitLab token 可选：如果本机 SSH Key / Git credential 已能访问 git.guazi-corp.com，可直接回车跳过。"
+  echo "如需申请 PAT，请访问：https://git.guazi-corp.com/profile/personal_access_tokens"
+  echo "仅更新 skill / 拉代码需要 read_repository；共享 KB 需要推送时还需 write_repository。"
+  read -r -s -p "请输入 GitLab PAT（输入时不会显示，没有可直接回车）: " GUAZI_GITLAB_TOKEN
+  echo
+}
+
 read -r -p "Choose auth mode [sso/cookie] (default: sso): " AUTH_MODE
 AUTH_MODE="${AUTH_MODE:-sso}"
 
@@ -25,7 +34,7 @@ umask 077
 
 cat > "$AUTH_ENV_FILE" <<'EOF'
 # Local llm-wiki auth values. Do not commit.
-# Loaded by llm-wiki Cwiki sync tools on this computer.
+# Loaded by llm-wiki Cwiki/Jira/Git helper tools on this computer.
 EOF
 
 case "$AUTH_MODE" in
@@ -34,12 +43,14 @@ case "$AUTH_MODE" in
     echo
     read -r -s -p "请输入 Jira 令牌（输入时不会显示，没有可直接回车）: " JIRA_TOKEN
     echo
+    read_gitlab_token
     if [[ -z "$COOKIE_HEADER" ]]; then
       echo "COOKIE_HEADER 不能为空；未写入鉴权文件。" >&2
       exit 2
     fi
     append_env_value "COOKIE_HEADER" "$COOKIE_HEADER"
     append_env_value "JIRA_TOKEN" "$JIRA_TOKEN"
+    append_env_value "GUAZI_GITLAB_TOKEN" "$GUAZI_GITLAB_TOKEN"
     ;;
   sso)
     read -r -p "请输入瓜子用户名: " GUAZI_SSO_USER_NAME
@@ -48,6 +59,7 @@ case "$AUTH_MODE" in
     read -r -p "请输入手机号: " GUAZI_SSO_APPLY_PHONE
     read -r -s -p "请输入 Jira 令牌（输入时不会显示，没有可直接回车）: " JIRA_TOKEN
     echo
+    read_gitlab_token
     if [[ -z "$GUAZI_SSO_USER_NAME" || -z "$GUAZI_SSO_PASSWORD" || -z "$GUAZI_SSO_APPLY_PHONE" ]]; then
       echo "用户名、密码和手机号不能为空；未写入鉴权文件。" >&2
       exit 2
@@ -56,6 +68,7 @@ case "$AUTH_MODE" in
     append_env_value "GUAZI_SSO_PASSWORD" "$GUAZI_SSO_PASSWORD"
     append_env_value "GUAZI_SSO_APPLY_PHONE" "$GUAZI_SSO_APPLY_PHONE"
     append_env_value "JIRA_TOKEN" "$JIRA_TOKEN"
+    append_env_value "GUAZI_GITLAB_TOKEN" "$GUAZI_GITLAB_TOKEN"
     ;;
   *)
     echo "未知鉴权模式：$AUTH_MODE。请输入 sso 或 cookie。" >&2

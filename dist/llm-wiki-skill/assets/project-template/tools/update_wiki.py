@@ -24,6 +24,7 @@ from gplus_quality import inspect_gplus_quality
 from raw_code_manager import RawCodeManagerError, is_permission_error, managed_code_sync_specs as declared_code_sync_specs, read_codebase_metadata
 from refinement_contract import summarize_refinement_contract
 from project_registry import best_effort_register_current_project
+from git_auth import permission_message, run_git as run_git_with_auth
 import shared_update
 from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_preflight_failed
 
@@ -110,6 +111,11 @@ def run_captured_command(command: str | Sequence[str], cwd: Path) -> CommandResu
         display = shlex.join(command)
         shell = False
     print("+ " + display)
+    if not shell and command and command[0] == "git":
+        result = run_git_with_auth(list(command), cwd, operation=str(command[1]) if len(command) > 1 else "git")
+        if result.stdout:
+            print(result.stdout, end="")
+        return CommandResult(result.returncode, result.stdout, result.stderr)
     result = subprocess.run(command, cwd=cwd, shell=shell, capture_output=True, text=True)
     if result.stdout:
         print(result.stdout, end="")
@@ -901,7 +907,7 @@ def run_code_sync(project: Path, shared_mode: bool = False) -> int:
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip()
             if is_permission_error(detail):
-                message = f"代码仓库同步失败：请先获取代码仓库读取权限后重试。详情：{detail}"
+                message = f"代码仓库同步失败：{permission_message('pull')} 详情：{detail}"
                 if shared_mode:
                     message += (
                         "\n共享模式已阻断，本轮不会继续生成或发布 KB 产物。"

@@ -4,6 +4,7 @@ import fnmatch
 import os
 import subprocess
 from pathlib import Path
+from git_auth import permission_message, run_git as run_git_with_auth
 
 
 class GitResult:
@@ -126,7 +127,7 @@ def classify_git_permission(stderr: str, operation: str) -> str:
 
 
 def run_git(args: list[str], cwd: Path) -> GitResult:
-    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    result = run_git_with_auth(args, cwd, operation=args[0] if args else "git")
     return GitResult(result.returncode, result.stdout, result.stderr)
 
 
@@ -364,14 +365,14 @@ def shared_preflight(
         detail = upstream_result.stderr.strip()
         message = "共享模式需要配置 KB 仓库上游分支。"
         if classify_git_permission(detail, "pull") == "read_permission":
-            message = "无法读取 KB 仓库上游。请先获取 KB 仓库权限（读取权限）后重试。"
+            message = "无法读取 KB 仓库上游。" + permission_message("pull")
         return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
 
     fetch = git_runner(["fetch", "--prune", "origin"], project)
     if fetch.returncode != 0:
         detail = fetch.stderr.strip()
         if classify_git_permission(detail, "pull") == "read_permission":
-            message = "无法读取 KB 仓库。请先获取 KB 仓库权限（读取权限）后重试。详情：" + detail
+            message = "无法读取 KB 仓库。" + permission_message("pull") + " 详情：" + detail
         else:
             message = "共享 KB 同步失败。详情：" + detail
         return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
@@ -390,7 +391,7 @@ def shared_preflight(
         if pull.returncode != 0:
             detail = pull.stderr.strip()
             if classify_git_permission(detail, "pull") == "read_permission":
-                message = "无法读取 KB 仓库。请先获取 KB 仓库权限（读取权限）后重试。详情：" + detail
+                message = "无法读取 KB 仓库。" + permission_message("pull") + " 详情：" + detail
             else:
                 message = "共享 KB pull 失败。详情：" + detail
             return local_mode_offer(message) if interactive else PreflightResult("shared_sync_failed", message)
@@ -402,7 +403,7 @@ def shared_preflight(
         if push.returncode != 0:
             detail = push.stderr.strip()
             if classify_git_permission(detail, "push") == "write_permission":
-                return PreflightResult("unpublished_local_baseline", "无法发布共享 KB 基线。请先获取 KB 仓库写入权限后重试。详情：" + detail)
+                return PreflightResult("unpublished_local_baseline", "无法发布共享 KB 基线。" + permission_message("push") + " 详情：" + detail)
             return PreflightResult("unpublished_local_baseline", "本地共享 KB 基线尚未发布，自动 push 失败。请检查远端状态后重试。详情：" + detail)
         fetch_after_push = git_runner(["fetch", "--prune", "origin"], project)
         if fetch_after_push.returncode != 0:
@@ -418,7 +419,7 @@ def shared_preflight(
             if pull.returncode != 0:
                 detail = pull.stderr.strip()
                 if classify_git_permission(detail, "pull") == "read_permission":
-                    return PreflightResult("shared_sync_failed", "无法读取 KB 仓库。请先获取 KB 仓库权限（读取权限）后重试。详情：" + detail)
+                    return PreflightResult("shared_sync_failed", "无法读取 KB 仓库。" + permission_message("pull") + " 详情：" + detail)
                 return PreflightResult("shared_sync_failed", "共享 KB pull 失败。详情：" + detail)
 
     if dirty and not preflight_dirty_engine_refresh_only(project):
@@ -458,7 +459,7 @@ def publish_shared_baseline(project: Path, actor: str = "local-skill", git_runne
     push = git_runner(["push"], cwd=project)
     if push.returncode != 0:
         if classify_git_permission(push.stderr, "push") == "write_permission":
-            return PublishResult("unpublished_local_baseline", "共享 KB 已在本地提交，但推送失败：缺少写入权限。请先获取 KB 仓库权限后执行 git push。")
+            return PublishResult("unpublished_local_baseline", "共享 KB 已在本地提交，但推送失败：缺少写入权限。" + permission_message("push"))
         return PublishResult("unpublished_local_baseline", "共享 KB 已在本地提交，但推送失败。请检查网络、仓库地址或 Git 凭证后重试。")
 
     return PublishResult("published", "共享 KB 已发布。")
