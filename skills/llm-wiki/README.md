@@ -343,7 +343,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 python3 "$LLM_WIKI_SKILL_ROOT/scripts/update_installed_skill.py" --client auto --backup
 ```
 
-更新来源优先使用本地 `llm-wiki-skill` bundle checkout 的 git upstream。若无法从安装目录、环境变量或当前工作目录推断本地 checkout，updater 会从公司 GitLab 默认地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` 下载到 `~/.cache/llm-wiki-skill/llm-wiki`，再从该 cache 安装。可用 `--git-url` / `LLM_WIKI_SKILL_GIT_URL` 覆盖下载地址，用 `--cache-dir` / `LLM_WIKI_SKILL_CACHE_DIR` 覆盖 cache 目录；GitHub remote 只作为额外远端，除非显式指定，不默认使用。若下载私有 GitLab 仓库时缺少凭据，Personal Access Token 创建地址是 `https://git.guazi-corp.com/profile/personal_access_tokens`，所需 scope 为 `read_repository`。
+更新来源优先使用本地 `llm-wiki-skill` bundle checkout 的 git upstream。若无法从安装目录、环境变量或当前工作目录推断本地 checkout，updater 会从公司 GitLab 默认地址 `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` 下载到 `~/.cache/llm-wiki-skill/llm-wiki`，再从该 cache 安装。可用 `--git-url` / `LLM_WIKI_SKILL_GIT_URL` 覆盖下载地址，用 `--cache-dir` / `LLM_WIKI_SKILL_CACHE_DIR` 覆盖 cache 目录；GitHub remote 只作为额外远端，除非显式指定，不默认使用。Git 操作先使用本机已有 SSH Key / Git credential helper；若 HTTPS GitLab 访问失败且 `~/.llm-wiki/guazi-sso.env` 中有 `GUAZI_GITLAB_TOKEN`，会用该 token 通过 `GIT_ASKPASS` 重试。若下载私有 GitLab 仓库时缺少凭据，Personal Access Token 创建地址是 `https://git.guazi-corp.com/profile/personal_access_tokens`，更新 skill 所需 scope 为 `read_repository`；需要共享 KB 推送时还需 `write_repository`。可运行 `bash "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/init_auth_env.sh"` 填入可选 GitLab token。
 
 如果要强制使用指定的本地 bundle 仓库路径：
 

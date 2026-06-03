@@ -7,7 +7,8 @@ Update source:
 - The updater first prefers a local llm-wiki-skill bundle checkout, using that checkout's configured git upstream.
 - If no local checkout can be inferred, the updater may clone the canonical GitLab source `https://git.guazi-corp.com/c2b-fe/llm-wiki.git` into `~/.cache/llm-wiki-skill/llm-wiki`, then install from that cached checkout.
 - Override the fallback Git URL with `--git-url` or `LLM_WIKI_SKILL_GIT_URL`; override the cache parent with `--cache-dir` or `LLM_WIKI_SKILL_CACHE_DIR`.
-- If GitLab credentials are missing, create a Personal Access Token at `https://git.guazi-corp.com/profile/personal_access_tokens` with the `read_repository` scope.
+- Git operations first use the machine's existing SSH Key / Git credential helper. If HTTPS GitLab access fails and `~/.llm-wiki/guazi-sso.env` contains `GUAZI_GITLAB_TOKEN`, the updater retries with that token via `GIT_ASKPASS`.
+- If GitLab credentials are missing, create a Personal Access Token at `https://git.guazi-corp.com/profile/personal_access_tokens` with the `read_repository` scope, then run `bash "${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/init_auth_env.sh"` and fill the optional GitLab token field.
 - A GitHub remote may exist as a mirror, but do not switch to it unless the user explicitly asks or the local checkout is configured that way.
 - If the installed skill was copied and no source checkout can be inferred, use the GitLab cache fallback unless the user requested offline mode with `--no-download`.
 

@@ -52,12 +52,12 @@ uv run python tools/update_wiki.py --graphify
 
 ## Cwiki Authentication
 
-When Cwiki upstream sync needs authentication, prefer the bundled `guazi-sso-login` flow over manually pasting `COOKIE_HEADER`. Ask the user to run the built-in setup script in a terminal, then return to the agent and continue update:
+When Cwiki upstream sync needs authentication, prefer the bundled `guazi-sso-login` flow over manually pasting `COOKIE_HEADER`. The same local setup script can also store an optional GitLab PAT for `git.guazi-corp.com` access when SSH Key / Git credential helper is not already configured. Ask the user to run the built-in setup script in a terminal, then return to the agent and continue update:
 
 ```bash
 bash tools/confluence_sync/init_auth_env.sh
 ```
 
-The script prompts for Guazi username, password, phone, and optional Jira token, writes them only to `~/.llm-wiki/guazi-sso.env` with user-only permissions, and does not write secrets into the KB project. The local SSO flow exchanges the credentials for a local Cwiki Cookie/login cache and reuses it until it expires. Jira issue reading should use `JIRA_TOKEN`; CHDSSO is only a fallback when no Jira token is available. If secrets are typed into an agent chat window, they may enter the current agent session context or local session history depending on the engine. A full `COOKIE_HEADER` is only a lower-priority one-off fallback.
+The script prompts for Guazi username, password, phone, optional Jira token, and optional `GUAZI_GITLAB_TOKEN`, writes them only to `~/.llm-wiki/guazi-sso.env` with user-only permissions, and does not write secrets into the KB project. Git operations first use existing SSH Key / Git credentials; the saved GitLab token is only used as an HTTPS GitLab fallback. The local SSO flow exchanges the credentials for a local Cwiki Cookie/login cache and reuses it until it expires. Jira issue reading should use `JIRA_TOKEN`; CHDSSO is only a fallback when no Jira token is available. If secrets are typed into an agent chat window, they may enter the current agent session context or local session history depending on the engine. A full `COOKIE_HEADER` is only a lower-priority one-off fallback.
 
-Before asking the user to enter auth again, first check whether local auth is already present in `~/.llm-wiki/guazi-sso.env` or the bundled `guazi-sso-login` cache/login records. If local auth already exists, do not ask the user to re-enter username, password, phone, Jira token, or Cookie unless you have evidence that the local login state is invalid and cannot be refreshed automatically.
+Before asking the user to enter auth again, first check whether local auth is already present in `~/.llm-wiki/guazi-sso.env`, existing Git credentials, or the bundled `guazi-sso-login` cache/login records. If local auth already exists, do not ask the user to re-enter username, password, phone, Jira token, GitLab token, or Cookie unless you have evidence that the local auth state is invalid and cannot be refreshed automatically.

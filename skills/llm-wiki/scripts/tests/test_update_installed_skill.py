@@ -61,6 +61,45 @@ class UpdateInstalledSkillTest(unittest.TestCase):
 
         prd_update.assert_not_called()
 
+    def test_gitlab_clone_retries_with_local_token_after_system_git_fails(self):
+        updater = load_updater()
+        calls = []
+
+        def fake_call(command, cwd, env=None):
+            calls.append((command, env))
+            return 128 if env is None else 0
+
+        with mock.patch.object(updater, "call", side_effect=fake_call), mock.patch.object(
+            updater, "gitlab_token", return_value="token-123"
+        ):
+            code = updater.run(
+                ["git", "clone", "https://git.guazi-corp.com/c2b-fe/llm-wiki.git", "/tmp/llm-wiki"],
+                Path("/tmp"),
+            )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 2)
+        self.assertIsNone(calls[0][1])
+        self.assertEqual(calls[1][1]["GUAZI_GITLAB_TOKEN"], "token-123")
+        self.assertIn("GIT_ASKPASS", calls[1][1])
+
+    def test_gitlab_clone_does_not_retry_without_token(self):
+        updater = load_updater()
+        calls = []
+
+        def fake_call(command, cwd, env=None):
+            calls.append((command, env))
+            return 128
+
+        with mock.patch.object(updater, "call", side_effect=fake_call), mock.patch.object(updater, "gitlab_token", return_value=""):
+            code = updater.run(
+                ["git", "clone", "https://git.guazi-corp.com/c2b-fe/llm-wiki.git", "/tmp/llm-wiki"],
+                Path("/tmp"),
+            )
+
+        self.assertEqual(code, 128)
+        self.assertEqual(len(calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,23 +5,98 @@ from __future__ import annotations
 
 import argparse
 import os
+import stat
 import subprocess
+import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 SCRIPT_PATH = Path(__file__).resolve()
 SKILL_ROOT = SCRIPT_PATH.parents[1]
 DEFAULT_GIT_URL = "https://git.guazi-corp.com/c2b-fe/llm-wiki.git"
 GITLAB_PAT_URL = "https://git.guazi-corp.com/profile/personal_access_tokens"
+AUTH_ENV_FILE = Path(os.environ.get("LLM_WIKI_AUTH_ENV_FILE", "~/.llm-wiki/guazi-sso.env")).expanduser()
+GITLAB_TOKEN_KEY = "GUAZI_GITLAB_TOKEN"
 
 
 def is_bundle_root(path: Path) -> bool:
     return (path / "install.sh").is_file() and (path / "skills" / "llm-wiki").is_dir()
 
 
+def parse_auth_env(path: Path | None = None) -> dict[str, str]:
+    path = AUTH_ENV_FILE if path is None else path
+    if not path.is_file():
+        return {}
+    result = subprocess.run(
+        ["bash", "-lc", f"set -a; . {str(path)!r}; env"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return {}
+    values: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key == GITLAB_TOKEN_KEY:
+            values[key] = value
+    return values
+
+
+def gitlab_token() -> str:
+    return os.environ.get(GITLAB_TOKEN_KEY, "").strip() or parse_auth_env().get(GITLAB_TOKEN_KEY, "").strip()
+
+
+def is_https_guazi_gitlab_command(command: list[str]) -> bool:
+    for value in command:
+        if "git.guazi-corp.com" not in value:
+            continue
+        parsed = urlparse(value)
+        if parsed.scheme == "https" and parsed.netloc == "git.guazi-corp.com":
+            return True
+    return False
+
+
+def git_askpass_env(token: str) -> tuple[dict[str, str], tempfile.TemporaryDirectory[str]]:
+    temp_dir = tempfile.TemporaryDirectory(prefix="llm-wiki-git-askpass-")
+    script = Path(temp_dir.name) / "askpass.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        "case \"$1\" in\n"
+        "  *Username*) printf '%s\\n' oauth2 ;;\n"
+        "  *Password*) printf '%s\\n' \"$GUAZI_GITLAB_TOKEN\" ;;\n"
+        "  *) printf '\\n' ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    script.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    env = os.environ.copy()
+    env.update({"GIT_ASKPASS": str(script), "GIT_TERMINAL_PROMPT": "0", "GUAZI_GITLAB_TOKEN": token})
+    return env, temp_dir
+
+
+def call(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> int:
+    return subprocess.call(command, cwd=cwd, env=env)
+
+
 def run(command: list[str], cwd: Path) -> int:
     print("+ " + " ".join(command))
-    return subprocess.call(command, cwd=cwd)
+    code = call(command, cwd)
+    if code == 0 or not command or command[0] != "git" or not is_https_guazi_gitlab_command(command):
+        return code
+    token = gitlab_token()
+    if not token:
+        return code
+    env, temp_dir = git_askpass_env(token)
+    try:
+        print("+ git ... (retry with GUAZI_GITLAB_TOKEN from local auth env)")
+        return call(command, cwd, env=env)
+    finally:
+        temp_dir.cleanup()
 
 
 def run_checked(command: list[str], cwd: Path) -> None:
@@ -36,7 +111,8 @@ def gitlab_auth_help(git_url: str) -> str:
         "If this is a private Guazi GitLab repository, create a Personal Access Token at:\n"
         f"  {GITLAB_PAT_URL}\n"
         "Required scope: read_repository.\n"
-        "Then retry after configuring Git credentials, or pass --source /path/to/llm-wiki-skill "
+        "Then configure SSH Key / Git credentials, or run `bash ${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/init_auth_env.sh` "
+        "and fill GUAZI_GITLAB_TOKEN before retrying. You can also pass --source /path/to/llm-wiki-skill "
         "to install from a local checkout."
     )
 
