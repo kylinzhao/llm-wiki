@@ -1,4 +1,0 @@
-interface:
-  display_name: "LLM Wiki Add Wiki"
-  short_description: "把其他文档或 wiki 目录加入 raw 证据层"
-  default_prompt: "用 $llm-wiki-new-add-wiki 添加这个文档目录："
