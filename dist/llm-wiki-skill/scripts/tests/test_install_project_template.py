@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -117,6 +118,8 @@ class InstallProjectTemplateTest(unittest.TestCase):
             self.assertIn("COOKIE_HEADER", text)
             self.assertIn("GUAZI_GITLAB_TOKEN", text)
             self.assertIn("personal_access_tokens", text)
+            self.assertIn("已检测到本机已有 GitLab 令牌", text)
+            self.assertIn("Jira 个人设置页", text)
             self.assertIn("Choose auth mode", text)
             self.assertIn(".llm-wiki/guazi-sso.env", text)
 
@@ -128,8 +131,43 @@ class InstallProjectTemplateTest(unittest.TestCase):
         self.assertIn("COOKIE_HEADER", text)
         self.assertIn("GUAZI_GITLAB_TOKEN", text)
         self.assertIn("personal_access_tokens", text)
+        self.assertIn("已检测到本机已有 GitLab 令牌", text)
+        self.assertIn("Jira 个人设置页", text)
         self.assertIn("Choose auth mode", text)
         self.assertIn(".llm-wiki/guazi-sso.env", text)
+
+    def test_auth_init_script_reuses_existing_gitlab_and_jira_tokens(self):
+        script = Path(__file__).resolve().parents[1] / "init_auth_env.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            auth_env = Path(tmp) / "guazi-sso.env"
+            auth_env.write_text(
+                "GUAZI_SSO_USER_NAME=user\n"
+                "GUAZI_SSO_PASSWORD=pass\n"
+                "GUAZI_SSO_APPLY_PHONE=13800138000\n"
+                "JIRA_TOKEN=jira-token\n"
+                "GUAZI_GITLAB_TOKEN=gitlab-token\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["LLM_WIKI_AUTH_ENV_FILE"] = str(auth_env)
+
+            result = subprocess.run(
+                ["bash", str(script)],
+                input="\n",
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+                timeout=10,
+            )
+            text = auth_env.read_text(encoding="utf-8")
+
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertIn("已检测到本机已有 Jira 令牌，跳过输入。", output)
+        self.assertIn("已检测到本机已有 GitLab 令牌，跳过输入。", output)
+        self.assertIn("JIRA_TOKEN=jira-token", text)
+        self.assertIn("GUAZI_GITLAB_TOKEN=gitlab-token", text)
 
     def test_project_template_ignores_evidence_caches(self):
         installer = load_installer()

@@ -18,11 +18,12 @@
 
 ## 版本
 
-- `version`: `1.0.5`
-- `engine_version`: `engine-v1.0.5`
+- `version`: `1.0.6`
+- `engine_version`: `engine-v1.0.6`
 
 ### Engine 发行记录
 
+- **`engine-v1.0.6`**：优化 init_auth_env 本机鉴权复用：已有 GitLab/Jira 令牌时不再重复输入，并根据 SSH Key / Git credential 动态提示 GitLab 令牌。
 - **`engine-v1.0.5`**：补齐 update-skill 与 shared update 的 GitLab token 本机鉴权 fallback，init_auth_env 可选保存 GitLab PAT，并保持优先使用本机 SSH Key / Git credential。
 - **`engine-v1.0.4`**：同步 GrapeHub 发布包（SKILL.md + manifest.json），合入 Cwiki exclude-author 下载过滤，以及 update-skill 默认联动升级 prd-review-max。
 - **`engine-v1.0.3`**：发布 shared update checkpoint 语义、Cwiki smoke 限流、raw path/image 下载保护，并合入 Confluence source path metadata。

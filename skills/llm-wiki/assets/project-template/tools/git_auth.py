@@ -64,8 +64,8 @@ def permission_message(operation: str = "git") -> str:
         scope += "；如需发布共享 KB，请同时勾选 write_repository"
     return (
         f"缺少{permission}或 GitLab 鉴权失败。请先获取 KB 仓库权限或代码仓库权限，并确认本机 SSH Key / Git 凭据可访问 git.guazi-corp.com；"
-        f"或到 {GITLAB_PAT_URL} 申请 Personal Access Token（scope: {scope}），"
-        "再运行 `bash tools/confluence_sync/init_auth_env.sh` 填入 GitLab token 后重试。"
+        f"或到 {GITLAB_PAT_URL} 创建 GitLab 令牌（scope: {scope}），"
+        "再运行 `bash tools/confluence_sync/init_auth_env.sh` 填入 GitLab 令牌后重试。"
     )
 
 
