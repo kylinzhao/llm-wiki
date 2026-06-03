@@ -64,6 +64,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 
 ## Engine 发行（`engine-v*`）
 
+- **`engine-v1.0.4`**：同步 GrapeHub 发布包（SKILL.md + manifest.json），合入 Cwiki exclude-author 下载过滤，以及 update-skill 默认联动升级 prd-review-max。
 - **`engine-v1.0.3`**：发布 shared update checkpoint 语义、Cwiki smoke 限流、raw path/image 下载保护，并合入 Confluence source path metadata。
 - **`engine-v1.0.2`**：新增发布版本脚本与 GitLab 发布规则，要求每次发布前同步升级 VERSION、manifest 和 README 发行记录。
 - **`engine-v1.0.1`**：修复项目模板健康检查与图谱构建对 Markdown 代码片段中 `[[...]]` 路径的误判，避免 Next.js catch-all 路由等代码路径被当作 broken wikilink；修复 `tools/health.py` 普通 CLI 输出的统计变量错误；当已启用本机 SSO 自动鉴权时，Cwiki 同步不再提前打印缺鉴权提示。

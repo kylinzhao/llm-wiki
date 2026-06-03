@@ -29,8 +29,42 @@ from wiki_preflight import raw_code_evidence_preflight_failed, raw_evidence_pref
 
 
 CANONICAL_WIKI_EXPORT_METADATA_DIR = "staging/wiki-export-state"
+DEFAULT_CONFLUENCE_DEPTH = 3
 CWIKI_SMOKE_MAX_PAGES_ENV = "LLM_WIKI_CWIKI_SMOKE_MAX_PAGES"
 CWIKI_SMOKE_RSS_MAX_RESULTS_ENV = "LLM_WIKI_CWIKI_SMOKE_RSS_MAX_RESULTS"
+
+
+def normalize_confluence_depth(value: object, *, fallback: int = DEFAULT_CONFLUENCE_DEPTH) -> int:
+    try:
+        parsed = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return fallback
+    return parsed if parsed > 0 else fallback
+
+
+def repair_wiki_export_state_depth(project: Path) -> bool:
+    exporter = project / "tools" / "confluence_sync" / "export_confluence_tree.py"
+    if not exporter.is_file():
+        return False
+    metadata_dir = project / CANONICAL_WIKI_EXPORT_METADATA_DIR
+    if not metadata_dir.is_dir():
+        return False
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("export_confluence_tree", exporter)
+    if spec is None or spec.loader is None:
+        return False
+    module = importlib.util.module_from_spec(spec)
+    previous_module = sys.modules.get(spec.name)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if previous_module is None:
+            sys.modules.pop(spec.name, None)
+        else:
+            sys.modules[spec.name] = previous_module
+    return bool(module.repair_export_state_depth_limits(metadata_dir))
 
 
 def utc_now() -> str:
@@ -499,6 +533,15 @@ def source_updated_since(source: dict[str, object]) -> str:
     return str(filters.get("updated_since") or source.get("updated_since") or "").strip()
 
 
+def source_exclude_authors(source: dict[str, object]) -> list[str]:
+    filters = source_filters(source)
+    raw = filters.get("exclude_authors")
+    if isinstance(raw, list):
+        return [str(value).strip() for value in raw if str(value).strip()]
+    single = str(filters.get("exclude_author") or "").strip()
+    return [single] if single else []
+
+
 def output_dir_has_confluence_pages(output_dir: Path) -> bool:
     """Return true when the ignored raw cache contains exported page bodies."""
     if not output_dir.is_dir():
@@ -542,6 +585,7 @@ def normalize_upstream_source(
         if page_id and not str(normalized.get("source_id") or "").strip():
             normalized["source_id"] = f"cwiki-{page_id}"
         normalized["metadata_dir"] = normalize_metadata_dir(normalized.get("metadata_dir"), project)
+        normalized["depth"] = normalize_confluence_depth(normalized.get("depth"))
     elif source_type == "rss":
         source_id = str(normalized.get("id") or normalized.get("source_id") or "").strip()
         if source_id and not str(normalized.get("source_id") or "").strip():
@@ -600,7 +644,7 @@ def export_state_to_upstream_sources(project: Path) -> list[dict[str, object]]:
                 "page_id": page_id,
                 "url": url,
                 "site_base": str(root.get("site_base") or ""),
-                "depth": int(root.get("depth_limit", 0) or 0),
+                "depth": normalize_confluence_depth(root.get("depth_limit")),
                 "weekly_from_title": str(root.get("weekly_from_title") or ""),
                 "space_key": str(root.get("space_key") or ""),
                 "rss_url": str(root.get("rss_url") or ""),
@@ -615,6 +659,7 @@ def export_state_to_upstream_sources(project: Path) -> list[dict[str, object]]:
 
 
 def ensure_upstream_wiki_sources(project: Path) -> list[dict[str, object]]:
+    repair_wiki_export_state_depth(project)
     config = load_upstream_wiki_sources(project)
     existing = config.get("sources")
     sources = (
@@ -677,7 +722,7 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         metadata_dir = project / metadata_dir_text if not Path(metadata_dir_text).is_absolute() else Path(metadata_dir_text)
         output_dir_text = str(source.get("output_dir") or "raw")
         output_dir = project / output_dir_text if not Path(output_dir_text).is_absolute() else Path(output_dir_text)
-        depth = int(source.get("depth", 0) or 0)
+        depth = normalize_confluence_depth(source.get("depth"))
         has_state = has_saved_confluence_progress(metadata_dir, output_dir, page_id, depth)
         if has_state:
             saved_state_groups.setdefault(str(metadata_dir), []).append(source)
@@ -703,6 +748,8 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         updated_since = source_updated_since(source)
         if updated_since:
             command.extend(["--updated-since", updated_since])
+        for author in source_exclude_authors(source):
+            command.extend(["--exclude-author", author])
         rss_url = str(source.get("rss_url") or "").strip()
         if page_id and rss_url:
             command.extend(["--rss-url", f"{page_id}={rss_url}"])
@@ -735,6 +782,13 @@ def confluence_sync_commands(project: Path) -> list[list[str]]:
         }
         if len(updated_since_values) == 1:
             command.extend(["--updated-since", next(iter(updated_since_values))])
+        exclude_author_values: list[str] = []
+        for source in grouped_sources:
+            for author in source_exclude_authors(source):
+                if author not in exclude_author_values:
+                    exclude_author_values.append(author)
+        for author in exclude_author_values:
+            command.extend(["--exclude-author", author])
         for source in grouped_sources:
             page_id = str(source.get("page_id") or "").strip()
             rss_url = str(source.get("rss_url") or "").strip()

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import subprocess
@@ -12,7 +13,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import project_registry
+
+def load_local_module(name: str):
+    script_dir = Path(__file__).resolve().parent
+    spec = importlib.util.spec_from_file_location(f"llm_wiki_scripts_{name}", script_dir / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+project_registry = load_local_module("project_registry")
 
 
 SCRIPT_PATH = Path(__file__).resolve()

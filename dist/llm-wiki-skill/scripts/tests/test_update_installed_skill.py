@@ -30,7 +30,9 @@ class UpdateInstalledSkillTest(unittest.TestCase):
                 sys.argv = [str(SCRIPT), "--source", str(bundle), "--no-pull"]
                 with mock.patch.object(updater, "resolve_bundle_root", return_value=bundle), mock.patch.object(
                     updater, "run", return_value=0
-                ), contextlib.redirect_stdout(stdout):
+                ), mock.patch.object(
+                    updater, "update_prd_review_max", return_value=0
+                ) as prd_update, contextlib.redirect_stdout(stdout):
                     self.assertEqual(updater.main(), 0)
             finally:
                 sys.argv = original_argv
@@ -38,6 +40,26 @@ class UpdateInstalledSkillTest(unittest.TestCase):
         output = stdout.getvalue()
         self.assertIn("maintain-all", output)
         self.assertIn("Existing KB projects keep their project-local tools", output)
+        self.assertIn("prd-review-max was refreshed", output)
+        prd_update.assert_called_once()
+
+    def test_skip_prd_review_max(self):
+        updater = load_updater()
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            original_argv = sys.argv
+            try:
+                sys.argv = [str(SCRIPT), "--source", str(bundle), "--no-pull", "--skip-prd-review-max"]
+                with mock.patch.object(updater, "resolve_bundle_root", return_value=bundle), mock.patch.object(
+                    updater, "run", return_value=0
+                ), mock.patch.object(
+                    updater, "update_prd_review_max", return_value=0
+                ) as prd_update:
+                    self.assertEqual(updater.main(), 0)
+            finally:
+                sys.argv = original_argv
+
+        prd_update.assert_not_called()
 
 
 if __name__ == "__main__":

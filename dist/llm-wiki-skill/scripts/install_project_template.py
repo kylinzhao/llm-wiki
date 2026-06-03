@@ -4,12 +4,21 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import shutil
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from project_registry import register_project
+
+def load_local_module(name: str):
+    script_dir = Path(__file__).resolve().parent
+    spec = importlib.util.spec_from_file_location(f"llm_wiki_scripts_{name}", script_dir / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+register_project = load_local_module("project_registry").register_project
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]

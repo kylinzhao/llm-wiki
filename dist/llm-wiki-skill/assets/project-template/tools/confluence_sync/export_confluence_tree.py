@@ -31,6 +31,17 @@ from drawio_diagram import drawio_to_mermaid
 
 DEFAULT_DEPTH = 3
 DEFAULT_RSS_MAX_RESULTS = 200
+
+
+def normalize_confluence_depth_limit(value: object, *, fallback: int = DEFAULT_DEPTH) -> int:
+    """Treat missing/invalid/zero depth as the configured default (3 by default)."""
+    try:
+        parsed = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return fallback
+    return parsed if parsed > 0 else fallback
+
+
 AUTO_RSS_MIN_RESULTS = 50
 AUTO_RSS_RESULTS_PER_DAY = 50
 AUTO_RSS_MAX_RESULTS = 200
@@ -477,6 +488,16 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Only persist pages whose updated_at/created_at is on or after this time "
             "(ISO-8601, for example 2026-01-01 or 2026-01-01T00:00:00+08:00)."
+        ),
+    )
+    parser.add_argument(
+        "--exclude-author",
+        action="append",
+        default=[],
+        help=(
+            "Skip exporting pages whose creator display name contains this fragment. "
+            "Repeat for multiple patterns. Matching is case-insensitive substring match, "
+            "for example 张丹-出海业务 matches 张丹-出海业务-出海产品与增长部."
         ),
     )
     return parser.parse_args()
@@ -2571,6 +2592,33 @@ def filter_pages_by_updated_since(
     return {page_id: page for page_id, page in pages.items() if page_matches_updated_since(page, cutoff)}
 
 
+def normalize_exclude_authors(values: list[str]) -> frozenset[str]:
+    normalized = {str(value).strip().casefold() for value in values if str(value).strip()}
+    return frozenset(normalized)
+
+
+def page_matches_exclude_authors(page: PageNode, excluded_authors: frozenset[str]) -> bool:
+    if not excluded_authors:
+        return False
+    author = str(page.author or "").strip().casefold()
+    if not author:
+        return False
+    return any(pattern in author for pattern in excluded_authors)
+
+
+def filter_pages_by_exclude_authors(
+    pages: dict[str, PageNode],
+    excluded_authors: frozenset[str],
+) -> dict[str, PageNode]:
+    if not excluded_authors:
+        return pages
+    return {
+        page_id: page
+        for page_id, page in pages.items()
+        if not page_matches_exclude_authors(page, excluded_authors)
+    }
+
+
 def feed_entry_is_newer(entry: FeedEntry, page: PageNode) -> bool:
     if entry.version_number is not None and page.version_number:
         return entry.version_number > page.version_number
@@ -2772,6 +2820,7 @@ def update_root_from_rss(
     change_report_dir: Optional[Path] = None,
     write_report: bool = True,
     updated_since: Optional[datetime] = None,
+    exclude_authors: Optional[frozenset[str]] = None,
 ) -> UpdateResult:
     progress_file = resolve_existing_progress_file(metadata_dir, output_dir, root_page_id)
     state = load_progress_state(
@@ -2910,6 +2959,20 @@ def update_root_from_rss(
                     )
                 )
                 continue
+        if page_matches_exclude_authors(new_page, exclude_authors or frozenset()):
+            ignored_page_ids.append(entry.page_id)
+            ignored_page_records.append(
+                ignored_page_record(
+                    root_page_id=root_page_id,
+                    entry=entry,
+                    reason="excluded_author",
+                    page=new_page,
+                    relative_depth=relative_depth_from_root(new_page, root_page_id),
+                    depth_limit=depth_limit,
+                )
+            )
+            continue
+        if not dry_run:
             pages[entry.page_id] = new_page
         new_path = build_page_paths(
             {entry.page_id: new_page},
@@ -3025,6 +3088,9 @@ def load_export_state(metadata_dir: Path, *, raw_output_dir: Optional[Path] = No
 
 def save_export_state(metadata_dir: Path, root_states: list[dict[str, Any]]) -> None:
     metadata_dir.mkdir(parents=True, exist_ok=True)
+    for root in root_states:
+        if isinstance(root, dict):
+            root["depth_limit"] = normalize_confluence_depth_limit(root.get("depth_limit"))
     payload = {
         "version": EXPORT_STATE_VERSION,
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -3034,6 +3100,49 @@ def save_export_state(metadata_dir: Path, root_states: list[dict[str, Any]]) -> 
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def depth_limit_from_progress(metadata_dir: Path, root_page_id: str) -> int | None:
+    progress_file = root_progress_file_path(metadata_dir, root_page_id)
+    if not progress_file.is_file():
+        return None
+    try:
+        payload = json.loads(progress_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if str(payload.get("root_page_id") or "") != str(root_page_id):
+        return None
+    try:
+        depth = int(payload.get("depth_limit", -1))
+    except (TypeError, ValueError):
+        return None
+    return depth if depth > 0 else None
+
+
+def repair_export_state_depth_limits(metadata_dir: Path, *, fallback: int = DEFAULT_DEPTH) -> bool:
+    """Align export-state.json depth_limit with progress/upstream defaults."""
+    payload = load_export_state(metadata_dir)
+    roots = payload.get("roots")
+    if not isinstance(roots, list):
+        return False
+    changed = False
+    for root in roots:
+        if not isinstance(root, dict):
+            continue
+        page_id = str(root.get("page_id") or "").strip()
+        if not page_id:
+            continue
+        progress_depth = depth_limit_from_progress(metadata_dir, page_id)
+        effective = normalize_confluence_depth_limit(
+            progress_depth if progress_depth is not None else root.get("depth_limit"),
+            fallback=fallback,
+        )
+        if int(root.get("depth_limit", -1)) != effective:
+            root["depth_limit"] = effective
+            changed = True
+    if changed:
+        save_export_state(metadata_dir, roots)
+    return changed
 
 
 def project_root_for_output(output_dir: Path) -> Optional[Path]:
@@ -3055,6 +3164,7 @@ def write_upstream_wiki_sources(
     metadata_dir: Path,
     root_states: list[dict[str, Any]],
     updated_since: Optional[str] = None,
+    exclude_authors: Optional[list[str]] = None,
 ) -> None:
     project = project_root_for_output(output_dir)
     if project is None:
@@ -3094,7 +3204,7 @@ def write_upstream_wiki_sources(
                 "page_id": page_id,
                 "url": str(root_state.get("url") or ""),
                 "site_base": str(root_state.get("site_base") or ""),
-                "depth": int(root_state.get("depth_limit", 0) or 0),
+                "depth": normalize_confluence_depth_limit(root_state.get("depth_limit")),
                 "weekly_from_title": str(root_state.get("weekly_from_title") or ""),
                 "space_key": str(root_state.get("space_key") or ""),
                 "rss_url": str(root_state.get("rss_url") or ""),
@@ -3106,6 +3216,8 @@ def write_upstream_wiki_sources(
         )
         if updated_since:
             filters["updated_since"] = updated_since
+        if exclude_authors:
+            filters["exclude_authors"] = list(exclude_authors)
         if filters:
             source["filters"] = filters
         by_page_id[page_id] = source
@@ -3289,6 +3401,8 @@ def main() -> int:
     if not str(getattr(args, "cookie", "") or "").strip() and auth_env.get("COOKIE_HEADER"):
         args.cookie = auth_env["COOKIE_HEADER"]
     updated_since = parse_updated_since(args.updated_since)
+    exclude_authors = normalize_exclude_authors(args.exclude_author)
+    exclude_author_values = list(dict.fromkeys(str(value).strip() for value in args.exclude_author if str(value).strip()))
     if not args.url and not args.update:
         raise SystemExit("--url is required unless --update is used with a saved output directory.")
     weekly_from_map = parse_page_value_args(args.weekly_from)
@@ -3313,6 +3427,7 @@ def main() -> int:
             metadata_dir=metadata_dir,
             root_states=root_states,
             updated_since=args.updated_since.strip(),
+            exclude_authors=exclude_author_values or None,
         )
         total_pages = sum(int(root_state.get("page_count", 0) or 0) for root_state in root_states)
         print(
@@ -3345,6 +3460,7 @@ def main() -> int:
         raise SystemExit(f"Failed to resolve Jira CHDSSO: {exc}") from exc
 
     if args.update:
+        repair_export_state_depth_limits(metadata_dir, fallback=normalize_confluence_depth_limit(args.depth))
         if args.url:
             root_specs = build_root_specs(args.url, weekly_from_map, depth_map, args.depth)
             root_states = root_states_from_specs(
@@ -3383,7 +3499,11 @@ def main() -> int:
         for root_state in root_states:
             root_page_id = str(root_state["page_id"])
             site_base = str(root_state["site_base"])
-            depth_limit = int(root_state.get("depth_limit", args.depth))
+            depth_limit = normalize_confluence_depth_limit(
+                depth_limit_from_progress(metadata_dir, root_page_id) or root_state.get("depth_limit"),
+                fallback=normalize_confluence_depth_limit(args.depth),
+            )
+            root_state["depth_limit"] = depth_limit
             rss_url = str(root_state.get("rss_url") or "")
             rss_max_results = resolve_rss_max_results(root_state, args.rss_max_results)
             if not rss_url:
@@ -3422,6 +3542,7 @@ def main() -> int:
                 change_report_dir=change_report_dir,
                 write_report=False,
                 updated_since=updated_since,
+                exclude_authors=exclude_authors,
             )
             total_scanned += result.scanned_count
             total_updated += len(result.updated_page_ids)
@@ -3477,6 +3598,7 @@ def main() -> int:
                 metadata_dir=metadata_dir,
                 root_states=root_states,
                 updated_since=args.updated_since.strip(),
+                exclude_authors=exclude_author_values or None,
             )
         print(
             f"{'Detected' if args.dry_run else 'Updated'} {total_updated} pages from {total_scanned} RSS entries "
@@ -3497,6 +3619,7 @@ def main() -> int:
             depth_one_child_filter=build_depth_one_child_filter(root_spec.weekly_from_title),
         )
         root_pages = filter_pages_by_updated_since(root_pages, updated_since)
+        root_pages = filter_pages_by_exclude_authors(root_pages, exclude_authors)
         write_root_export(
             root_spec.page_id,
             root_pages,
@@ -3517,6 +3640,7 @@ def main() -> int:
         metadata_dir=metadata_dir,
         root_states=root_states,
         updated_since=args.updated_since.strip(),
+        exclude_authors=exclude_author_values or None,
     )
 
     total_pages = 0

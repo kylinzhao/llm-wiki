@@ -146,12 +146,12 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - 对带 `cjira` 或 `【IDEA】` 信号的来源页，`update` 还应刷新 active registry，终态 requirement 归档到 `staging/cjira-registry/archive.json`，并把低置信度主单号或 stale Jira 拉取暴露给 `doctor` / `health`。
 - `llm-wiki backfill`：存量 KB 历史证据补全。先刷新 engine-owned 工具，重新扫描历史 `raw/` / `wiki/sources/` / `staging/`，补齐新版确定性派生能力（draw.io、Cjira/Jira/IDEA、source metadata、agent rules 等），再默认进入 `llm-wiki update` 语义做精修吸收和 G+ 收口。
 - `llm-wiki maintain-all`：维护本机 `~/.llm-wiki/projects.json` KB registry；默认 dry-run，可用 `--discover` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，只有用户明确要求 `--apply` 时才对已注册 KB 批量执行完整 backfill/update 维护。
-- `llm-wiki update-skill`：显式更新已安装的 llm-wiki skill bundle 本体；不要混入普通 KB 内容更新，除非用户明确要求。
+- `llm-wiki update-skill`：显式更新已安装的 llm-wiki skill bundle 本体，并默认同时升级上游 `prd-review-max`；不要混入普通 KB 内容更新，除非用户明确要求。
 - `llm-wiki add-wiki`：把另一个文档/wiki 目录或 wiki URL 接入当前项目，作为新的 `raw/` 需求/业务证据来源；wiki URL 应在同一个 `upstream/wiki-sources.json` source object 中记录关系、层级、RSS/feed URL 和筛选条件，无法推导 RSS/feed 时要求用户手动提供，否则该来源 RSS 留空且不具备后续自动更新能力。
 - `llm-wiki add-code`：把另一个项目代码库接成 `raw-code/<codebase_id>/` 下的 engine-managed git checkout，作为唯一受支持的代码证据接入方式，并构建代码 wiki、capability 和 traceability。
 - `llm-wiki query`：按意图分流回答业务或代码问题；业务知识默认不展开大量代码实现证据。
 - `llm-wiki query-plus`：同时拉通业务/需求证据和代码实现证据，输出更详尽的联合答案。
-- `llm-wiki review-requirement`：对新 PRD、Cwiki 页面或需求文档做证据型需求评审，纳入 raw 原文、图片、zip 原型、前端评审和代码能力证据。
+- `llm-wiki review-requirement`：对新 PRD、Cwiki 页面或需求文档做知识库增强的需求评审——先检索 raw/wiki/raw-code 证据，再调用上游 `prd-review-max` 做业务与 UX 诊断，并输出影响范围与历史冲突。
 - `llm-wiki image`：高价值图片证据补充。
 
 ### 1. 阶段模型与任务模式

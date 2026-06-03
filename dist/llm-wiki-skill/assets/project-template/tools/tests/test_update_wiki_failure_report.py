@@ -1103,6 +1103,44 @@ class UpdateFailureReportTest(unittest.TestCase):
             self.assertIn("--updated-since", commands[0])
             self.assertIn("2026-01-01", commands[0])
 
+    def test_confluence_exclude_authors_filter_is_forwarded(self):
+        import tempfile
+
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            exporter = project / "tools" / "confluence_sync" / "export_obsidian_wiki.py"
+            exporter.parent.mkdir(parents=True)
+            exporter.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            (project / "upstream").mkdir(parents=True)
+            (project / "upstream" / "wiki-sources.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "sources": [
+                            {
+                                "type": "confluence",
+                                "enabled": True,
+                                "source_id": "cwiki-1",
+                                "relationship": {"role": "primary"},
+                                "page_id": "1",
+                                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=1",
+                                "depth": 2,
+                                "filters": {"exclude_authors": ["Noise Author"]},
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            commands = update_wiki.confluence_sync_commands(project)
+
+            self.assertIn("--exclude-author", commands[0])
+            self.assertIn("Noise Author", commands[0])
+
     def test_confluence_sync_allows_interactive_auth_by_default(self):
         import tempfile
 
@@ -1176,6 +1214,54 @@ class UpdateFailureReportTest(unittest.TestCase):
             self.assertNotIn("--max-pages", default_command)
             self.assertIn("--max-pages", smoke_command)
             self.assertIn("3", smoke_command)
+
+    def test_repair_wiki_export_state_depth_safely_loads_exporter_module(self):
+        update_wiki = load_update_wiki()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            tools_dir = project / "tools"
+            confluence_dir = tools_dir / "confluence_sync"
+            confluence_dir.mkdir(parents=True)
+            (confluence_dir / "export_confluence_tree.py").write_text(
+                (TOOLS_DIR / "confluence_sync" / "export_confluence_tree.py").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (tools_dir / "drawio_diagram.py").write_text(
+                "def drawio_to_mermaid(*_args, **_kwargs):\n    return ''\n",
+                encoding="utf-8",
+            )
+            metadata_dir = project / "staging" / "wiki-export-state"
+            progress_dir = metadata_dir / "progress"
+            progress_dir.mkdir(parents=True)
+            (metadata_dir / "export-state.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "updated_at": "2026-01-01T00:00:00+00:00",
+                        "roots": [
+                            {
+                                "page_id": "638576143",
+                                "url": "https://cwiki.guazi.com/pages/viewpage.action?pageId=638576143",
+                                "site_base": "https://cwiki.guazi.com",
+                                "depth_limit": 0,
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (progress_dir / "638576143.json").write_text(
+                json.dumps({"root_page_id": "638576143", "depth_limit": 3, "pages": {}, "queue": [], "enqueued": []}),
+                encoding="utf-8",
+            )
+
+            self.assertTrue(update_wiki.repair_wiki_export_state_depth(project))
+
+            payload = json.loads((metadata_dir / "export-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["roots"][0]["depth_limit"], 3)
 
 
 if __name__ == "__main__":

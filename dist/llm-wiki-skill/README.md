@@ -18,11 +18,12 @@
 
 ## 版本
 
-- `version`: `1.0.3`
-- `engine_version`: `engine-v1.0.3`
+- `version`: `1.0.4`
+- `engine_version`: `engine-v1.0.4`
 
 ### Engine 发行记录
 
+- **`engine-v1.0.4`**：同步 GrapeHub 发布包（SKILL.md + manifest.json），合入 Cwiki exclude-author 下载过滤，以及 update-skill 默认联动升级 prd-review-max。
 - **`engine-v1.0.3`**：发布 shared update checkpoint 语义、Cwiki smoke 限流、raw path/image 下载保护，并合入 Confluence source path metadata。
 - **`engine-v1.0.2`**：新增发布版本脚本与 GitLab 发布规则，要求每次发布前同步升级 VERSION、manifest 和 README 发行记录。
 - **`engine-v1.0.1`**：修复项目模板 health/graph 对 Markdown 代码片段中 `[[...]]` 路径的误判，修复 `tools/health.py` 普通 CLI 输出统计变量错误，并避免已有本机 SSO 自动鉴权时误打印 Cwiki 缺鉴权提示。
@@ -61,7 +62,7 @@
 | `$llm-wiki-query` | `llm-wiki query` | 按意图回答业务或实现问题；业务知识默认不展开大量代码证据。 |
 | `$llm-wiki-query-plus` | `llm-wiki query-plus` | 同时回答业务/需求口径与代码实现证据，适合需要更详尽联动分析的问题。 |
 | `$llm-wiki-image` | `llm-wiki image` | 补充高价值图片证据。 |
-| `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧调用；实际转向 `$requirement-review`。 |
+| `$llm-wiki-review-requirement` | 兼容入口 | 兼容旧调用；KB 证据 + `$prd-review-max`。 |
 
 `llm-wiki maintain-all` 使用本机 `~/.llm-wiki/projects.json` registry。常用操作包括 `--discover <dir>` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，以及用户确认后的 `--apply` 批量执行完整 backfill/update 维护；默认不加 `--apply` 时只输出 dry-run 计划。
 
