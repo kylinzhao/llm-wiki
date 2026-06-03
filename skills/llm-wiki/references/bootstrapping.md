@@ -40,8 +40,8 @@ COOKIE_HEADER='从浏览器 DevTools 复制的完整 Cookie' \
 - **按更新时间硬过滤**：可加 `--updated-since`，仅落盘该时间点及之后更新的页面，例如 `--updated-since 2026-01-01` 或 `--updated-since 2026-01-01T00:00:00+08:00`。该条件会持久化为 `upstream/wiki-sources.json` 中对应 source 的 `filters.updated_since`。
 - **增量更新**：首次导出后可在项目根执行  
   `COOKIE_HEADER='...' uv run python tools/confluence_sync/export_obsidian_wiki.py --update --project-dir "$PWD"`。
-- **缺少 Cookie 时的交互认证**：`llm-wiki update` 触发 Cwiki 同步时，若没有可用登录态，推荐使用内置脚本初始化本机 SSO 环境，而不是手填 `COOKIE_HEADER`。用户需要提供瓜子用户名、密码、手机号；如果需要解析 Jira issue，还应提供 Jira 令牌并写入同一个本机 env 文件。内置登录组件会在本机换取 Cookie/login cache，并复用到过期失效；Jira 读取优先使用 `JIRA_TOKEN`，CHDSSO 只作为没有 Jira token 时的 fallback。提示必须明确：llm-wiki skill 不会上报用户名、密码、手机号、Jira token、Cookie 或 token，也不会写入 KB 项目的 raw/wiki/staging/git；持久化只写到用户电脑本地的 `~/.llm-wiki/guazi-sso.env`，权限应为 `0600`，供后续本机 update 自动加载。终端中优先给用户一条命令；脚本会自己处理 bash/zsh 差异、交互输入和权限设置：
-- **禁止重复提醒**：在提示用户重新录入鉴权前，先检查本机是否已经存在 `~/.llm-wiki/guazi-sso.env`、`guazi-sso-login` cache / 今日 login records 或可直接复用的 `COOKIE_HEADER` / `JIRA_TOKEN`。如果本地鉴权已存在，就不要再次提示用户补录，只能在确认“本地登录态已失效且无法自动刷新”后才提示刷新或重录。
+- **缺少 Cookie 时的交互认证**：`llm-wiki update` 触发 Cwiki 同步时，若没有可用登录态，推荐使用内置脚本初始化本机 SSO 环境，而不是手填 `COOKIE_HEADER`。用户需要提供瓜子用户名、密码、手机号；如果需要解析 Jira issue，还应提供 Jira 令牌并写入同一个本机 env 文件。脚本还会可选收集 `GUAZI_GITLAB_TOKEN`，用于本机 SSH Key / Git credential 不可用时访问 `git.guazi-corp.com`。内置登录组件会在本机换取 Cookie/login cache，并复用到过期失效；Jira 读取优先使用 `JIRA_TOKEN`，CHDSSO 只作为没有 Jira token 时的 fallback。Git 操作先使用现有 SSH Key / Git 凭据，失败后才使用本机 env 中的 GitLab token。提示必须明确：llm-wiki skill 不会上报用户名、密码、手机号、Jira token、Cookie 或 token，也不会写入 KB 项目的 raw/wiki/staging/git；持久化只写到用户电脑本地的 `~/.llm-wiki/guazi-sso.env`，权限应为 `0600`，供后续本机 update 自动加载。终端中优先给用户一条命令；脚本会自己处理 bash/zsh 差异、交互输入和权限设置：
+- **禁止重复提醒**：在提示用户重新录入鉴权前，先检查本机是否已经存在 `~/.llm-wiki/guazi-sso.env`、可直接复用的 SSH Key / Git credential、`guazi-sso-login` cache / 今日 login records 或可直接复用的 `COOKIE_HEADER` / `JIRA_TOKEN` / `GUAZI_GITLAB_TOKEN`。如果本地鉴权已存在，就不要再次提示用户补录，只能在确认“本地登录态或 Git 鉴权已失效且无法自动刷新”后才提示刷新或重录。
 
   ```bash
   bash tools/confluence_sync/init_auth_env.sh

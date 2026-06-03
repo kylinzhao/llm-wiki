@@ -11,6 +11,8 @@ DRY_RUN=0
 FORCE=0
 UPGRADE=0
 DEST_OVERRIDE=""
+AUTH_ENV_FILE="${LLM_WIKI_AUTH_ENV_FILE:-$HOME/.llm-wiki/guazi-sso.env}"
+GITLAB_PAT_URL="https://git.guazi-corp.com/profile/personal_access_tokens"
 
 usage() {
   cat <<'EOF' >&2
@@ -91,6 +93,50 @@ target_points_to_staging() {
   [[ "$resolved" == "$expected" ]] || [[ "$(readlink -f "$target" 2>/dev/null || true)" == "$(readlink -f "$expected" 2>/dev/null || true)" ]]
 }
 
+load_gitlab_token() {
+  [[ -n "${GUAZI_GITLAB_TOKEN:-}" ]] && return 0
+  [[ -f "$AUTH_ENV_FILE" ]] || return 0
+  # shellcheck disable=SC1090
+  source "$AUTH_ENV_FILE" || true
+}
+
+gitlab_auth_help() {
+  cat >&2 <<EOF
+GitLab 鉴权失败。请先确认本机 SSH Key / Git 凭据可访问 git.guazi-corp.com；
+或到 $GITLAB_PAT_URL 申请 Personal Access Token（scope: read_repository），
+再运行 bash "\${CODEX_HOME:-\$HOME/.codex}/skills/llm-wiki/scripts/init_auth_env.sh" 填入 GitLab token 后重试。
+EOF
+}
+
+with_git_token_retry() {
+  "$@" && return 0
+  local code=$?
+  [[ "$REPO_URL" == https://git.guazi-corp.com/* ]] || return "$code"
+  load_gitlab_token
+  if [[ -z "${GUAZI_GITLAB_TOKEN:-}" ]]; then
+    gitlab_auth_help
+    return "$code"
+  fi
+  local askpass
+  askpass="$(mktemp "${TMPDIR:-/tmp}/llm-wiki-git-askpass.XXXXXX")"
+  cat > "$askpass" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  *Username*) printf '%s\n' oauth2 ;;
+  *Password*) printf '%s\n' "$GUAZI_GITLAB_TOKEN" ;;
+  *) printf '\n' ;;
+esac
+EOF
+  chmod 700 "$askpass"
+  GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 "$@"
+  code=$?
+  rm -f "$askpass"
+  if [[ "$code" -ne 0 ]]; then
+    gitlab_auth_help
+  fi
+  return "$code"
+}
+
 while (($#)); do
   case "$1" in
     --copy|--link) MODE="$1" ;;
@@ -131,11 +177,11 @@ UPSTREAM_SKILL="$STAGING/$SKILL_SUBDIR"
 pull_upstream() {
   mkdir -p "$CACHE_DIR"
   if [[ ! -d "$STAGING/.git" ]]; then
-    git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$STAGING"
+    with_git_token_retry git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$STAGING"
   else
-    git -C "$STAGING" fetch --depth 1 origin "$REPO_REF"
+    with_git_token_retry git -C "$STAGING" fetch --depth 1 origin "$REPO_REF"
     git -C "$STAGING" checkout "$REPO_REF"
-    git -C "$STAGING" pull --ff-only origin "$REPO_REF" || true
+    with_git_token_retry git -C "$STAGING" pull --ff-only origin "$REPO_REF" || true
   fi
   if [[ ! -f "$UPSTREAM_SKILL/SKILL.md" ]]; then
     echo "Missing upstream skill at $UPSTREAM_SKILL/SKILL.md" >&2

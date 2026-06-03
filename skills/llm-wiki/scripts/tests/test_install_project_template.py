@@ -115,6 +115,8 @@ class InstallProjectTemplateTest(unittest.TestCase):
             self.assertIn("#!/usr/bin/env bash", text)
             self.assertIn("GUAZI_SSO_USER_NAME", text)
             self.assertIn("COOKIE_HEADER", text)
+            self.assertIn("GUAZI_GITLAB_TOKEN", text)
+            self.assertIn("personal_access_tokens", text)
             self.assertIn("Choose auth mode", text)
             self.assertIn(".llm-wiki/guazi-sso.env", text)
 
@@ -124,6 +126,8 @@ class InstallProjectTemplateTest(unittest.TestCase):
 
         self.assertIn("GUAZI_SSO_USER_NAME", text)
         self.assertIn("COOKIE_HEADER", text)
+        self.assertIn("GUAZI_GITLAB_TOKEN", text)
+        self.assertIn("personal_access_tokens", text)
         self.assertIn("Choose auth mode", text)
         self.assertIn(".llm-wiki/guazi-sso.env", text)
 
