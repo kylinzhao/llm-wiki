@@ -267,19 +267,34 @@ def write_success_report(
         )
     else:
         lines.append("- No G+ semantic underfit finding from deterministic heuristics.")
+    source_refinement = refinement_contract.get("source_refinement", refinement_contract)
+    code_refinement = refinement_contract.get("code_refinement", {})
     lines.extend(["", "## Source Refinement Contract", ""])
-    if refinement_contract["status"] == "needs_refinement":
+    if source_refinement.get("status") == "needs_refinement":
         lines.extend(
             [
                 "- Status: `needs_refinement`",
-                f"- Required source pages: `{refinement_contract['required_count']}`",
-                f"- Pending source pages: `{refinement_contract['pending_count']}`",
+                f"- Required source pages: `{source_refinement['required_count']}`",
+                f"- Pending source pages: `{source_refinement['pending_count']}`",
                 "",
                 "Next action: the current `llm-wiki update` agent must run Codex-native source refinement for these pages before final closure; this is a P1 automatic update task, not a user follow-up.",
             ]
         )
     else:
-        lines.append(f"- Status: `{refinement_contract['status']}`")
+        lines.append(f"- Status: `{source_refinement.get('status', refinement_contract['status'])}`")
+    lines.extend(["", "## Code Refinement Contract", ""])
+    if isinstance(code_refinement, dict) and code_refinement.get("status") == "needs_refinement":
+        lines.extend(
+            [
+                "- Status: `needs_refinement`",
+                f"- Codebases: `{code_refinement.get('codebase_count', 0)}`",
+                f"- Pending codebases: `{code_refinement.get('pending_count', 0)}`",
+                "",
+                "Next action: the current `llm-wiki update` agent must refine codebase indexes, capability pages, and traceability from scan_code candidates before final closure; this is a P1 automatic update task, not a user follow-up.",
+            ]
+        )
+    else:
+        lines.append(f"- Status: `{code_refinement.get('status', 'ok') if isinstance(code_refinement, dict) else 'ok'}`")
     (report_dir / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

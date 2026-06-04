@@ -85,6 +85,45 @@ class RefinementPlanTest(unittest.TestCase):
 
             self.assertEqual(check_refinement.check_project(project), 0)
 
+    def test_refinement_contract_reports_thin_codebase_page_as_pending_code_refinement(self):
+        refinement_contract = load_tool("refinement_contract")
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            raw_code = project / "raw-code" / "demo"
+            raw_code.mkdir(parents=True)
+            (raw_code / "package.json").write_text("{}", encoding="utf-8")
+            (project / "wiki" / "code" / "codebases" / "demo").mkdir(parents=True)
+            (project / "wiki" / "code" / "codebases" / "demo" / "index.md").write_text(
+                "# Codebase: demo\n\n## Scan Status\n\n- Files scanned: 1\n\n## Evidence Boundary\n",
+                encoding="utf-8",
+            )
+
+            contract = refinement_contract.summarize_refinement_contract(project)
+
+            self.assertEqual(contract["status"], "needs_refinement")
+            self.assertEqual(contract["source_refinement"]["status"], "missing_plan")
+            self.assertEqual(contract["code_refinement"]["status"], "needs_refinement")
+            self.assertEqual(contract["code_refinement"]["pending_count"], 1)
+            self.assertEqual(
+                contract["code_refinement"]["pending_codebases"][0]["codebase_id"],
+                "demo",
+            )
+
+    def test_check_refinement_fails_pending_code_refinement(self):
+        check_refinement = load_tool("check_refinement")
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            raw_code = project / "raw-code" / "demo"
+            raw_code.mkdir(parents=True)
+            (raw_code / "package.json").write_text("{}", encoding="utf-8")
+            (project / "wiki" / "code" / "codebases" / "demo").mkdir(parents=True)
+            (project / "wiki" / "code" / "codebases" / "demo" / "index.md").write_text(
+                "# Codebase: demo\n\n## Scan Status\n\n- Files scanned: 1\n\n## Evidence Boundary\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(check_refinement.check_project(project), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -64,6 +64,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 
 ## Engine 发行（`engine-v*`）
 
+- **`engine-v1.0.7`**：新增代码精修 contract，将薄 codebase 页面和未消化代码候选纳入 update/doctor 的 P1 自动精修队列。
 - **`engine-v1.0.6`**：优化 init_auth_env 本机鉴权复用：已有 GitLab/Jira 令牌时不再重复输入，并根据 SSH Key / Git credential 动态提示 GitLab 令牌。
 - **`engine-v1.0.5`**：补齐 update-skill 与 shared update 的 GitLab token 本机鉴权 fallback，init_auth_env 可选保存 GitLab PAT，并保持优先使用本机 SSH Key / Git credential。
 - **`engine-v1.0.4`**：同步 GrapeHub 发布包（SKILL.md + manifest.json），合入 Cwiki exclude-author 下载过滤，以及 update-skill 默认联动升级 prd-review-max。
