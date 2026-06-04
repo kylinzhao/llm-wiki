@@ -208,6 +208,74 @@ def drawio_repair_status(project: Path) -> dict[str, object]:
     }
 
 
+def drawio_promotion_status(project: Path) -> dict[str, object]:
+    """Check whether drawio mermaid knowledge has been absorbed into concept/overview pages.
+
+    A drawio source page is considered 'promoted' when at least one concept page
+    or the overview page contains a wiki-link referencing it.  This is a
+    lightweight deterministic proxy for the semantic question of whether the
+    flow knowledge has been absorbed; agent-native promotion may still enrich
+    the concept text beyond a bare link.
+    """
+    wiki = project / "wiki"
+    sources_dir = wiki / "sources"
+    if not sources_dir.is_dir():
+        return {
+            "total_drawio_sources": 0,
+            "promoted_count": 0,
+            "not_promoted_count": 0,
+            "not_promoted": [],
+        }
+    drawio_sources = sorted(sources_dir.glob("*.drawio.md"))
+    if not drawio_sources:
+        return {
+            "total_drawio_sources": 0,
+            "promoted_count": 0,
+            "not_promoted_count": 0,
+            "not_promoted": [],
+        }
+
+    # Collect all concept and overview page content for link scanning.
+    scan_targets: list[Path] = []
+    concepts_dir = wiki / "concepts"
+    if concepts_dir.is_dir():
+        scan_targets.extend(concepts_dir.glob("*.md"))
+    overview = wiki / "overview.md"
+    if overview.is_file():
+        scan_targets.append(overview)
+    # Also scan layered pages (e.g., wiki/entities, wiki/truth, wiki/operations)
+    for layer_dir_name in ("entities", "truth", "operations", "reference", "proposals"):
+        layer_dir = wiki / layer_dir_name
+        if layer_dir.is_dir():
+            scan_targets.extend(layer_dir.glob("*.md"))
+
+    # Build a set of lowercased stems/anchors that appear in scan targets.
+    referenced_anchors: set[str] = set()
+    for target in scan_targets:
+        try:
+            content = target.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        content_lower = content.lower()
+        for src in drawio_sources:
+            stem = src.stem.lower()  # e.g. "673970540-r外贸销量增长-assets-外部合作全流程.drawio"
+            # Also try the base stem without .drawio suffix for broader matching
+            base_stem = stem.removesuffix(".drawio")
+            if stem in content_lower or base_stem in content_lower:
+                referenced_anchors.add(src.stem)
+
+    promoted = [s for s in drawio_sources if s.stem in referenced_anchors]
+    not_promoted = [s for s in drawio_sources if s.stem not in referenced_anchors]
+    return {
+        "total_drawio_sources": len(drawio_sources),
+        "promoted_count": len(promoted),
+        "not_promoted_count": len(not_promoted),
+        "not_promoted": [
+            p.relative_to(project).as_posix() for p in not_promoted[:20]
+        ],
+    }
+
+
 def count_image_notes(project: Path) -> int:
     notes = project / "staging" / "image-notes"
     if not notes.is_dir():
@@ -472,17 +540,15 @@ def build_report(project: Path) -> dict[str, object]:
     raw_image_count = count_raw_images(project)
     raw_diagram_count = count_raw_diagrams(project)
     drawio_status = drawio_repair_status(project)
+    drawio_promotion = drawio_promotion_status(project)
     image_note_count = count_image_notes(project)
     image_candidates = image_refinement_candidates(project)
     status_doc = refinement_status(project)
     image_evidence_status = str(status_doc.get("image_evidence_status", "")).strip() or "unknown"
     image_evidence_gaps: list[str] = []
-    # Only flag image-notes gap for raw images (screenshots/photos);
-    # drawio text extraction is a deterministic pipeline with its own gap check below.
-    # Once drawio missing_evidence_count == 0, drawio no longer nags here.
-    if raw_image_count and image_note_count == 0 and image_evidence_status not in {"complete", "not_applicable", "skipped_by_user", "deferred"}:
+    if (raw_image_count or raw_diagram_count) and image_note_count == 0 and image_evidence_status not in {"complete", "not_applicable", "skipped_by_user"}:
         image_evidence_gaps.append(
-            "raw/ contains image assets but no staging/image-notes/ were found; after text/G+ completion, review high-value visual evidence with `llm-wiki image`."
+            "raw/ contains image or draw.io diagram assets but no staging/image-notes/ were found; after text/G+ completion, review high-value visual evidence with `llm-wiki image`."
         )
     if drawio_status["missing_evidence_count"]:
         image_evidence_gaps.append(
@@ -522,6 +588,13 @@ def build_report(project: Path) -> dict[str, object]:
         )
     if drawio_status["missing_evidence_count"]:
         recommended_actions.insert(0, "Run `llm-wiki update` to generate missing draw.io Mermaid text evidence before semantic refinement.")
+    if (
+        drawio_promotion["not_promoted_count"]
+        and not drawio_status["missing_evidence_count"]
+    ):
+        recommended_actions.append(
+            f"{drawio_promotion['not_promoted_count']} draw.io source page(s) have not been promoted to concept/overview pages; run `llm-wiki update` to absorb drawio flow knowledge into wiki concepts."
+        )
     if not business_context["has_valid_business_context"]:
         recommended_actions.insert(
             0,
@@ -571,6 +644,7 @@ def build_report(project: Path) -> dict[str, object]:
         "raw_image_assets": raw_image_count,
         "raw_drawio_assets": raw_diagram_count,
         "drawio_repair": drawio_status,
+        "drawio_promotion": drawio_promotion,
         "image_notes": image_note_count,
         "image_evidence_status": image_evidence_status,
         "image_evidence_gaps": image_evidence_gaps,

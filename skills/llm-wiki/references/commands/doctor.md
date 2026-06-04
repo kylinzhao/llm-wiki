@@ -29,6 +29,7 @@ Optional read-only checks:
 - Count image assets under `raw/**/assets/` and image notes under `staging/image-notes/`.
 - When image assets exist without a completed image evidence pass, list prioritized image refinement candidate pages, using signals such as flow diagrams, state screenshots, money/account/risk/permission terms, launch tables, test conclusions, data tables, tracking, and pages already central to overview/concepts/query acceptance.
 - Count generated prototype evidence notes under `raw/**/assets/*.prototype.md`; flag linked zip evidence that has no sidecar note.
+- Count drawio source pages under `wiki/sources/*.drawio.md` and check `drawio_promotion` status from the health report. When `not_promoted_count > 0`, list the top not-promoted drawio pages and recommend `llm-wiki update` for agent-native drawio knowledge promotion into concept/overview pages.
 - Count `wiki/code/codebases/*`, `wiki/code/capabilities/*.md`, and `wiki/code/traceability/*.md`.
 - Inspect latest health status.
 - Inspect graph node / edge counts.

@@ -35,4 +35,5 @@ description: LLM Wiki 增量维护入口。用于 raw/、BUSINESS_CONTEXT.md、r
 11. 如果硬收口检查失败或仍有可安全修复的问题，优先继续修复或建议继续 `llm-wiki-new update`。硬阻断包括 raw/raw-code 同步失败、health 失败、graph broken edges、必要 anchor check 失败、发布范围外文件或凭据/证据缓存误入 git。refinement pending 不属于 raw/graph/health 硬阻断，但属于 P1 自动精修任务；未尝试处理前不得把它降级成普通 soft gap。
 12. 如果硬收口检查通过且没有阻塞项，在 `建议下一步` 中说明当前 KB 已可使用，并说明未来什么变化应触发下一次 `llm-wiki-new update`；如果只剩图片证据待筛选或已分批 checkpoint 的语义层待加厚，明确说“已发布/可发布 usable-with-gaps 共享基线”，并给出最小继续动作。若 doctor / update 没有 P0/P1，但存在重要 P2（图片证据 unknown、Cjira 状态质量、orphan source、G+ 薄层等），把最重要的 P2 提权为 P1，作为下一轮 update 消化焦点。
 13. **Drawio vs 图片分离规则**：`drawio_repair.py` 是确定性流水线，每次 update 自动将 `.drawio` XML 转为 `.drawio.md` Markdown 证据；普通图片（截图/照片）是 AI 筛选流程，由 `llm-wiki image` 触发。两者是完全不同的工作流，报告中不得混为一谈。当 `drawio_repair.missing_evidence_count == 0` 时，drawio 已全量转换，`建议下一步` 中**不得**提及 drawio；仅当 `missing_evidence_count > 0` 时才提醒用户关注 drawio。
-14. 最后输出 `建议下一步`。
+14. **Drawio 知识提升**：health 报告中的 `drawio_promotion.not_promoted_count` 表示有多少 drawio source 页的流程知识未被 concept/overview 页吸收。当该值 > 0 时，作为 P2 agent-native 提升任务：读取未提升的 `.drawio.md` 页面，提取关键流程节点/步骤/规则，内联到相关 `wiki/concepts/*.md`（`## 流程` 段）和 `wiki/overview.md`（`## 核心流程` 段）。不得只加 wiki-link，必须实际提取和摘要流程知识。队列较大时优先处理节点数最多或业务信号最强（流程/状态/规则/风控/权限）的页面。
+15. 最后输出 `建议下一步`。
