@@ -282,15 +282,30 @@ def build_report(project: Path) -> dict[str, Any]:
         if next_item.get("severity") == "P2":
             next_item["promote_when_no_p1"] = True
         findings.append(next_item)
-    if refinement_contract["status"] == "needs_refinement":
+    source_refinement = refinement_contract.get("source_refinement", refinement_contract)
+    if source_refinement.get("status") == "needs_refinement":
         findings.append(
             finding(
                 "P1",
                 "source_refinement_pending",
                 (
-                    f"{refinement_contract['pending_count']} required source page(s) still need AI-native "
+                    f"{source_refinement['pending_count']} required source page(s) still need AI-native "
                     "source refinement/status records. `llm-wiki update` must process this queue automatically; "
                     "it is not a user-only follow-up."
+                ),
+                blocking=False,
+            )
+        )
+    code_refinement = refinement_contract.get("code_refinement", {})
+    if isinstance(code_refinement, dict) and code_refinement.get("status") == "needs_refinement":
+        findings.append(
+            finding(
+                "P1",
+                "code_refinement_pending",
+                (
+                    f"{code_refinement.get('pending_count', 0)} codebase(s) still need AI-native code refinement. "
+                    "`llm-wiki update` must refine codebase indexes, capability pages, and traceability from "
+                    "scan_code candidates instead of leaving thin deterministic code pages."
                 ),
                 blocking=False,
             )

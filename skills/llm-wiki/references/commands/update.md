@@ -2,6 +2,11 @@
 
 Purpose: respond to changes, resume incomplete work, refine affected pages, and refresh code evidence without rebuilding the whole project.
 
+Release note:
+
+- `engine-v1.0.7`: source 精修 contract 扩展为 source + code refinement contract；薄 codebase index、未消化 capability candidates 和代码 traceability 缺口会进入 `doctor` / `update` 的 P1 自动精修队列。
+- `engine-v1.0.6`: `init_auth_env` reuses existing local GitLab/Jira tokens, dynamically detects GitLab SSH/credential auth, and presents GitLab/Jira token creation links only when needed.
+
 If the user asks to update the **llm-wiki skill itself** rather than KB content, route to `llm-wiki update-skill` semantics below. Do not mix global skill installation changes into an ordinary KB update unless the user explicitly asked for it.
 
 Shared update protocol:

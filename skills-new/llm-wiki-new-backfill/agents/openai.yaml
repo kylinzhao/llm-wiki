@@ -1,4 +1,0 @@
-interface:
-  display_name: "LLM Wiki Backfill"
-  short_description: "补齐存量 KB 的历史证据并触发精修吸收"
-  default_prompt: "用 $llm-wiki-new-backfill 补齐当前存量知识库的历史证据并继续精修吸收。"

@@ -1,4 +1,0 @@
-interface:
-  display_name: "LLM Wiki Fast"
-  short_description: "一轮完成 LLM Wiki 初始化、精修、代码层、health 和 graph"
-  default_prompt: "用 $llm-wiki-new-fast 初始化当前项目。"

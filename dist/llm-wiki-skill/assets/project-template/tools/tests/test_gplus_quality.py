@@ -139,6 +139,23 @@ class GPlusQualityTest(unittest.TestCase):
             self.assertEqual(findings["source_refinement_pending"]["severity"], "P1")
             self.assertEqual(report["refinement_contract"]["pending_count"], 1)
 
+    def test_doctor_reports_pending_code_refinement_as_p1(self):
+        doctor = load_module("doctor")
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            write_page(project / "raw-code" / "demo" / "package.json", "{}")
+            write_page(
+                project / "wiki" / "code" / "codebases" / "demo" / "index.md",
+                "# Codebase: demo\n\n## Scan Status\n\n- Files scanned: 1\n\n## Evidence Boundary\n",
+            )
+            doctor.run_health = lambda _: {"ok": True, "status": "pass", "source_pages": 0, "wiki_pages": 1}
+
+            report = doctor.build_report(project)
+
+            findings = {item["title"]: item for item in report["findings"]}
+            self.assertEqual(findings["code_refinement_pending"]["severity"], "P1")
+            self.assertEqual(report["refinement_contract"]["code_refinement"]["pending_count"], 1)
+
     def test_doctor_promotes_important_p2_when_no_p1_exists(self):
         doctor = load_module("doctor")
         with tempfile.TemporaryDirectory() as tmp:

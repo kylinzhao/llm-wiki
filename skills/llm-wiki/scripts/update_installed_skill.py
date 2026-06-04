@@ -108,7 +108,7 @@ def run_checked(command: list[str], cwd: Path) -> None:
 def gitlab_auth_help(git_url: str) -> str:
     return (
         f"Could not clone llm-wiki skill source from {git_url}.\n"
-        "If this is a private Guazi GitLab repository, create a Personal Access Token at:\n"
+        "If this is a private Guazi GitLab repository, create a GitLab token at:\n"
         f"  {GITLAB_PAT_URL}\n"
         "Required scope: read_repository.\n"
         "Then configure SSH Key / Git credentials, or run `bash ${CODEX_HOME:-$HOME/.codex}/skills/llm-wiki/scripts/init_auth_env.sh` "
