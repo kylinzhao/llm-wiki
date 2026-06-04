@@ -477,9 +477,12 @@ def build_report(project: Path) -> dict[str, object]:
     status_doc = refinement_status(project)
     image_evidence_status = str(status_doc.get("image_evidence_status", "")).strip() or "unknown"
     image_evidence_gaps: list[str] = []
-    if (raw_image_count or raw_diagram_count) and image_note_count == 0 and image_evidence_status not in {"complete", "not_applicable", "skipped_by_user"}:
+    # Only flag image-notes gap for raw images (screenshots/photos);
+    # drawio text extraction is a deterministic pipeline with its own gap check below.
+    # Once drawio missing_evidence_count == 0, drawio no longer nags here.
+    if raw_image_count and image_note_count == 0 and image_evidence_status not in {"complete", "not_applicable", "skipped_by_user", "deferred"}:
         image_evidence_gaps.append(
-            "raw/ contains image or draw.io diagram assets but no staging/image-notes/ were found; after text/G+ completion, review high-value visual evidence with `llm-wiki image`."
+            "raw/ contains image assets but no staging/image-notes/ were found; after text/G+ completion, review high-value visual evidence with `llm-wiki image`."
         )
     if drawio_status["missing_evidence_count"]:
         image_evidence_gaps.append(

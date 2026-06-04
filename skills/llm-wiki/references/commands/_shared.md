@@ -64,3 +64,4 @@ The recommendation should be project-specific:
 - Include the exact next command when useful.
 - Mention when it is reasonable to pause.
 - Mention what future change should trigger `llm-wiki update`.
+- **Drawio completion rule**: `drawio_repair.py` is a deterministic pipeline that auto-converts `.drawio` XML to `.drawio.md` Markdown during every update. When `drawio_repair.missing_evidence_count == 0`, drawio is fully converted and must **not** appear in `建议下一步` or any recommendation. Only mention drawio when `missing_evidence_count > 0`. Never conflate drawio status with screenshot/photo image evidence status.

@@ -15,5 +15,6 @@ description: LLM Wiki 图片证据入口。用于用户明确要求在文本层�
 4. 若候选页面或图片较多，读取同包内 `references/subagent-handoff.md`，并优先使用 subagent 并发处理互不重叠的页面/图片批次。
 5. 将 `$llm-wiki-new-image` 后面的用户文本作为 `llm-wiki-new image` 参数。
 6. 只处理范围内高价值图片证据；默认不批量分析低价值截图。
-7. 主 agent 负责候选排序、任务切分、全局去重、最终合并、health/graph 收口和 `staging/refinement-status.md`；subagent 负责局部页面/图片识别与 note 草稿。
-8. 最后输出 `建议下一步`。
+7. **范围澄清**：`llm-wiki image` 仅处理截图和照片。Drawio 图表（`.drawio` XML 文件）已由 `drawio_repair.py` 确定性流水线自动处理，在每次 `llm-wiki update` 时自动转换为 `.drawio.md` Markdown 证据。不得将 drawio 纳入图片筛选流程，不得为了处理 drawio 而建议运行 `llm-wiki image`。
+8. 主 agent 负责候选排序、任务切分、全局去重、最终合并、health/graph 收口和 `staging/refinement-status.md`；subagent 负责局部页面/图片识别与 note 草稿。
+9. 最后输出 `建议下一步`。

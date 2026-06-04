@@ -48,7 +48,8 @@ Output shape:
 状态画像：
 - 输入层：
 - 文档层：
-- 图片证据层：
+- drawio 层：`drawio_repair.py` 确定性转换状态（auto-converted X/Y, Z missing）
+- 图片证据层：截图/照片 AI 筛选状态（与 drawio 分开报告）
 - 代码层：
 - 追踪矩阵：
 - 校验层：
@@ -79,8 +80,8 @@ Recommendation rules:
 - If query acceptance or quality audit artifacts are missing, recommend `llm-wiki update` to refresh them.
 - If G+ semantic underfit is P1/P2, recommend `llm-wiki update` for agent-native G+ semantic expansion. This is separate from health: a wiki can be structurally healthy and still need G+ expansion.
 - If there is no P0/P1 and important P2 findings remain, promote the highest-value P2 findings to P1 for the next maintenance pass. Use this for recurring debt such as image evidence unknown, Cjira stale/low-confidence status quality, orphan source pages, or G+ thin layers.
-- If text/G+ is healthy but `raw/` contains image assets and no image evidence pass is recorded, recommend `llm-wiki image` for selective high-value multimodal refinement. Treat this as a non-blocking evidence gap unless core pages depend on diagrams, table screenshots, state screenshots, money/account/risk/permission flows, launch tables, or test conclusions.
-- When recommending `llm-wiki image`, include the top candidate pages from health output or a read-only scan, not only the total image count.
+- If text/G+ is healthy but `raw/` contains image assets and no image evidence pass is recorded, recommend `llm-wiki image` for selective high-value multimodal refinement. Treat this as a non-blocking evidence gap unless core pages depend on diagrams, table screenshots, state screenshots, money/account/risk/permission flows, launch tables, or test conclusions. **Drawio exclusion**: drawio diagrams are handled by `drawio_repair.py` (deterministic pipeline); only mention drawio in recommendations when `missing_evidence_count > 0`. Never conflate drawio and screenshot/photo status.
+- When recommending `llm-wiki image`, include the top candidate pages from health output or a read-only scan, not only the total image count. Do not include drawio diagrams in the image candidate list.
 - If code wiki exists but traceability is thin, recommend `llm-wiki update` for existing code evidence or `llm-wiki add-code` when a new codebase must be connected first.
 - If files changed recently or stale markers exist, recommend `llm-wiki update`.
 - If everything is healthy, say it is reasonable to pause and note what future change should trigger `llm-wiki update`.

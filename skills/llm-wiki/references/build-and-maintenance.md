@@ -157,7 +157,7 @@ uv run python tools/anchor_check.py
 - `blocked_reason`
 - `image_asset_count`
 - `image_note_count`
-- `image_evidence_status`：`not_applicable` / `pending` / `in_progress` / `complete` / `skipped_by_user`
+- `image_evidence_status`：`not_applicable` / `pending` / `in_progress` / `complete` / `skipped_by_user` / `deferred`
 - `next_action`
 
 如果项目已有精修产物、人工编辑或 `wiki/code/`，不要用确定性构建覆盖它们。只在确认输入或规则变化影响范围后，更新受影响页面。

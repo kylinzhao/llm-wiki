@@ -156,11 +156,15 @@ Final report:
 - validation results
 - G+ semantic quality status: ok / needs_attention, including concept count, concept coverage, manual placeholders, and any P1/P2 underfit findings
 - source refinement contract status: ok / needs_refinement, including processed pages, remaining queue, and whether any batch checkpoint was published
+- drawio status: `auto-converted X/Y, Z missing` — report separately from image evidence; when `missing_evidence_count == 0`, drawio is complete and must not appear in `建议下一步` or any recommendation
+- image evidence status: `N screenshots/photos pending screening, run llm-wiki image` — P2 suggestion only; never conflate with drawio status
 - readiness: healthy / usable-with-gaps / blocked, with the reason
 - remaining stale or missing evidence
 
 Recommendation rule:
 
+- Drawio vs image separation: `drawio_repair.py` is a **deterministic pipeline** that auto-converts `.drawio` XML to `.drawio.md` Markdown during every update. Ordinary images (screenshots/photos) are an **AI screening flow** triggered by `llm-wiki image`. These are fundamentally different workflows — never conflate them in reports or recommendations.
+- When `drawio_repair.missing_evidence_count == 0`, drawio is fully converted: do **not** mention drawio in `建议下一步` or any recommendation. Only mention drawio when `missing_evidence_count > 0` (e.g., new `.drawio` files that failed parsing).
 - Do not recommend `llm-wiki update` as the next step when the current `llm-wiki update` can safely finish the remaining source refinement, capability, traceability, health, or graph work. Finish it in the current command.
 - Do not leave P1 `source_refinement_pending` as a plain soft gap. Run agent-native source refinement in the current update. If the queue is too large for one manual pass, use subagents/workers in parallel and target the full queue, not a tiny sample. Checkpoint only after a real blocker, tool/context limit, or explicit user stop, and state exactly what remains.
 - If affected source pages remain stale and affected code traceability also needs refresh but a hard blocker prevents completion, report the blocker and checkpoint, then recommend one combined continuation: `llm-wiki update` to resume the integrated source refinement plus traceability refresh.

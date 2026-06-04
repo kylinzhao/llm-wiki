@@ -48,7 +48,8 @@ Final report:
 - files created / updated
 - codebases included
 - traceability coverage
-- image evidence status: not applicable / pending high-value screening / complete / skipped by user
+- drawio status: `auto-converted X/Y, Z missing` — `drawio_repair.py` is a deterministic pipeline; when `missing_evidence_count == 0`, drawio is complete and must not appear in `建议下一步`
+- image evidence status: not applicable / pending high-value screening / complete / skipped by user / deferred. Image evidence covers screenshots and photos only; drawio diagrams are handled by the deterministic drawio pipeline above.
 - validation results
 - blocked items
 - recommended next pass
