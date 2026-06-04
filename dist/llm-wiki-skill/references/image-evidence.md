@@ -10,6 +10,7 @@ Use this reference only after the requested text layer is complete, or when the 
 - Store image notes in `staging/image-notes/`.
 - Reference raw image paths; do not copy raw images into wiki outputs.
 - Text-first commands still need an image inventory. If `raw/` contains images and no image evidence pass is complete, report phase H as pending instead of silently skipping it.
+- **Drawio exclusion**: `.drawio` XML files are already handled by `drawio_repair.py` — a deterministic pipeline that auto-converts them to `.drawio.md` Markdown evidence during every `llm-wiki update`. Drawio diagrams must not be included in image candidate inventory, must not be processed through this image evidence flow, and must not trigger `llm-wiki image` recommendations when `drawio_repair.missing_evidence_count == 0`.
 
 ## Inventory Before Analysis
 
