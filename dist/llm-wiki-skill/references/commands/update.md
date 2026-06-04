@@ -2,6 +2,8 @@
 
 Purpose: respond to changes, resume incomplete work, refine affected pages, and refresh code evidence without rebuilding the whole project.
 
+update 可以自动进入 source refinement：当 `tools/check_refinement.py`、`staging/refinement-plan.json` 或 `staging/update/latest.json.refinement_contract.status` 暴露 pending / stale / needs_refinement 时，当前 agent 必须在同一轮处理可安全完成的语义精修。用户也可以主动触发 `llm-wiki refine`；它复用 update 的 shared preflight、validation 和 publish 规则，但把语义精修队列作为主目标。
+
 Release note:
 
 - `engine-v1.0.7`: source 精修 contract 扩展为 source + code refinement contract；薄 codebase index、未消化 capability candidates 和代码 traceability 缺口会进入 `doctor` / `update` 的 P1 自动精修队列。

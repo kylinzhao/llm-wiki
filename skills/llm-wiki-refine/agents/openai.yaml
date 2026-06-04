@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Refine"
+  short_description: "主动精修 source/concept/entity/wiki 语义并发布共享 KB"
+  default_prompt: "用 $llm-wiki-refine 精修当前项目。"

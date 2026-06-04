@@ -15,6 +15,7 @@ Use this reference when the user invokes a `llm-wiki` subcommand or when the req
 | `llm-wiki doctor` | User wants site status, diagnosis, quality review, or prioritized recommendations | Findings plus health portrait and next steps |
 | `llm-wiki version` | User asks for the llm-wiki skill / bundle version, current version, skill version, or engine version | Installed skill bundle version from `VERSION` |
 | `llm-wiki update` | Existing KB needs resume, refinement, traceability refresh, source/code updates, or validation after changes | Impact-scoped update, validation, and maintenance report |
+| `llm-wiki refine` | User explicitly asks to refine source/concept/entity/wiki semantics without waiting for another input change | Agent-native semantic refinement, validation, and shared publish |
 | `llm-wiki backfill` | Existing KB was built with older skill versions and needs historical evidence re-scanned | Deterministic evidence backfill, then refinement absorption through update semantics |
 | `llm-wiki maintain-all` | User wants to discover, list, prune, or batch-maintain local registered KB projects | Dry-run plan by default; optional apply runs full backfill/update maintenance per KB |
 | `llm-wiki update-skill` | User explicitly asks to update the llm-wiki skill bundle itself, not the current KB content | Pull/reinstall the installed skill bundle, then optionally refresh project tooling |

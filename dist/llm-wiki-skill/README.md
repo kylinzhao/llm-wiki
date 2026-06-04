@@ -18,11 +18,12 @@
 
 ## 版本
 
-- `version`: `1.0.7`
-- `engine_version`: `engine-v1.0.7`
+- `version`: `1.0.8`
+- `engine_version`: `engine-v1.0.8`
 
 ### Engine 发行记录
 
+- **`engine-v1.0.8`**：加回 llm-wiki refine 主动精修入口，并明确 update 可自动精修、refine shared 模式验证后自动 commit and push。
 - **`engine-v1.0.7`**：新增代码精修 contract，将薄 codebase 页面和未消化代码候选纳入 update/doctor 的 P1 自动精修队列。
 - **`engine-v1.0.6`**：优化 init_auth_env 本机鉴权复用：已有 GitLab/Jira 令牌时不再重复输入，并根据 SSH Key / Git credential 动态提示 GitLab 令牌。
 - **`engine-v1.0.5`**：补齐 update-skill 与 shared update 的 GitLab token 本机鉴权 fallback，init_auth_env 可选保存 GitLab PAT，并保持优先使用本机 SSH Key / Git credential。
