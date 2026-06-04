@@ -14,7 +14,6 @@ DEPRECATED_SKILLS=(
   "llm-wiki-audit"
   "llm-wiki-build-code"
   "llm-wiki-code-trace"
-  "llm-wiki-refine"
   "llm-wiki-resume"
   "llm-wiki-ship"
 )

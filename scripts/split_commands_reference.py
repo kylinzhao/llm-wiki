@@ -16,6 +16,7 @@ NAMED_SECTIONS = {
     "update": "update.md",
     "backfill": "backfill.md",
     "maintain-all": "maintain-all.md",
+    "refine": "refine.md",
     "update-skill": "update-skill.md",
     "add-wiki": "add-wiki.md",
     "add-code": "add-code.md",

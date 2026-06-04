@@ -18,11 +18,12 @@
 
 ## 版本
 
-- `version`: `1.0.5`
-- `engine_version`: `engine-v1.0.5`
+- `version`: `1.0.6`
+- `engine_version`: `engine-v1.0.6`
 
 ### Engine 发行记录
 
+- **`engine-v1.0.6`**：加回 llm-wiki refine 主动精修入口，并明确 update 可自动精修、refine shared 模式验证后自动 commit and push。
 - **`engine-v1.0.5`**：补齐 update-skill 与 shared update 的 GitLab token 本机鉴权 fallback，init_auth_env 可选保存 GitLab PAT，并保持优先使用本机 SSH Key / Git credential。
 - **`engine-v1.0.4`**：同步 GrapeHub 发布包（SKILL.md + manifest.json），合入 Cwiki exclude-author 下载过滤，以及 update-skill 默认联动升级 prd-review-max。
 - **`engine-v1.0.3`**：发布 shared update checkpoint 语义、Cwiki smoke 限流、raw path/image 下载保护，并合入 Confluence source path metadata。
@@ -55,6 +56,7 @@
 | `$llm-wiki-init` | `llm-wiki init` | 新项目分阶段初始化。 |
 | `$llm-wiki-doctor` | `llm-wiki doctor` | 只读诊断项目健康度、质量问题、缺口和下一步；集合原 audit 能力。 |
 | `$llm-wiki-update` | `llm-wiki update` | 输入、wiki 或源码变化后的影响范围更新；也负责续跑、精修、代码 wiki、traceability 和收口检查；会自动维护 `AGENTS.md` 查询路由规则。 |
+| `$llm-wiki-refine` | `llm-wiki refine` | 主动精修 source/concept/entity/wiki 语义；默认按 shared 模式完成验证后 commit and push。 |
 | `$llm-wiki-backfill` | `llm-wiki backfill` | 存量 KB 历史证据补全；重新扫描历史 raw/wiki/staging，补齐新版确定性派生能力，并继续进入 source/G+ 精修吸收。 |
 | `$llm-wiki-maintain-all` | `llm-wiki maintain-all` | 维护本机已注册 KB registry；默认 dry-run，可发现、列出、清理 missing 项，并在确认后批量执行完整 backfill/update 维护。 |
 | `$llm-wiki-update-skill` | `llm-wiki update-skill` | 显式更新本机安装的 llm-wiki skill bundle；不更新当前 KB 内容。 |
