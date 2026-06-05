@@ -6,6 +6,7 @@ update 可以自动进入 source refinement：当 `tools/check_refinement.py`、
 
 Release note:
 
+- `engine-v1.0.13`: 修复 raw-code 同步命令接入 Git 鉴权时重复 `git` 前缀的问题，并保留代码仓库权限诊断短句。
 - `engine-v1.0.12`: 收敛 `llm-wiki code-trace` 为单一二级命令，诊断、确定性重建、AI 精修和验证改为内部阶段，不再暴露 `doctor/rebuild/refine` 三级子命令。
 - `engine-v1.0.11`: 恢复 `llm-wiki-code-trace` 顶层短入口并从安装清理列表移除，确保 Codex/Qoder 等客户端可直接显示 code-trace 指令。
 - `engine-v1.0.10`: 新增 `llm-wiki code-trace` 二级命令，支持独立 code trace 诊断、确定性重建和 AI 精修能力；AI 精修可分布执行但必须完成声明范围内的代码追踪精修。
