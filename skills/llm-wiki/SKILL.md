@@ -144,7 +144,7 @@ python3 "$LLM_WIKI_SKILL_ROOT/scripts/install_project_template.py" --project "$P
 - `llm-wiki doctor`：只读诊断整个 LLM Wiki 站点状态，集合原 audit 能力，指出健康度、质量问题、缺口、优化建议和下一步命令。
 - `llm-wiki update`：`raw/`、`BUSINESS_CONTEXT.md`、`raw-code/`、wiki 或代码变化后的影响范围更新；也负责续跑、source/concept/entity 精修、代码 wiki 和 traceability 收口；结束前自动运行 health/graph/必要 anchor 检查。
 - `llm-wiki refine`：用户主动要求精修 source/concept/entity/wiki 语义时使用；复用 `update` 的 shared preflight、validation、commit and push 发布语义，但以语义精修队列为主目标。
-- `llm-wiki code-trace`：只做代码追踪的二级命令；`doctor` 只读诊断，`rebuild` 做 deterministic raw-code/code candidate/traceability units 重建，`refine` 做 AI-native code trace 精修。`refine` 可按优先级和任务大小分布执行，但最终必须完成声明范围内的 AI 精修，不能把 checkpoint 当完成。
+- `llm-wiki code-trace`：只做代码追踪的二级命令；诊断、deterministic raw-code/code candidate/traceability units 重建、AI-native code trace 精修和验证都是同一命令内的阶段。AI 精修可按优先级和任务大小分布执行，但最终必须完成声明范围内的 AI 精修，不能把 checkpoint 当完成。
 - 对带 `cjira` 或 `【IDEA】` 信号的来源页，`update` 还应刷新 active registry，终态 requirement 归档到 `staging/cjira-registry/archive.json`，并把低置信度主单号或 stale Jira 拉取暴露给 `doctor` / `health`。
 - `llm-wiki backfill`：存量 KB 历史证据补全。先刷新 engine-owned 工具，重新扫描历史 `raw/` / `wiki/sources/` / `staging/`，补齐新版确定性派生能力（draw.io、Cjira/Jira/IDEA、source metadata、agent rules 等），再默认进入 `llm-wiki update` 语义做精修吸收和 G+ 收口。
 - `llm-wiki maintain-all`：维护本机 `~/.llm-wiki/projects.json` KB registry；默认 dry-run，可用 `--discover` 补录历史 KB、`--list` 查看、`--prune-missing` 清理不存在路径，只有用户明确要求 `--apply` 时才对已注册 KB 批量执行完整 backfill/update 维护。

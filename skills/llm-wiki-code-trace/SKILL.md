@@ -12,6 +12,6 @@ description: LLM Wiki 代码追踪入口。用于只做 raw-code 扫描重建、
 1. 读取 **llm-wiki** skill 包内 `references/core-rules.md`（子入口必读；**不要**加载完整 `SKILL.md`）。
 2. 读取 `references/commands/_shared.md` 与 `references/commands/code-trace.md`。
 3. 将 `$llm-wiki-code-trace` 后面的用户文本作为 `llm-wiki code-trace` 参数。
-4. `doctor` 只读诊断；`rebuild` 只做 deterministic raw-code/code candidate/traceability units 重建；`refine` 做 AI-native 代码追踪精修。
-5. `refine` 可按 source、unit、capability 或 codebase 分布执行；但只有声明范围内 AI 精修、证据判断、capability 页面和 validation 收口后，才允许报告完成。checkpoint 只能报告为 usable-with-gaps，不能当作完成。
+4. 这是单一二级命令，不再暴露 `doctor/rebuild/refine` 子命令；诊断、确定性重建、AI 精修和验证都是同一条 `llm-wiki code-trace` 内部阶段。
+5. AI 精修阶段可按 source、unit、capability 或 codebase 分布执行；但只有声明范围内 AI 精修、证据判断、capability 页面和 validation 收口后，才允许报告完成。checkpoint 只能报告为 usable-with-gaps，不能当作完成。
 6. 结束前必须输出 `建议下一步`。

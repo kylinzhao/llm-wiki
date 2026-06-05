@@ -64,6 +64,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 
 ## Engine 发行（`engine-v*`）
 
+- **`engine-v1.0.12`**：收敛 llm-wiki code-trace 为单一二级命令，将诊断、重建、AI 精修改为内部阶段，不再暴露三级子命令。
 - **`engine-v1.0.11`**：恢复 llm-wiki-code-trace 顶层短入口，确保 Codex/Qoder 等客户端技能列表可直接显示 code-trace 指令。
 - **`engine-v1.0.10`**：新增 llm-wiki code-trace 二级命令，支持独立代码追踪诊断、确定性重建和必须收口的 AI 精修流程。
 - **`engine-v1.0.9`**：新增 traceability units，以 endpoint/关键事实、能力、字段和调用链维度诊断代码追踪粒度。

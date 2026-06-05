@@ -1,27 +1,24 @@
 ## `llm-wiki code-trace`
 
-Purpose: rebuild, diagnose, and refine code traceability without running a full KB update.
+Purpose: run the dedicated code trace workflow without running a full KB update.
+
+This is a single second-level command. Do not ask the user to choose `doctor`, `rebuild`, or `refine` subcommands. Those are internal phases of the same command:
+
+1. diagnose
+2. deterministic rebuild when needed
+3. AI-native refinement when needed
+4. validation and final report
 
 Use this command when the user asks to refresh `raw-code` evidence, rebuild code candidates, diagnose traceability quality, or complete code-side AI traceability refinement.
 
-Subcommands:
-
-```text
-llm-wiki code-trace doctor
-llm-wiki code-trace rebuild
-llm-wiki code-trace refine
-```
-
-If the user says only `llm-wiki code-trace`, start with `doctor`, then choose `rebuild` or `refine` from the diagnostics.
-
 ## Core Contract
 
-- `doctor` is read-only.
-- `rebuild` is deterministic engineering work and should not require AI.
-- `refine` is AI-native semantic work and must complete the code trace refinement contract before the command is reported as complete.
-- Distributed execution is allowed for `refine`: split by source, unit, capability, or codebase according to priority and task size.
+- Start with read-only diagnosis, but present it as the diagnosis phase, not as a separate `doctor` subcommand.
+- Run deterministic rebuild when scan, candidate, upstream `docs/wiki`, units, or traceability artifacts are missing/stale.
+- Run AI-native refinement when diagnostics show missing units, low-granularity links, unmapped candidates, weak code anchors, or thin capability evidence.
+- Distributed execution is allowed: split AI refinement by source, unit, capability, or codebase according to priority and task size.
 - Checkpoints are allowed only when there is a real blocker, tool/context limit, or explicit user stop. A checkpoint is `usable-with-gaps`, not completion.
-- Do not finish `refine` by merely recommending another `code-trace refine` run when the remaining AI refinement is low-risk and feasible in the current command.
+- Do not finish by merely recommending another command when remaining AI refinement is low-risk and feasible in the current command.
 
 ## Priority Order
 
@@ -34,9 +31,9 @@ When refining traceability, process in this order:
 
 Do not upgrade evidence strength to `strong` unless direct requirement evidence and direct code evidence both exist.
 
-## `llm-wiki code-trace doctor`
+## Phase 1: Diagnose
 
-Read-only diagnostics. Do not mutate files.
+Read-only. Do not mutate files.
 
 Read:
 
@@ -50,7 +47,7 @@ Read:
 8. `staging/traceability/state.json`
 9. `wiki/code/traceability/index.md`
 
-Report:
+Report internally:
 
 - codebase scan freshness and missing code evidence
 - upstream `docs/wiki` availability and adapter status
@@ -61,20 +58,16 @@ Report:
 - unmapped candidate count
 - Markdown size and table rows
 
-Recommend:
+Use the diagnosis to decide the next internal phase:
 
-- `llm-wiki code-trace rebuild` when deterministic scan/candidate/unit artifacts are missing or stale
-- `llm-wiki code-trace refine` when units exist but low-granularity or unmapped candidate evidence remains
-- `llm-wiki add-code` when repeatable shared rebuild needs managed code source metadata
-- `llm-wiki update` only when source/business evidence outside code trace also needs refresh
+- Rebuild when deterministic scan/candidate/unit artifacts are missing or stale.
+- Refine when deterministic artifacts exist but low-granularity or unmapped candidate evidence remains.
+- Use `llm-wiki add-code` only when repeatable shared rebuild requires managed code source metadata that does not exist.
+- Use `llm-wiki update` only when source/business evidence outside code trace also needs refresh.
 
-## `llm-wiki code-trace rebuild`
+## Phase 2: Deterministic Rebuild
 
-Deterministic engineering rebuild. It may be scoped:
-
-```text
-llm-wiki code-trace rebuild --codebase <codebase_id>
-```
+Engineering rebuild. It may be scoped by user text, for example a named source, unit, or codebase, but it is still the same `llm-wiki code-trace` command.
 
 Steps:
 
@@ -102,11 +95,11 @@ Steps:
    - `wiki/code/traceability/index.md`
 7. Run health/doctor diagnostics.
 
-After `rebuild`, if diagnostics show `traceability_units_missing`, `traceability_low_granularity`, or `traceability_unmapped_candidates`, continue into `refine` when the user asked for full code trace completion or when the remaining queue is manageable.
+After rebuild, continue into AI refinement when diagnostics show `traceability_units_missing`, `traceability_low_granularity`, or `traceability_unmapped_candidates` and the remaining work is in scope.
 
-## `llm-wiki code-trace refine`
+## Phase 3: AI-Native Refinement
 
-AI-native code trace refinement. This is not a deterministic script chain.
+This phase is semantic work, not a deterministic script chain.
 
 Read diagnostics:
 
@@ -145,15 +138,15 @@ If the queue is too large, process by priority and checkpoint explicitly:
 - completed batches
 - remaining sources/units/codebases
 - blocker or limit
-- exact continuation command: `llm-wiki code-trace refine`
+- exact continuation command: `llm-wiki code-trace`
 
 Do not label the command complete until AI refinement is actually complete for the declared scope.
 
 ## Integration With `llm-wiki update`
 
-`llm-wiki update` still owns integrated source/code updates. When `raw-code/` changed, update may run the equivalent of `code-trace rebuild` internally.
+`llm-wiki update` still owns integrated source/code updates. When `raw-code/` changed, update may run the equivalent code trace phases internally.
 
-If only code trace refinement remains after deterministic update and the source/business layer is otherwise current, recommend `llm-wiki code-trace refine` rather than another full `llm-wiki update`.
+If only code trace refinement remains after deterministic update and the source/business layer is otherwise current, recommend `llm-wiki code-trace` rather than another full `llm-wiki update`.
 
 When the same update affects both requirement/source evidence and implementation/code evidence, finish the integrated source refinement plus code trace refresh in `llm-wiki update` unless blocked.
 
@@ -161,7 +154,7 @@ When the same update affects both requirement/source evidence and implementation
 
 Include:
 
-- mode: doctor / rebuild / refine
+- phases run: diagnosis / deterministic rebuild / AI refinement / validation
 - scope: source, unit, codebase, or full KB
 - deterministic artifacts refreshed
 - AI refinement batches completed

@@ -6,8 +6,9 @@ update 可以自动进入 source refinement：当 `tools/check_refinement.py`、
 
 Release note:
 
+- `engine-v1.0.12`: 收敛 `llm-wiki code-trace` 为单一二级命令，诊断、确定性重建、AI 精修和验证改为内部阶段，不再暴露 `doctor/rebuild/refine` 三级子命令。
 - `engine-v1.0.11`: 恢复 `llm-wiki-code-trace` 顶层短入口并从安装清理列表移除，确保 Codex/Qoder 等客户端可直接显示 code-trace 指令。
-- `engine-v1.0.10`: 新增 `llm-wiki code-trace` 二级命令，支持独立 code trace doctor/rebuild/refine；`refine` 可分布执行但必须完成声明范围内的 AI-native 代码追踪精修。
+- `engine-v1.0.10`: 新增 `llm-wiki code-trace` 二级命令，支持独立 code trace 诊断、确定性重建和 AI 精修能力；AI 精修可分布执行但必须完成声明范围内的代码追踪精修。
 - `engine-v1.0.9`: traceability 从“整页需求到代码文件”升级为 traceability units，优先按 endpoint/关键事实、业务能力、字段参数和调用链维度诊断代码追踪粒度，并在 health/doctor 中暴露低粒度与未映射候选问题。
 - `engine-v1.0.7`: source 精修 contract 扩展为 source + code refinement contract；薄 codebase index、未消化 capability candidates 和代码 traceability 缺口会进入 `doctor` / `update` 的 P1 自动精修队列。
 - `engine-v1.0.6`: `init_auth_env` reuses existing local GitLab/Jira tokens, dynamically detects GitLab SSH/credential auth, and presents GitLab/Jira token creation links only when needed.
@@ -179,7 +180,7 @@ Recommendation rule:
 - Do not recommend `llm-wiki update` as the next step when the current `llm-wiki update` can safely finish the remaining source refinement, capability, traceability, health, or graph work. Finish it in the current command.
 - Do not leave P1 `source_refinement_pending` as a plain soft gap. Run agent-native source refinement in the current update. If the queue is too large for one manual pass, use subagents/workers in parallel and target the full queue, not a tiny sample. Checkpoint only after a real blocker, tool/context limit, or explicit user stop, and state exactly what remains.
    - If affected source pages remain stale and affected code traceability also needs refresh but a hard blocker prevents completion, report the blocker and checkpoint, then recommend one combined continuation: `llm-wiki update` to resume the integrated source refinement plus traceability refresh.
-   - If only code trace refinement remains and source/business evidence is otherwise current, recommend `llm-wiki code-trace refine` instead of another full `llm-wiki update`.
+   - If only code trace refinement remains and source/business evidence is otherwise current, recommend `llm-wiki code-trace` instead of another full `llm-wiki update`.
    - Source-only refinements still stay under `llm-wiki update` or `llm-wiki refine`; code-trace-only rebuild/refine work should route to `llm-wiki code-trace`.
 - When validation fails, recommend the smallest safe continuation or fix, phrased as a command the user can run (`llm-wiki update`, `llm-wiki doctor`, or `llm-wiki image`) rather than a script chain.
 - When validation passes and there are no blockers, say the KB is ready to use or ready for the owner's normal git/release process.
