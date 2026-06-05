@@ -13,7 +13,6 @@ SRC_DIR="${LLM_WIKI_SKILL_SRC_DIR:-$ROOT_DIR/skills}"
 DEPRECATED_SKILLS=(
   "llm-wiki-audit"
   "llm-wiki-build-code"
-  "llm-wiki-code-trace"
   "llm-wiki-resume"
   "llm-wiki-ship"
 )

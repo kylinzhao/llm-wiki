@@ -310,6 +310,70 @@ def build_report(project: Path) -> dict[str, Any]:
                 blocking=False,
             )
         )
+    traceability = health.get("traceability")
+    if isinstance(traceability, dict):
+        unit_count = int(traceability.get("unit_count") or 0)
+        candidate_count = int(traceability.get("candidate_count") or 0)
+        links_without_unit_count = int(traceability.get("links_without_unit_count") or 0)
+        unmapped_candidate_count = int(traceability.get("unmapped_candidate_count") or 0)
+        markdown_size_bytes = int(traceability.get("markdown_size_bytes") or 0)
+        markdown_table_rows = int(traceability.get("markdown_table_rows") or 0)
+        if candidate_count and unit_count == 0:
+            findings.append(
+                finding(
+                    "P1",
+                    "traceability_units_missing",
+                    (
+                        f"Traceability has {candidate_count} code candidate(s) but no extracted traceability units. "
+                        "Extract endpoint/key-fact units before relying on requirement-to-code links."
+                    ),
+                    blocking=False,
+                )
+            )
+        if links_without_unit_count:
+            findings.append(
+                finding(
+                    "P1",
+                    "traceability_low_granularity",
+                    (
+                        f"{links_without_unit_count} traceability link(s) do not reference a unit_id. "
+                        "These page-title-to-code links are too coarse; map them to endpoint/fact, capability, field, or flow units."
+                    ),
+                    blocking=False,
+                )
+            )
+        if unmapped_candidate_count:
+            findings.append(
+                finding(
+                    "P2",
+                    "traceability_unmapped_candidates",
+                    (
+                        f"{unmapped_candidate_count} code candidate(s) are not mapped to traceability units. "
+                        "Keep full candidates in staging JSON and promote only evidence-backed matches."
+                    ),
+                    blocking=False,
+                    promote_when_no_p1=True,
+                )
+            )
+        if markdown_size_bytes > 1_000_000 or markdown_table_rows > 3000:
+            severity = "P1"
+        elif markdown_size_bytes > 300_000 or markdown_table_rows > 1000:
+            severity = "P2"
+        else:
+            severity = ""
+        if severity:
+            findings.append(
+                finding(
+                    severity,
+                    "traceability_markdown_too_large",
+                    (
+                        f"Traceability Markdown is {markdown_size_bytes} bytes with {markdown_table_rows} table row(s). "
+                        "Markdown should summarize reviewed/unit-oriented evidence; full candidate queues belong in staging JSON."
+                    ),
+                    blocking=False,
+                    promote_when_no_p1=severity == "P2",
+                )
+            )
     cjira_registry = health.get("cjira_registry")
     if isinstance(cjira_registry, dict):
         stale_status_pages = int(cjira_registry.get("stale_status_pages") or 0)

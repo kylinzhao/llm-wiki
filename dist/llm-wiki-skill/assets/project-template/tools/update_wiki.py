@@ -112,7 +112,8 @@ def run_captured_command(command: str | Sequence[str], cwd: Path) -> CommandResu
         shell = False
     print("+ " + display)
     if not shell and command and command[0] == "git":
-        result = run_git_with_auth(list(command), cwd, operation=str(command[1]) if len(command) > 1 else "git")
+        git_args = list(command[1:])
+        result = run_git_with_auth(git_args, cwd, operation=str(git_args[0]) if git_args else "git")
         if result.stdout:
             print(result.stdout, end="")
         return CommandResult(result.returncode, result.stdout, result.stderr)

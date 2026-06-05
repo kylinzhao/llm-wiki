@@ -79,6 +79,34 @@ class GPlusQualityTest(unittest.TestCase):
             self.assertEqual(report["gplus_quality"]["metrics"]["non_index_concept_pages"], 1)
             self.assertEqual(report["project"], ".")
 
+    def test_doctor_reports_traceability_quality_findings(self):
+        doctor = load_module("doctor")
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            doctor.run_health = lambda _: {
+                "ok": True,
+                "status": "pass",
+                "source_pages": 1,
+                "wiki_pages": 3,
+                "traceability": {
+                    "status": "low_granularity",
+                    "unit_count": 0,
+                    "links_without_unit_count": 12,
+                    "candidate_count": 30,
+                    "markdown_size_bytes": 1_200_000,
+                    "markdown_table_rows": 3200,
+                    "unmapped_candidate_count": 18,
+                },
+            }
+
+            report = doctor.build_report(project)
+
+            findings = {item["title"]: item for item in report["findings"]}
+            self.assertEqual(findings["traceability_units_missing"]["severity"], "P1")
+            self.assertEqual(findings["traceability_low_granularity"]["severity"], "P1")
+            self.assertEqual(findings["traceability_unmapped_candidates"]["severity"], "P2")
+            self.assertEqual(findings["traceability_markdown_too_large"]["severity"], "P1")
+
     def test_doctor_latest_is_stable_when_only_path_and_time_would_change(self):
         doctor = load_module("doctor")
         with tempfile.TemporaryDirectory() as tmp:

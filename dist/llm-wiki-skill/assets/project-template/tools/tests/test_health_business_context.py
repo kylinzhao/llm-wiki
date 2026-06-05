@@ -130,12 +130,24 @@ class HealthBusinessContextTest(unittest.TestCase):
                         "raw_image_assets": 0,
                         "raw_drawio_assets": 0,
                         "drawio_repair": {"drawio_count": 0, "missing_evidence_count": 0, "missing_evidence": [], "last_report": {"generated_at": "", "converted_count": 0, "unparsed_count": 0, "changed_count": 0}},
+                        "drawio_promotion": {"total_drawio_sources": 0, "promoted_count": 0, "not_promoted_count": 0, "not_promoted": []},
                         "image_notes": 0,
                         "image_evidence_status": "unknown",
                         "image_evidence_gaps": [],
                         "image_refinement_candidates": [],
                         "cjira_registry": {"active_pages": 0, "archived_pages": 0, "idea_pages": 0, "in_progress_pages": 0, "frozen_pages": 0, "low_confidence_pages": 0, "stale_status_pages": 0},
                         "code_intelligence": {"detected_codebases": [], "fallback_only_codebases": [], "details": {}},
+                        "traceability": {
+                            "status": "missing",
+                            "unit_count": 0,
+                            "candidate_count": 0,
+                            "link_count": 0,
+                            "links_with_unit_count": 0,
+                            "links_without_unit_count": 0,
+                            "unmapped_candidate_count": 0,
+                            "markdown_size_bytes": 0,
+                            "markdown_table_rows": 0,
+                        },
                         "recommended_actions": [],
                         "query_may_work_without_full_evidence": False,
                     },
@@ -222,6 +234,53 @@ class HealthBusinessContextTest(unittest.TestCase):
                     "stale_status_pages": 1,
                 },
             )
+
+    def test_health_reports_traceability_metrics(self):
+        health = load_health()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            write_minimal_project(project)
+            (project / "BUSINESS_CONTEXT.md").write_text(
+                "# BUSINESS_CONTEXT\n\n- 项目名称：二手车知识库\n- 目标用户/角色：运营\n- 核心业务目标：统一需求口径。\n",
+                encoding="utf-8",
+            )
+            traceability = project / "wiki" / "code" / "traceability" / "index.md"
+            traceability.parent.mkdir(parents=True)
+            traceability.write_text(
+                "# Traceability\n\n| A | B |\n| --- | --- |\n| a | b |\n",
+                encoding="utf-8",
+            )
+            traceability_dir = project / "staging" / "traceability"
+            traceability_dir.mkdir(parents=True)
+            traceability_dir.joinpath("units.json").write_text(
+                json.dumps({"schema_version": 1, "units": [{"id": "tu_1", "kind": "endpoint"}], "diagnostics": []}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            traceability_dir.joinpath("state.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "links": [
+                            {"id": "tr_1", "unit_id": "tu_1", "status": "proposed", "strength": "partial"},
+                            {"id": "tr_legacy", "status": "proposed", "strength": "partial"},
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (project / "staging" / "traceability-candidates.json").write_text(
+                json.dumps({"candidates": [{"code_anchor": "raw-code/demo/src/app.ts"}, {"code_anchor": "raw-code/demo/src/other.ts"}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            report = health.build_report(project)
+
+            self.assertEqual(report["traceability"]["unit_count"], 1)
+            self.assertEqual(report["traceability"]["links_without_unit_count"], 1)
+            self.assertEqual(report["traceability"]["candidate_count"], 2)
+            self.assertEqual(report["traceability"]["markdown_table_rows"], 3)
+            self.assertEqual(report["traceability"]["status"], "low_granularity")
 
     def test_health_reports_missing_drawio_evidence(self):
         health = load_health()

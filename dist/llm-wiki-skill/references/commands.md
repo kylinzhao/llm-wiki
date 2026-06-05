@@ -12,6 +12,7 @@ Agent 执行单条 `llm-wiki` 子命令时**不要**加载本文件全文；只�
 | `llm-wiki add-code` | [`add-code.md`](./commands/add-code.md) |
 | `llm-wiki add-wiki` | [`add-wiki.md`](./commands/add-wiki.md) |
 | `llm-wiki backfill` | [`backfill.md`](./commands/backfill.md) |
+| `llm-wiki code-trace` | [`code-trace.md`](./commands/code-trace.md) |
 | `llm-wiki doctor` | [`doctor.md`](./commands/doctor.md) |
 | `llm-wiki fast` | [`fast.md`](./commands/fast.md) |
 | `llm-wiki image` | [`image.md`](./commands/image.md) |

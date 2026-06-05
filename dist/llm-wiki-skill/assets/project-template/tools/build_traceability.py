@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,6 +37,11 @@ def markdown_cell(value: object) -> str:
 def stable_id(parts: list[object]) -> str:
     payload = "\n".join(str(part).strip() for part in parts if part is not None)
     return "tr_" + hashlib.sha1(payload.encode("utf-8")).hexdigest()[:10]
+
+
+def traceability_unit_id(parts: list[object]) -> str:
+    payload = "\n".join(str(part).strip() for part in parts if part is not None)
+    return "tu_" + hashlib.sha1(payload.encode("utf-8")).hexdigest()[:10]
 
 
 def build_code_seed_row(codebase: dict[str, object]) -> str:
@@ -78,6 +85,114 @@ The previous traceability page did not use the current section format. It is pre
 
 def codebase_id_from_summary(codebase: dict[str, object]) -> str:
     return str(codebase.get("codebase_id") or codebase.get("id") or "unknown")
+
+
+def source_ref_from_manifest(source: dict[str, object]) -> str:
+    slug = str(source.get("slug") or "").strip()
+    return f"wiki/sources/{slug}.md" if slug else ""
+
+
+def source_page_path(project: Path, source: dict[str, object]) -> Path | None:
+    source_ref = source_ref_from_manifest(source)
+    if source_ref and (project / source_ref).is_file():
+        return project / source_ref
+    slug = str(source.get("slug") or "").strip()
+    if not slug:
+        return None
+    candidates = [
+        project / "wiki" / "sources" / f"{slug}-index.md",
+        project / "wiki" / "sources" / f"{slug.removesuffix('-index')}.md",
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
+def infer_capability(title: str, text: str) -> str:
+    haystack = f"{title}\n{text}"
+    if "报告" in haystack and "分析" in haystack:
+        return "报告分析查询"
+    if "接口" in title:
+        return title.replace("接口", "").strip() or title
+    return title or "待归类能力"
+
+
+def extract_backtick_terms(text: str) -> list[str]:
+    terms: list[str] = []
+    seen: set[str] = set()
+    for match in re.finditer(r"`([A-Za-z_][A-Za-z0-9_]*)`", text):
+        term = match.group(1)
+        if term not in seen:
+            terms.append(term)
+            seen.add(term)
+    return terms
+
+
+def classify_terms(terms: list[str]) -> tuple[list[str], list[str]]:
+    param_names = {"clue_id", "key", "task_id", "snapshot_id", "report_version", "car_id", "order_id", "page", "size"}
+    params: list[str] = []
+    fields: list[str] = []
+    for term in terms:
+        if term in param_names or term.endswith("_id"):
+            params.append(term)
+        else:
+            fields.append(term)
+    return params, fields
+
+
+def extract_traceability_units(project: Path, sources: list[object]) -> dict[str, object]:
+    units: list[dict[str, object]] = []
+    diagnostics: list[dict[str, object]] = []
+    endpoint_pattern = re.compile(r"\b(GET|POST|PUT|DELETE|PATCH)\s+(/[A-Za-z0-9_./{}:\[\]-]+)")
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        title = str(source.get("title") or source.get("slug") or "Source")
+        source_ref = source_ref_from_manifest(source)
+        path = source_page_path(project, source)
+        if path is None:
+            diagnostics.append({"source": source_ref, "status": "needs_unit_extraction", "reason": "source_page_missing"})
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        capability = infer_capability(title, text)
+        params, fields = classify_terms(extract_backtick_terms(text))
+        matched_endpoint = False
+        for endpoint_match in endpoint_pattern.finditer(text):
+            endpoint = f"{endpoint_match.group(1)} {endpoint_match.group(2)}"
+            units.append(
+                {
+                    "id": traceability_unit_id([source_ref, "endpoint", endpoint]),
+                    "source": source_ref,
+                    "kind": "endpoint",
+                    "title": endpoint,
+                    "capability": capability,
+                    "endpoint": endpoint,
+                    "params": params,
+                    "fields": fields,
+                    "evidence": f"{title} source page endpoint fact",
+                    "status": "extracted",
+                }
+            )
+            matched_endpoint = True
+        if not matched_endpoint and (params or fields):
+            units.append(
+                {
+                    "id": traceability_unit_id([source_ref, "field", ",".join([*params, *fields][:12])]),
+                    "source": source_ref,
+                    "kind": "field",
+                    "title": title,
+                    "capability": capability,
+                    "endpoint": "",
+                    "params": params,
+                    "fields": fields,
+                    "evidence": f"{title} source page field fact",
+                    "status": "extracted",
+                }
+            )
+        if not matched_endpoint and not params and not fields:
+            diagnostics.append({"source": source_ref, "status": "needs_unit_extraction", "reason": "no_endpoint_or_terms"})
+    return {"schema_version": 1, "generated_at": utc_now(), "units": units, "diagnostics": diagnostics}
 
 
 def collect_code_anchor_candidates(project: Path, codebases: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -167,6 +282,9 @@ def normalize_link(raw: dict[str, object]) -> dict[str, object]:
     for key in ("updated_by", "decision_note", "previously_rejected"):
         if key in raw:
             link[key] = raw[key]
+    for key in ("unit_id", "capability", "code_role", "match_reason", "diagnostics"):
+        if key in raw:
+            link[key] = raw[key]
     return link
 
 
@@ -228,6 +346,9 @@ def load_candidate_proposals(project: Path, sources: list[object]) -> list[dict[
                         "requirement": source.get("title", "candidate requirement") if isinstance(source, dict) else "candidate requirement",
                         "source": source_ref,
                         "code": [code_anchor],
+                        "code_role": str(candidate.get("code_role") or ""),
+                        "match_reason": candidate.get("match_reason") or candidate.get("signals") or [],
+                        "diagnostics": candidate.get("diagnostics") or [],
                         "strength": strength,
                         "status": "proposed",
                         "note": "Generated from deterministic code candidate; direct requirement-to-code verification is still required.",
@@ -330,6 +451,104 @@ def render_links_table(links: list[dict[str, object]], empty: str) -> str:
     return "\n".join(rows)
 
 
+def render_traceability_summary(units: list[dict[str, object]], links: list[dict[str, object]], candidates: list[dict[str, object]]) -> str:
+    unit_kinds = Counter(str(unit.get("kind") or "unknown") for unit in units)
+    statuses = Counter(str(link.get("status") or "unknown") for link in links)
+    strengths = Counter(str(link.get("strength") or "unknown") for link in links)
+    without_unit = sum(1 for link in links if not link.get("unit_id"))
+    return f"""## Traceability Summary
+
+| Metric | Value |
+| --- | ---: |
+| Units | {len(units)} |
+| Candidate anchors | {len(candidates)} |
+| Links | {len(links)} |
+| Links without unit | {without_unit} |
+| Unit kinds | {markdown_cell(dict(unit_kinds))} |
+| Link statuses | {markdown_cell(dict(statuses))} |
+| Evidence strengths | {markdown_cell(dict(strengths))} |
+
+Full candidate data remains in `staging/traceability-candidates.json`, `staging/traceability/state.json`, and `staging/traceability/units.json`.
+"""
+
+
+def render_units_table(units: list[dict[str, object]]) -> str:
+    if not units:
+        rows = "| pending | pending | pending | pending | pending | No extracted traceability units yet. |"
+    else:
+        rendered: list[str] = []
+        for unit in units[:200]:
+            params = ", ".join(str(item) for item in unit.get("params", [])[:8]) if isinstance(unit.get("params"), list) else ""
+            fields = ", ".join(str(item) for item in unit.get("fields", [])[:8]) if isinstance(unit.get("fields"), list) else ""
+            rendered.append(
+                "| {kind} | {title} | {capability} | `{endpoint}` | {params} | {fields} |".format(
+                    kind=markdown_cell(unit.get("kind", "")),
+                    title=markdown_cell(unit.get("title", "")),
+                    capability=markdown_cell(unit.get("capability", "")),
+                    endpoint=markdown_cell(unit.get("endpoint", "")),
+                    params=markdown_cell(params),
+                    fields=markdown_cell(fields),
+                )
+            )
+        rows = "\n".join(rendered)
+        if len(units) > 200:
+            rows += f"\n| ... | ... | ... | ... | ... | {len(units) - 200} more units in `staging/traceability/units.json`. |"
+    return f"""## Traceability Units
+
+| Kind | Unit | Capability | Endpoint | Params | Fields |
+| --- | --- | --- | --- | --- | --- |
+{rows}
+"""
+
+
+def render_traceability_diagnostics(state: dict[str, object], unit_payload: dict[str, object]) -> str:
+    links = [link for link in state.get("links", []) if isinstance(link, dict)]
+    low_granularity = [link for link in links if not link.get("unit_id")]
+    unit_diagnostics = unit_payload.get("diagnostics", [])
+    unit_diag_rows: list[str] = []
+    if isinstance(unit_diagnostics, list):
+        for item in unit_diagnostics[:50]:
+            if isinstance(item, dict):
+                unit_diag_rows.append(
+                    "| {source} | {status} | {reason} |".format(
+                        source=markdown_cell(item.get("source", "")),
+                        status=markdown_cell(item.get("status", "")),
+                        reason=markdown_cell(item.get("reason", "")),
+                    )
+                )
+    unit_rows = "\n".join(unit_diag_rows) or "| pending | ok | No unit extraction diagnostics. |"
+    link_rows = "\n".join(
+        "| {id} | {requirement} | {source} | {code} |".format(
+            id=markdown_cell(link.get("id", "")),
+            requirement=markdown_cell(link.get("requirement", "")),
+            source=markdown_cell(link.get("source", "")),
+            code=markdown_cell("; ".join(str(item) for item in link.get("code", [])) if isinstance(link.get("code"), list) else link.get("code", "")),
+        )
+        for link in low_granularity[:50]
+    ) or "| pending | pending | pending | No low-granularity legacy links. |"
+    if len(low_granularity) > 50:
+        link_rows += f"\n| ... | ... | ... | {len(low_granularity) - 50} more low-granularity links in `staging/traceability/state.json`. |"
+    return f"""## Traceability Diagnostics
+
+| Metric | Value |
+| --- | ---: |
+| low_granularity_links | {len(low_granularity)} |
+| unit_extraction_diagnostics | {len(unit_diag_rows)} |
+
+### Unit Extraction Diagnostics
+
+| Source | Status | Reason |
+| --- | --- | --- |
+{unit_rows}
+
+### Legacy Low-Granularity Links
+
+| Link ID | Requirement | Source | Code |
+| --- | --- | --- | --- |
+{link_rows}
+"""
+
+
 def render_state_sections(state: dict[str, object]) -> str:
     links = [link for link in state.get("links", []) if isinstance(link, dict)]
     verified = [link for link in links if str(link.get("status")) == "confirmed"]
@@ -382,15 +601,22 @@ def build_traceability(project: Path) -> dict[str, int]:
     ) or "| pending | pending | pending | missing | No source manifest found. |"
     code_rows = "\n".join(build_code_seed_row(codebase) for codebase in codebase_dicts) or "| pending | pending | pending | missing | No codebase scan found. |"
     candidates = collect_code_anchor_candidates(project, codebase_dicts)
+    unit_payload = extract_traceability_units(project, sources)
+    units = [unit for unit in unit_payload.get("units", []) if isinstance(unit, dict)]
     traceability_path = project / "wiki" / "code" / "traceability" / "index.md"
     existing = traceability_path.read_text(encoding="utf-8") if traceability_path.is_file() else ""
     verified_traceability = extract_verified_traceability(existing)
     state = merge_traceability_state(project, generated_proposals=load_candidate_proposals(project, sources))
     state_sections = render_state_sections(state)
+    links = [link for link in state.get("links", []) if isinstance(link, dict)]
 
     content = f"""# Traceability Matrix
 
 Generated: {utc_now()}
+
+{render_traceability_summary(units, links, candidates)}
+
+{render_units_table(units)}
 
 ## Requirement Seeds
 
@@ -412,6 +638,8 @@ Generated: {utc_now()}
 
 {state_sections}
 
+{render_traceability_diagnostics(state, unit_payload)}
+
 {verified_traceability}
 
 ## Evidence Strength Vocabulary
@@ -427,6 +655,10 @@ Generated: {utc_now()}
 Verified traceability rows must only claim requirement-to-code evidence after checking requirement sources, capability pages, and direct code anchors. Deterministic candidates are useful inputs, not implementation proof by themselves.
 """
     write(traceability_path, content)
+    write(
+        project / "staging" / "traceability" / "units.json",
+        json.dumps(unit_payload, ensure_ascii=False, indent=2) + "\n",
+    )
     write(
         project / "staging" / "traceability-candidates.json",
         json.dumps({"generated_at": utc_now(), "candidates": candidates}, ensure_ascii=False, indent=2) + "\n",

@@ -471,6 +471,103 @@ class TraceabilitySeedTests(unittest.TestCase):
             proposed_section = content.split("## Proposed Traceability", 1)[1].split("## Traceability Gaps", 1)[0]
             self.assertNotIn("新拒绝文案", proposed_section)
 
+    def test_build_traceability_extracts_endpoint_units_from_refined_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw" / "source").mkdir(parents=True)
+            (project / "raw" / "source" / "index.md").write_text("# source\n", encoding="utf-8")
+            (project / "raw-code" / "carsource" / "src").mkdir(parents=True)
+            (project / "raw-code" / "carsource" / "src" / "ReportController.java").write_text(
+                "class ReportController { void reportResultAnalysisByKey() {} }\n",
+                encoding="utf-8",
+            )
+            (project / "staging").mkdir()
+            (project / "staging" / "source-manifest.json").write_text(
+                json.dumps({"sources": [{"slug": "report-analysis", "title": "报告分析接口"}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            source_page = project / "wiki" / "sources" / "report-analysis.md"
+            source_page.parent.mkdir(parents=True)
+            source_page.write_text(
+                "# 报告分析接口\n\n"
+                "## 关键事实\n\n"
+                "- 内部接口：`GET /cars-report/internal/reportResultAnalysisByKey`，调用前需要验签。\n"
+                "- 必传参数：`clue_id`（车源号）、`key`（字段 key）；可选：`task_id`、`snapshot_id`。\n"
+                "- `report_version` 取值：`check` / `recheck` / `latest` / `snapshot`。\n"
+                "- 关键 key：`major_accident`、`base_info`、`report_conclusion`。\n",
+                encoding="utf-8",
+            )
+            (project / "staging" / "code-graph").mkdir(parents=True)
+            (project / "staging" / "code-graph" / "summary.json").write_text(
+                json.dumps({"codebases": [{"codebase_id": "carsource", "stack": ["java"]}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            build_traceability.build_traceability(project)
+
+            units_path = project / "staging" / "traceability" / "units.json"
+            units = json.loads(units_path.read_text(encoding="utf-8"))["units"]
+            endpoint_units = [unit for unit in units if unit["kind"] == "endpoint"]
+            self.assertTrue(endpoint_units)
+            unit = endpoint_units[0]
+            self.assertEqual(unit["source"], "wiki/sources/report-analysis.md")
+            self.assertEqual(unit["capability"], "报告分析查询")
+            self.assertEqual(unit["endpoint"], "GET /cars-report/internal/reportResultAnalysisByKey")
+            self.assertIn("clue_id", unit["params"])
+            self.assertIn("major_accident", unit["fields"])
+            content = (project / "wiki" / "code" / "traceability" / "index.md").read_text(encoding="utf-8")
+            self.assertIn("## Traceability Units", content)
+            self.assertIn("GET /cars-report/internal/reportResultAnalysisByKey", content)
+            self.assertIn("报告分析查询", content)
+
+    def test_build_traceability_diagnoses_legacy_low_granularity_links(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw" / "source").mkdir(parents=True)
+            (project / "raw" / "source" / "index.md").write_text("# source\n", encoding="utf-8")
+            (project / "raw-code" / "demo" / "src").mkdir(parents=True)
+            (project / "raw-code" / "demo" / "src" / "service.ts").write_text("export const service = 1;\n", encoding="utf-8")
+            (project / "staging").mkdir()
+            (project / "staging" / "source-manifest.json").write_text(
+                json.dumps({"sources": [{"slug": "source-index", "title": "Source"}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (project / "staging" / "code-graph").mkdir(parents=True)
+            (project / "staging" / "code-graph" / "summary.json").write_text(
+                json.dumps({"codebases": [{"codebase_id": "demo", "stack": ["node"]}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            state_dir = project / "staging" / "traceability"
+            state_dir.mkdir(parents=True)
+            state_dir.joinpath("state.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "links": [
+                            {
+                                "id": "tr_page_to_file",
+                                "requirement": "Source",
+                                "source": "wiki/sources/source-index.md",
+                                "code": ["raw-code/demo/src/service.ts"],
+                                "strength": "partial",
+                                "status": "proposed",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            build_traceability.build_traceability(project)
+
+            state = json.loads(state_dir.joinpath("state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["links"][0]["id"], "tr_page_to_file")
+            content = (project / "wiki" / "code" / "traceability" / "index.md").read_text(encoding="utf-8")
+            self.assertIn("## Traceability Diagnostics", content)
+            self.assertIn("low_granularity_links", content)
+            self.assertIn("tr_page_to_file", content)
+
 
 if __name__ == "__main__":
     unittest.main()

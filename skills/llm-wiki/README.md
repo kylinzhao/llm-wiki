@@ -18,11 +18,17 @@
 
 ## 版本
 
-- `version`: `1.0.8`
-- `engine_version`: `engine-v1.0.8`
+- `version`: `1.0.14`
+- `engine_version`: `engine-v1.0.14`
 
 ### Engine 发行记录
 
+- **`engine-v1.0.14`**：收敛 code-trace 入口文案为单一入口和内部阶段表述，避免客户端误判为需要选择三级命令。
+- **`engine-v1.0.13`**：修复 raw-code 同步命令接入 Git 鉴权时重复 git 前缀的问题，并保留代码仓库权限诊断短句。
+- **`engine-v1.0.12`**：收敛 llm-wiki code-trace 为单一二级命令，将诊断、重建、AI 精修改为内部阶段，不再暴露三级子命令。
+- **`engine-v1.0.11`**：恢复 llm-wiki-code-trace 顶层短入口，确保 Codex/Qoder 等客户端技能列表可直接显示 code-trace 指令。
+- **`engine-v1.0.10`**：新增 llm-wiki code-trace 二级命令，支持独立代码追踪诊断、确定性重建和必须收口的 AI 精修流程。
+- **`engine-v1.0.9`**：新增 traceability units，以 endpoint/关键事实、能力、字段和调用链维度诊断代码追踪粒度。
 - **`engine-v1.0.8`**：加回 llm-wiki refine 主动精修入口，并明确 update 可自动精修、refine shared 模式验证后自动 commit and push。
 - **`engine-v1.0.7`**：新增代码精修 contract，将薄 codebase 页面和未消化代码候选纳入 update/doctor 的 P1 自动精修队列。
 - **`engine-v1.0.6`**：优化 init_auth_env 本机鉴权复用：已有 GitLab/Jira 令牌时不再重复输入，并根据 SSH Key / Git credential 动态提示 GitLab 令牌。
