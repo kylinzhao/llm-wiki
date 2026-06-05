@@ -18,11 +18,12 @@
 
 ## 版本
 
-- `version`: `1.0.13`
-- `engine_version`: `engine-v1.0.13`
+- `version`: `1.0.14`
+- `engine_version`: `engine-v1.0.14`
 
 ### Engine 发行记录
 
+- **`engine-v1.0.14`**：收敛 code-trace 入口文案为单一入口和内部阶段表述，避免客户端误判为需要选择三级命令。
 - **`engine-v1.0.13`**：修复 raw-code 同步命令接入 Git 鉴权时重复 git 前缀的问题，并保留代码仓库权限诊断短句。
 - **`engine-v1.0.12`**：收敛 llm-wiki code-trace 为单一二级命令，将诊断、重建、AI 精修改为内部阶段，不再暴露三级子命令。
 - **`engine-v1.0.11`**：恢复 llm-wiki-code-trace 顶层短入口，确保 Codex/Qoder 等客户端技能列表可直接显示 code-trace 指令。

@@ -2,7 +2,7 @@
 
 Purpose: run the dedicated code trace workflow without running a full KB update.
 
-This is a single second-level command. Do not ask the user to choose `doctor`, `rebuild`, or `refine` subcommands. Those are internal phases of the same command:
+This is a single second-level command. Keep the workflow inside `llm-wiki code-trace` and choose the internal phase from evidence:
 
 1. diagnose
 2. deterministic rebuild when needed
@@ -13,7 +13,7 @@ Use this command when the user asks to refresh `raw-code` evidence, rebuild code
 
 ## Core Contract
 
-- Start with read-only diagnosis, but present it as the diagnosis phase, not as a separate `doctor` subcommand.
+- Start with read-only diagnosis and present it as an internal phase of `llm-wiki code-trace`.
 - Run deterministic rebuild when scan, candidate, upstream `docs/wiki`, units, or traceability artifacts are missing/stale.
 - Run AI-native refinement when diagnostics show missing units, low-granularity links, unmapped candidates, weak code anchors, or thin capability evidence.
 - Distributed execution is allowed: split AI refinement by source, unit, capability, or codebase according to priority and task size.

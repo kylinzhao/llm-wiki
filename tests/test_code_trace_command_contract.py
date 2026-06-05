@@ -31,7 +31,8 @@ def test_code_trace_command_is_documented_and_routed_in_skill_bundle():
     assert "llm-wiki code-trace doctor" not in code_trace_command
     assert "references/commands/code-trace.md" in code_trace_entry
     assert "llm-wiki code-trace" in code_trace_entry
-    assert "不再暴露 `doctor/rebuild/refine` 子命令" in code_trace_entry
+    assert "这是单一二级入口" in code_trace_entry
+    assert "子命令" not in code_trace_entry
 
 
 def test_dist_bundle_contains_code_trace_command_contract():
