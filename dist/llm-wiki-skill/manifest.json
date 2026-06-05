@@ -1,6 +1,6 @@
 {
   "name": "llm-wiki",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "在项目中从 0-1 初始化、构建、增量维护、查询和审查一套基于 raw 文档、raw-code 源码库与 BUSINESS_CONTEXT.md 的 LLM Wiki。",
   "entrypoint": "SKILL.md",
   "files": [
