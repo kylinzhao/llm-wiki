@@ -48,6 +48,57 @@ def scan_signals(fact: dict[str, object]) -> list[str]:
     return signals
 
 
+def infer_code_role(path: str, fact: dict[str, object] | None = None) -> str:
+    lowered = path.lower()
+    name = Path(path).name.lower()
+    if "/.agents/" in lowered or "/scripts/" in lowered or "script" in lowered:
+        return "tooling"
+    if "/test/" in lowered or "/tests/" in lowered or name.startswith("test_") or name.endswith("_test.py") or ".test." in name:
+        return "test"
+    if "controller" in lowered or "handler" in lowered or "router" in lowered or "route" in lowered:
+        return "controller"
+    if "service" in lowered:
+        return "service"
+    if "repository" in lowered or "dao" in lowered:
+        return "repository"
+    if any(token in lowered for token in ("dto", "request", "response", "req", "resp")):
+        return "dto"
+    if "entity" in lowered or "model" in lowered:
+        return "entity"
+    if any(token in lowered for token in ("page.", "/pages/", "/app/")):
+        return "frontend_page"
+    if any(token in lowered for token in ("component", "/components/")):
+        return "frontend_component"
+    if any(token in lowered for token in ("config", ".yml", ".yaml", ".json")):
+        return "config"
+    if fact and fact.get("endpoints"):
+        return "controller"
+    return "module"
+
+
+def path_diagnostics(path: str, signals: list[str]) -> list[str]:
+    lowered = path.lower()
+    diagnostics: list[str] = []
+    low_value_markers = (
+        "/.agents/",
+        "/node_modules/",
+        "/tests/",
+        "/test/",
+        "/examples/",
+        "/example/",
+        "/dist/",
+        "/build/",
+        "/coverage/",
+    )
+    if any(marker in lowered for marker in low_value_markers):
+        diagnostics.append("low_value_path")
+    if "scan_endpoint" not in signals and "scan_route" not in signals:
+        diagnostics.append("missing_endpoint_signal")
+    if "scan_symbol" not in signals:
+        diagnostics.append("missing_symbol_signal")
+    return diagnostics
+
+
 def source_map_by_path(entries: list[dict[str, object]]) -> dict[str, list[dict[str, object]]]:
     grouped: dict[str, list[dict[str, object]]] = {}
     for entry in entries:
@@ -75,8 +126,11 @@ def build_anchor_candidates(codebase: str, facts: list[dict[str, object]], sourc
             {
                 "codebase_id": codebase,
                 "role": fact.get("role", "module"),
+                "code_role": infer_code_role(path, fact),
                 "code_anchor": path,
                 "signals": sorted(set(signals)),
+                "match_reason": sorted(set(signals)),
+                "diagnostics": path_diagnostics(path, signals),
                 "source_files": [path],
                 "upstream_refs": source_map.get(rel, []),
                 "evidence_strength": strength,

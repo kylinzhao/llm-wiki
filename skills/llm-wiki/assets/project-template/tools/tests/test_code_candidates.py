@@ -120,6 +120,30 @@ class CodeCandidateTests(unittest.TestCase):
             self.assertIn("raw-code/demo/src/app.ts", proposed[0]["code"])
             self.assertNotEqual(proposed[0]["strength"], "strong")
 
+    def test_anchor_candidates_include_role_and_low_value_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            codebase = project / "raw-code" / "demo"
+            (codebase / ".agents" / "skills").mkdir(parents=True)
+            (codebase / ".agents" / "skills" / "helper.py").write_text("def helper(): pass\n", encoding="utf-8")
+            (codebase / "src" / "api").mkdir(parents=True)
+            (codebase / "src" / "api" / "ReportController.java").write_text(
+                "class ReportController { void reportResultAnalysisByKey() {} }\n",
+                encoding="utf-8",
+            )
+            scan_code.scan_codebase(project, codebase)
+
+            build_code_candidates(project, "demo")
+
+            anchors = json.loads((project / "staging" / "code-graph" / "demo" / "anchor-candidates.json").read_text(encoding="utf-8"))
+            by_anchor = {item["code_anchor"]: item for item in anchors["candidates"]}
+            controller = by_anchor["raw-code/demo/src/api/ReportController.java"]
+            self.assertEqual(controller["code_role"], "controller")
+            self.assertIn("scan_symbol", controller["match_reason"])
+            helper = by_anchor["raw-code/demo/.agents/skills/helper.py"]
+            self.assertEqual(helper["code_role"], "tooling")
+            self.assertIn("low_value_path", helper["diagnostics"])
+
     def test_missing_code_anchor_marks_confirmed_traceability_stale(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)

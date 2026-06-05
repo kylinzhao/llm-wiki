@@ -400,6 +400,57 @@ def code_intelligence_status(project: Path) -> dict[str, object]:
     return {"detected_codebases": detected, "fallback_only_codebases": fallback_only, "details": details}
 
 
+def load_json_dict(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def traceability_status(project: Path) -> dict[str, object]:
+    traceability_md = project / "wiki" / "code" / "traceability" / "index.md"
+    units_payload = load_json_dict(project / "staging" / "traceability" / "units.json")
+    state_payload = load_json_dict(project / "staging" / "traceability" / "state.json")
+    candidates_payload = load_json_dict(project / "staging" / "traceability-candidates.json")
+    units = units_payload.get("units", [])
+    links = state_payload.get("links", [])
+    candidates = candidates_payload.get("candidates", [])
+    units = units if isinstance(units, list) else []
+    links = links if isinstance(links, list) else []
+    candidates = candidates if isinstance(candidates, list) else []
+    links_without_unit_count = sum(1 for link in links if isinstance(link, dict) and not link.get("unit_id"))
+    links_with_unit_count = sum(1 for link in links if isinstance(link, dict) and link.get("unit_id"))
+    markdown_size_bytes = traceability_md.stat().st_size if traceability_md.is_file() else 0
+    markdown_table_rows = 0
+    if traceability_md.is_file():
+        markdown_table_rows = sum(1 for line in traceability_md.read_text(encoding="utf-8", errors="replace").splitlines() if line.startswith("|"))
+    unmapped_candidate_count = max(0, len(candidates) - links_with_unit_count)
+    if not traceability_md.is_file() and not units and not links and not candidates:
+        status = "missing"
+    elif candidates and not units:
+        status = "units_missing"
+    elif links_without_unit_count:
+        status = "low_granularity"
+    elif unmapped_candidate_count:
+        status = "unmapped_candidates"
+    else:
+        status = "ok"
+    return {
+        "status": status,
+        "unit_count": len(units),
+        "candidate_count": len(candidates),
+        "link_count": len(links),
+        "links_with_unit_count": links_with_unit_count,
+        "links_without_unit_count": links_without_unit_count,
+        "unmapped_candidate_count": unmapped_candidate_count,
+        "markdown_size_bytes": markdown_size_bytes,
+        "markdown_table_rows": markdown_table_rows,
+    }
+
+
 def business_context_status(project: Path) -> dict[str, object]:
     path = project / "BUSINESS_CONTEXT.md"
     if not path.is_file():
@@ -602,6 +653,7 @@ def build_report(project: Path) -> dict[str, object]:
         )
 
     code_intelligence = code_intelligence_status(project)
+    traceability = traceability_status(project)
     cjira_registry = cjira_registry_status(project)
     if cjira_registry["stale_status_pages"]:
         if local_jira_auth_configured():
@@ -651,6 +703,7 @@ def build_report(project: Path) -> dict[str, object]:
         "image_refinement_candidates": image_candidates,
         "cjira_registry": cjira_registry,
         "code_intelligence": code_intelligence,
+        "traceability": traceability,
         "recommended_actions": recommended_actions,
         "query_may_work_without_full_evidence": query_may_work_without_full_evidence,
     }

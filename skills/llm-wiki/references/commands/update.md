@@ -6,6 +6,7 @@ update 可以自动进入 source refinement：当 `tools/check_refinement.py`、
 
 Release note:
 
+- `engine-v1.0.9`: traceability 从“整页需求到代码文件”升级为 traceability units，优先按 endpoint/关键事实、业务能力、字段参数和调用链维度诊断代码追踪粒度，并在 health/doctor 中暴露低粒度与未映射候选问题。
 - `engine-v1.0.7`: source 精修 contract 扩展为 source + code refinement contract；薄 codebase index、未消化 capability candidates 和代码 traceability 缺口会进入 `doctor` / `update` 的 P1 自动精修队列。
 - `engine-v1.0.6`: `init_auth_env` reuses existing local GitLab/Jira tokens, dynamically detects GitLab SSH/credential auth, and presents GitLab/Jira token creation links only when needed.
 
