@@ -64,6 +64,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 
 ## Engine 发行（`engine-v*`）
 
+- **`engine-v1.0.16`**：补充 llm-wiki 周更新文档并同步正式发布包，确保公司 skill 平台包只包含正式 llm-wiki bundle。
 - **`engine-v1.0.15`**：code-trace 默认进入 shared mode，验证通过后自动 commit and push；显式 local 模式才跳过发布。
 - **`engine-v1.0.14`**：收敛 code-trace 入口文案为单一入口和内部阶段表述，避免客户端误判为需要选择三级命令。
 - **`engine-v1.0.13`**：修复 raw-code 同步命令接入 Git 鉴权时重复 git 前缀的问题，并保留代码仓库权限诊断短句。
