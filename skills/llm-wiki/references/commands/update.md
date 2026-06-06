@@ -6,6 +6,7 @@ update 可以自动进入 source refinement：当 `tools/check_refinement.py`、
 
 Release note:
 
+- `engine-v1.0.15`: `llm-wiki code-trace` 默认进入 shared mode，验证通过后自动 commit and push；显式 local 模式才跳过发布。
 - `engine-v1.0.14`: 收敛 code-trace 入口文案为单一入口和内部阶段表述，避免客户端误判为需要选择三级命令。
 - `engine-v1.0.13`: 修复 raw-code 同步命令接入 Git 鉴权时重复 `git` 前缀的问题，并保留代码仓库权限诊断短句。
 - `engine-v1.0.12`: 收敛 `llm-wiki code-trace` 为单一二级命令，诊断、确定性重建、AI 精修和验证改为内部阶段，不再暴露 `doctor/rebuild/refine` 三级子命令。

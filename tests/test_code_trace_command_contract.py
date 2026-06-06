@@ -27,6 +27,10 @@ def test_code_trace_command_is_documented_and_routed_in_skill_bundle():
     assert "Phase 1: Diagnose" in code_trace_command
     assert "Phase 2: Deterministic Rebuild" in code_trace_command
     assert "Phase 3: AI-Native Refinement" in code_trace_command
+    assert "shared mode" in code_trace_command
+    assert "commit and push" in code_trace_command
+    assert "`llm-wiki code-trace --local`" in code_trace_command
+    assert "Do not publish when readiness is `blocked`" in code_trace_command
     assert "llm-wiki code-trace rebuild" not in code_trace_command
     assert "llm-wiki code-trace doctor" not in code_trace_command
     assert "references/commands/code-trace.md" in code_trace_entry
@@ -49,6 +53,8 @@ def test_dist_bundle_contains_code_trace_command_contract():
     assert "llm-wiki code-trace refine" not in update_command
     assert "Do not label the command complete until AI refinement is actually complete" in code_trace_command
     assert "This is a single second-level command" in code_trace_command
+    assert "commit and push" in code_trace_command
+    assert "`llm-wiki code-trace --local`" in code_trace_command
 
 
 def test_install_script_does_not_prune_code_trace_entry():

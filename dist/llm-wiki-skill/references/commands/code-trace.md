@@ -13,6 +13,8 @@ Use this command when the user asks to refresh `raw-code` evidence, rebuild code
 
 ## Core Contract
 
+- Default to shared mode. `llm-wiki code-trace` must commit and push changed KB outputs after successful validation.
+- Use `llm-wiki code-trace --local` or `LLM_WIKI_UPDATE_MODE=local` only for an explicit local trial; local mode must not commit or push automatically.
 - Start with read-only diagnosis and present it as an internal phase of `llm-wiki code-trace`.
 - Run deterministic rebuild when scan, candidate, upstream `docs/wiki`, units, or traceability artifacts are missing/stale.
 - Run AI-native refinement when diagnostics show missing units, low-granularity links, unmapped candidates, weak code anchors, or thin capability evidence.
@@ -141,6 +143,21 @@ If the queue is too large, process by priority and checkpoint explicitly:
 - exact continuation command: `llm-wiki code-trace`
 
 Do not label the command complete until AI refinement is actually complete for the declared scope.
+
+## Shared Publish Contract
+
+In shared mode, `llm-wiki code-trace` owns publication of its code-trace changes.
+
+Before any mutating phase, run the same KB git preflight used by `llm-wiki update`: upstream configured, worktree clean except allowed generated outputs, fast-forward sync possible, and no local-only skip flags. If preflight fails, stop before writing traceability outputs unless the user explicitly switches to `llm-wiki code-trace --local`.
+
+After deterministic rebuild, AI refinement, and validation:
+
+1. Publish when readiness is `healthy` or `usable-with-gaps`.
+2. Commit and push changed KB outputs with a normal shared-update commit.
+3. Include traceability artifacts, capability pages, health/doctor snapshots, and any related staging state needed to make the published baseline reproducible.
+4. Report the commit id and push result in the final report.
+
+Do not publish when readiness is `blocked`, validation failed, raw-code evidence is dirty/unmanaged/damaged, repository permissions are missing, or the user explicitly requested local mode.
 
 ## Integration With `llm-wiki update`
 
