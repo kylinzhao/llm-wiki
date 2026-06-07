@@ -4,7 +4,7 @@
 
 1. 读取 `BUSINESS_CONTEXT.md`，把它作为业务语义基线。
 2. 判断查询意图，不要直接从模型记忆、单个 `rg` 命中或孤立代码片段下结论。
-3. 先查 `wiki/overview.md`，确认站点范围、主链路和已知缺口。
+3. 先查 `wiki/overview.md`，确认站点范围、主链路和已知缺口。**不要读 `wiki/index.md` 的来源列表**——它只含域统计摘要，具体来源靠 grep/搜索定位。
 4. 按查询意图选择专项目录层：`truth`、`conflicts`、`evidence`、`proposals`、`reference`、`operations`。
 5. 使用 `concepts / entities` 作为通用扩展层，扩展主题、实体、别名和相关来源。
 6. 回到 `sources` 找直接需求/业务证据。
