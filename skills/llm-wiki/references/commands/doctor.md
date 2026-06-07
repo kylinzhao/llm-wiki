@@ -5,7 +5,7 @@ Purpose: read-only diagnosis and quality review of the whole LLM Wiki site. Use 
 Read:
 
 1. `BUSINESS_CONTEXT.md`
-2. `wiki/index.md`
+2. `wiki/index.md`（仅读头部：入口链接 + 来源域统计表；不读来源明细列表）
 3. `wiki/overview.md`
 4. `docs/retrieval-playbook.md`
 5. `docs/build-and-maintenance.md`

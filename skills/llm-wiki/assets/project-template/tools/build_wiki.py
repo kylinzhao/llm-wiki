@@ -330,15 +330,49 @@ def backfill_source_page(path: Path, source: dict[str, object], project: Path) -
     path.write_text(text, encoding="utf-8")
 
 
+def _domain_prefix(slug: str) -> str:
+    """Extract domain prefix from source slug (e.g. 'c1-123-foo' -> 'c1')."""
+    m = re.match(r"^([a-z][a-z0-9-]*?)-(\d)", slug)
+    return m.group(1) if m else "other"
+
+
 def index_page(sources: list[dict[str, object]], codebases: list[str]) -> str:
-    source_lines = "\n".join(
-        f"- [[sources/{source['slug']}|{source['title']}]]"
-        for source in sources
-    ) or "- 尚未发现来源页面。"
+    """Generate wiki/index.md with compact domain summary."""
+    from collections import Counter
+
+    domain_counts: Counter = Counter()
+    for source in sources:
+        domain_counts[_domain_prefix(str(source["slug"]))] += 1
+    total = len(sources)
+
+    if total == 0:
+        source_section = "- 尚未发现来源页面。"
+    else:
+        real_total = sum(c for d, c in domain_counts.items() if d != "other")
+        if real_total > total * 0.1 and real_total >= 5:
+            # Multi-domain: show domain table
+            domain_table = "| 域 | 来源数 |\n| --- | --- |\n"
+            for domain in sorted(domain_counts):
+                domain_table += f"| {domain} | {domain_counts[domain]} |\n"
+            source_section = (
+                f"共 **{total}** 个来源页面，按域分布：\n\n"
+                f"{domain_table}\n"
+                f"> 查找具体来源请使用 `grep`/搜索 `wiki/sources/` 目录，"
+                f"或通过 `concepts/`、`entities/` 导航。"
+            )
+        else:
+            # Single-domain: just total
+            source_section = (
+                f"共 **{total}** 个来源页面。\n\n"
+                f"> 查找具体来源请使用 `grep`/搜索 `wiki/sources/` 目录，"
+                f"或通过 `concepts/`、`entities/` 导航。"
+            )
+
     code_lines = "\n".join(
         f"- [[code/codebases/{codebase}/index|{codebase}]]"
         for codebase in codebases
     ) or "- 尚未发现 raw-code 代码库。"
+
     return f"""# LLM Wiki
 
 生成时间: {utc_now()}
@@ -358,13 +392,12 @@ def index_page(sources: list[dict[str, object]], codebases: list[str]) -> str:
 
 ## 来源
 
-{source_lines}
+{source_section}
 
 ## 代码库
 
 {code_lines}
 """
-
 
 def simple_page(title: str, body: str) -> str:
     return f"# {title}\n\n{body.rstrip()}\n"

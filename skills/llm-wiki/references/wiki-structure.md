@@ -118,6 +118,17 @@ wiki/code/codebases/<backend-id>/
 - 推断
 - 缺失证据
 
+
+### `wiki/index.md`
+
+站点目录页。采用 **compact index** 格式：
+
+- **入口**：各 wiki 层（overview / concepts / entities / ... / code）的 wikilink
+- **来源**：仅包含按域分组的来源数量统计表 + grep 导航提示，**不列出逐条来源链接**
+- **代码库**：各 codebase 的 wikilink
+
+设计原因：大型 KB（如多域合并的 mega KB）可能有数千个来源页面。平铺来源列表会占满 agent 上下文窗口（数百 KB），但查询流程不依赖 index.md 查找具体来源——查询靠 `concepts/`、`entities/`、`overview.md` 导航 + grep 搜索 `wiki/sources/` 目录。
+
 ## staging 目录
 
 ### `staging/code-graph/`

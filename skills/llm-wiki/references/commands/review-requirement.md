@@ -36,7 +36,7 @@ When the current project is an LLM Wiki project, gather evidence from:
 1. `BUSINESS_CONTEXT.md`
 2. target `raw/**/index.md` or provided requirement file / URL
 3. `docs/retrieval-playbook.md`
-4. `wiki/overview.md`, `wiki/index.md`, relevant `wiki/sources/`
+4. `wiki/overview.md`, `wiki/index.md`（仅读头部统计，不读来源明细）, relevant `wiki/sources/`（按查询关键词 grep 定位）
 5. `wiki/concepts/`, `wiki/entities/`, `wiki/truth/`, `wiki/conflicts/`, `wiki/evidence/`, `wiki/proposals/`, `wiki/reference/`, `wiki/operations/`
 6. if present, `raw-code/`, `wiki/code/capabilities/`, `wiki/code/traceability/`
 
