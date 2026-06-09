@@ -6,6 +6,7 @@ update 可以自动进入 source refinement：当 `tools/check_refinement.py`、
 
 Release note:
 
+- `engine-v1.0.17`: 新增 `llm-wiki pull` 二级命令，只同步 KB git 与 `raw/` / `raw-code/` 证据缓存并报告上次更新时间 / 上次精修时间；按 `now - last_update_time` 是否超过 1 天给出 `直接 query` 或 `建议 update` 的结论；不修改 `wiki/` / `staging/` / `graph/` / `index/` / `tools/` 产物，也不进入 shared publish。
 - `engine-v1.0.16`: 补充 `skills/llm-wiki/update.md` 周更新文档并同步正式发布包，发布包只包含正式 `llm-wiki-skill` bundle。
 - `engine-v1.0.15`: `llm-wiki code-trace` 默认进入 shared mode，验证通过后自动 commit and push；显式 local 模式才跳过发布。
 - `engine-v1.0.14`: 收敛 code-trace 入口文案为单一入口和内部阶段表述，避免客户端误判为需要选择三级命令。
