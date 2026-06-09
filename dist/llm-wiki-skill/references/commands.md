@@ -23,4 +23,5 @@ Agent 执行单条 `llm-wiki` 子命令时**不要**加载本文件全文；只�
 | `llm-wiki refine` | [`refine.md`](./commands/refine.md) |
 | `llm-wiki review-requirement` | [`review-requirement.md`](./commands/review-requirement.md) |
 | `llm-wiki update-skill` | [`update-skill.md`](./commands/update-skill.md) |
+| `llm-wiki pull` | [`pull.md`](./commands/pull.md) |
 | `llm-wiki update` | [`update.md`](./commands/update.md) |
