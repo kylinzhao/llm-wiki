@@ -18,11 +18,12 @@
 
 ## 版本
 
-- `version`: `1.0.17`
-- `engine_version`: `engine-v1.0.17`
+- `version`: `1.0.18`
+- `engine_version`: `engine-v1.0.18`
 
 ### Engine 发行记录
 
+- **`engine-v1.0.18`**：新增 Cloud 作业边界契约：命令 manifest、pull/update 结果 envelope、GitLab token 输出脱敏和 Cloud 可消费的阶段/问题字段。
 - **`engine-v1.0.17`**：新增 llm-wiki pull 二级命令：只同步 KB git 与 raw/raw-code 证据缓存并报告上次更新时间与上次精修时间，按 now - last_update_time 是否超过 1 天给出直接 query 或建议 update 的结论，不修改 wiki/staging/graph/index/tools 产物，也不进入 shared publish。
 - **`engine-v1.0.16`**：补充 llm-wiki 周更新文档并同步正式发布包，确保公司 skill 平台包只包含正式 llm-wiki bundle。
 - **`engine-v1.0.15`**：code-trace 默认进入 shared mode，验证通过后自动 commit and push；显式 local 模式才跳过发布。

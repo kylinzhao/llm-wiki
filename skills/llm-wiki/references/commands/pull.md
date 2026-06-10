@@ -87,3 +87,9 @@ Verdict & 建议下一步 rule:
 - `now - last_update_time > 1 day` → 建议 `llm-wiki update`（用户可显式追加 `--local` / `LLM_WIKI_UPDATE_MODE=local` 做本机试跑）。
 - 1 天阈值是经验值；当阈值触发但 `pending_refinement` 队列为空且 `evidence_gaps` 为空，仍按 "> 1 天" 分支给出 `llm-wiki update` 建议，但要在报告里说明上游时间只是"软提示"，由用户决定是否升级。
 - 权限失败、KB git 分叉、`raw-code/` dirty、未受管 `raw-code/` 等阻断项必须显式列出；不要把它们降级成普通 gap。
+
+Cloud result envelope:
+
+When `llm-wiki pull` is executed by Cloud, end the Markdown report with exactly one fenced block whose info string is `llm-wiki-job-result-json`. The JSON must use `schemaVersion: "llm-wiki-job-result/v1"`, `command: "llm-wiki pull"`, `status` (`completed`, `failed`, `blocked`, `partial`, or `skipped`), `phases`, `issues`, `pushStatus: "not_requested"`, and `recommendations`. Use stable phase names such as `kb_git_sync`, `raw_sync`, `raw_code_sync`, and `freshness_report`. `issues` must be an empty array when there are no issues; otherwise each issue must include a stable uppercase `code`, redacted `message`, and optional `remediation`.
+
+Never include GitLab tokens, Authorization headers, Cookie values, askpass output, environment dumps, or token-bearing remote URLs in the Markdown report or the `llm-wiki-job-result-json` envelope. Replace sensitive values with `[REDACTED]`.

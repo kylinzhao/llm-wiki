@@ -4,6 +4,7 @@
 
 ## 版本发布
 
+- 发布 `engine-v1.0.18`，补齐 Cloud 可消费的命令能力 manifest、`pull` / `update` 结果 envelope 契约和 GitLab token 输出脱敏规则。
 - 发布 `engine-v1.0.1` 到 `engine-v1.0.6`，同步维护 `VERSION`、`manifest.json`、README 发行记录和 GrapeHub `dist/llm-wiki-skill.zip` 发布包。
 - `engine-v1.0.6` 正式产出 `dist/llm-wiki-new-skill.zip` 多入口安装包，zip 内包含 `llm-wiki-new` 主入口和全部 `llm-wiki-new-*` 二级 skill，便于上传公司 skill 平台。
 - 新增 `scripts/release_version.py` 与发布脚本约束，发布前统一更新 skill 源目录、dist 目录和 manifest 版本元数据。

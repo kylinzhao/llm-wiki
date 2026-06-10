@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "llm-wiki-command-manifest/v1",
+  "commands": {
+    "query": {
+      "command": "llm-wiki query",
+      "readOnly": true,
+      "mutatesEvidenceCache": false,
+      "publishes": false,
+      "requiresModel": true,
+      "supportedProviders": ["cursor", "opencode"]
+    },
+    "pull": {
+      "command": "llm-wiki pull",
+      "readOnly": false,
+      "mutatesEvidenceCache": true,
+      "publishes": false,
+      "requiresModel": false,
+      "supportedProviders": ["cursor", "opencode"]
+    },
+    "update": {
+      "command": "llm-wiki update",
+      "readOnly": false,
+      "mutatesEvidenceCache": true,
+      "publishes": true,
+      "requiresModel": true,
+      "supportedProviders": ["cursor", "opencode"]
+    },
+    "refine": {
+      "command": "llm-wiki refine",
+      "readOnly": false,
+      "mutatesEvidenceCache": false,
+      "publishes": true,
+      "requiresModel": true,
+      "supportedProviders": ["cursor", "opencode"]
+    },
+    "code-trace": {
+      "command": "llm-wiki code-trace",
+      "readOnly": false,
+      "mutatesEvidenceCache": false,
+      "publishes": true,
+      "requiresModel": true,
+      "supportedProviders": ["cursor", "opencode"]
+    },
+    "review-requirement": {
+      "command": "llm-wiki review-requirement",
+      "readOnly": true,
+      "mutatesEvidenceCache": false,
+      "publishes": false,
+      "requiresModel": true,
+      "supportedProviders": ["cursor", "opencode"]
+    }
+  }
+}

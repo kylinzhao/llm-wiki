@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import stat
 import subprocess
 import tempfile
@@ -69,6 +70,17 @@ def permission_message(operation: str = "git") -> str:
     )
 
 
+def redact_text(text: str, secrets: list[str] | None = None) -> str:
+    redacted = text
+    for secret in secrets or []:
+        if secret:
+            redacted = redacted.replace(secret, "[REDACTED]")
+    redacted = re.sub(r"https://([^:\s/@]+):([^@\s]+)@git\.guazi-corp\.com", "https://[REDACTED]@git.guazi-corp.com", redacted)
+    redacted = re.sub(r"(?i)(authorization:\s*)(bearer|basic)\s+[^\s]+", r"\1[REDACTED]", redacted)
+    redacted = re.sub(r"(?i)(cookie:\s*)[^\n\r]+", r"\1[REDACTED]", redacted)
+    return redacted
+
+
 def _run_git(args: list[str], cwd: Path | None, env: dict[str, str] | None = None) -> GitCommandResult:
     result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, env=env)
     return GitCommandResult(result.returncode, result.stdout, result.stderr)
@@ -110,6 +122,8 @@ def run_git(args: list[str], cwd: Path | None = None, *, operation: str = "git")
         second = _run_git(args, cwd, env=env)
     finally:
         temp_dir.cleanup()
+    second.stdout = redact_text(second.stdout, [token])
+    second.stderr = redact_text(second.stderr, [token])
     if second.returncode != 0 and not second.stderr.strip():
         second.stderr = permission_message(operation)
     return second
