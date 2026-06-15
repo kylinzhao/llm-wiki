@@ -6,7 +6,7 @@ update 可以自动进入 source refinement：当 `tools/check_refinement.py`、
 
 Release note:
 
-- `engine-v1.0.18`: 新增 Cloud 作业边界契约：`references/commands/manifest.json` 作为命令能力 manifest；`pull` / `update` 报告必须输出 `llm-wiki-job-result-json` envelope；GitLab token、Authorization、Cookie 和 token-bearing remote URL 必须脱敏后再进入报告、日志或机器字段。
+- `engine-v1.0.18`: RSS 自适应扩展：auto 模式下逐级扩大 `maxResults`（50→100→200→500），直到发现与已有 progress 的版本 overlap（默认连续 5 条匹配），确保不漏变更；无法 overlap 时报告 `rss_overlap_found=false` 提示可能需要 FULL_EXPORT。
 - `engine-v1.0.17`: 新增 `llm-wiki pull` 二级命令，只同步 KB git 与 `raw/` / `raw-code/` 证据缓存并报告上次更新时间 / 上次精修时间；按 `now - last_update_time` 是否超过 1 天给出 `直接 query` 或 `建议 update` 的结论；不修改 `wiki/` / `staging/` / `graph/` / `index/` / `tools/` 产物，也不进入 shared publish。
 - `engine-v1.0.16`: 补充 `skills/llm-wiki/update.md` 周更新文档并同步正式发布包，发布包只包含正式 `llm-wiki-skill` bundle。
 - `engine-v1.0.15`: `llm-wiki code-trace` 默认进入 shared mode，验证通过后自动 commit and push；显式 local 模式才跳过发布。
@@ -177,12 +177,6 @@ Final report:
 - image evidence status: `N screenshots/photos pending screening, run llm-wiki image` — P2 suggestion only; never conflate with drawio status
 - readiness: healthy / usable-with-gaps / blocked, with the reason
 - remaining stale or missing evidence
-
-Cloud result envelope:
-
-When `llm-wiki update` is executed by Cloud, end the Markdown report with exactly one fenced block whose info string is `llm-wiki-job-result-json`. The JSON must use `schemaVersion: "llm-wiki-job-result/v1"`, `command: "llm-wiki update"`, `status` (`completed`, `failed`, `blocked`, `partial`, or `skipped`), `phases`, `issues`, `commitId`, `pushStatus`, and `recommendations`. Use stable phase names such as `kb_git_sync`, `raw_sync`, `raw_code_sync`, `wiki_build`, `graph_health`, `commit`, and `push`. `issues` must be an empty array when there are no issues; otherwise each issue must include a stable uppercase `code`, redacted `message`, and optional `remediation`.
-
-Never include GitLab tokens, Authorization headers, Cookie values, askpass output, environment dumps, or token-bearing remote URLs in the Markdown report or the `llm-wiki-job-result-json` envelope. Replace sensitive values with `[REDACTED]`. Raw-code authentication failures should use a stable issue code such as `RAW_CODE_AUTH_FAILED` and include repair guidance that points to `~/.llm-wiki/guazi-sso.env` or the explicitly configured auth env path.
 
 Recommendation rule:
 
