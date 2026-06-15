@@ -64,6 +64,7 @@ LLM Wiki 不是传统 wiki，也不是纯向量库，而是多层证据结构：
 
 ## Engine 发行（`engine-v*`）
 
+- **`engine-v1.0.18`**：feat: RSS adaptive expansion - auto-expand maxResults until version overlap with progress is detected
 - **`engine-v1.0.17`**：新增 llm-wiki pull 二级命令：只同步 KB git 与 raw/raw-code 证据缓存并报告上次更新时间与上次精修时间，按 now - last_update_time 是否超过 1 天给出直接 query 或建议 update 的结论，不修改 wiki/staging/graph/index/tools 产物，也不进入 shared publish。
 - **`engine-v1.0.17`**：挂出 `llm-wiki-pull` 顶层短入口（`skills/llm-wiki-pull/SKILL.md`），让 Codex / Qoder 等客户端技能列表可直接显示 `$llm-wiki-pull`，与 `$llm-wiki-code-trace` / `$llm-wiki-refine` 同层；执行协议指向 `skills/llm-wiki/references/commands/pull.md`，默认 local-only 预热语义。
 - **`engine-v1.0.16`**：补充 llm-wiki 周更新文档并同步正式发布包，确保公司 skill 平台包只包含正式 llm-wiki bundle。

@@ -45,6 +45,11 @@ def normalize_confluence_depth_limit(value: object, *, fallback: int = DEFAULT_D
 AUTO_RSS_MIN_RESULTS = 50
 AUTO_RSS_RESULTS_PER_DAY = 50
 AUTO_RSS_MAX_RESULTS = 200
+
+# Adaptive RSS expansion: when auto mode is active, progressively expand
+# maxResults until version overlap with existing progress is detected.
+RSS_OVERLAP_THRESHOLD = 5
+RSS_ADAPTIVE_TIERS: list[int] = [50, 100, 200, 500]
 USER_AGENT = "Codex-Confluence-Markdown-Exporter/1.0"
 RATE_LIMIT_RETRIES = 5
 RATE_LIMIT_BACKOFF_SECONDS = 3.0
@@ -2652,6 +2657,72 @@ def resolve_rss_max_results(
     return min(AUTO_RSS_MAX_RESULTS, max(AUTO_RSS_MIN_RESULTS, dynamic_count))
 
 
+def count_rss_overlap(entries: list["FeedEntry"], pages: dict[str, "PageNode"]) -> int:
+    """Count how many of the oldest RSS entries (tail) already match existing progress.
+
+    RSS feeds are sorted newest-first. The tail of the list contains the oldest
+    entries. If those entries have a page_id that already exists in *pages* with
+    a version that is not older, we have overlap with the previous update.
+    """
+    overlap = 0
+    for entry in reversed(entries):
+        existing = pages.get(entry.page_id)
+        if existing is None:
+            break
+        if not feed_entry_is_newer(entry, existing):
+            overlap += 1
+        else:
+            break
+    return overlap
+
+
+def resolve_adaptive_rss_max_results(
+    session: requests.Session,
+    rss_url: str,
+    pages: dict[str, "PageNode"],
+    *,
+    initial_max: int = 0,
+    tiers: Optional[list[int]] = None,
+    overlap_threshold: int = RSS_OVERLAP_THRESHOLD,
+) -> tuple[int, bool]:
+    """Progressively expand RSS maxResults until version overlap is detected.
+
+    Returns ``(effective_max_results, overlap_found)``.
+
+    *overlap_found* is ``True`` when at least *overlap_threshold* consecutive
+    entries at the tail of the feed already match existing progress, meaning the
+    RSS window fully covers the gap since the last update.
+    """
+    if tiers is None:
+        tiers = list(RSS_ADAPTIVE_TIERS)
+    # Build the expansion ladder: start with initial_max (auto-calculated) if > 0,
+    # then walk through tiers that are larger than the starting point.
+    ladder: list[int] = []
+    if initial_max > 0:
+        ladder.append(initial_max)
+    for t in tiers:
+        if t > (ladder[-1] if ladder else 0):
+            ladder.append(t)
+    if not ladder:
+        ladder = list(tiers) or [AUTO_RSS_MAX_RESULTS]
+
+    for step in ladder:
+        url = update_rss_url_max_results(rss_url, step)
+        try:
+            entries = fetch_rss_entries(session, url)
+        except Exception:
+            continue
+        if len(entries) < step:
+            # Confluence returned fewer entries than requested — feed exhausted.
+            overlap = count_rss_overlap(entries, pages)
+            return step, overlap >= overlap_threshold
+        overlap = count_rss_overlap(entries, pages)
+        if overlap >= overlap_threshold:
+            return step, True
+    # Exhausted all tiers without confident overlap.
+    return ladder[-1], False
+
+
 def default_change_report_dir(output_dir: Path) -> Path:
     if output_dir.name == "raw":
         return output_dir.parent / "staging" / "wiki-sync"
@@ -3519,9 +3590,28 @@ def main() -> int:
                 root_state["rss_url_is_custom"] = False
             else:
                 rss_url = update_rss_url_max_results(rss_url, rss_max_results)
+            # Adaptive RSS expansion: when in auto mode, progressively expand
+            # maxResults until version overlap with existing progress is found.
+            rss_overlap_found = True
+            if args.rss_max_results <= 0:
+                progress_file = resolve_existing_progress_file(metadata_dir, output_dir, root_page_id)
+                saved_state = load_progress_state(progress_file, root_page_id=root_page_id, depth_limit=depth_limit)
+                if saved_state is not None:
+                    saved_pages: dict[str, PageNode] = saved_state["pages"]
+                    if saved_pages:
+                        adaptive_max, rss_overlap_found = resolve_adaptive_rss_max_results(
+                            session,
+                            rss_url,
+                            saved_pages,
+                            initial_max=rss_max_results,
+                        )
+                        if adaptive_max != rss_max_results:
+                            rss_max_results = adaptive_max
+                            rss_url = update_rss_url_max_results(rss_url, rss_max_results)
             root_state["rss_url"] = rss_url
             root_state["rss_max_results"] = rss_max_results
             root_state["rss_max_results_mode"] = "fixed" if args.rss_max_results > 0 else "auto"
+            root_state["rss_overlap_found"] = rss_overlap_found
             result = update_root_from_rss(
                 session,
                 root_page_id=root_page_id,
@@ -3556,6 +3646,7 @@ def main() -> int:
                     "rss_url": rss_url,
                     "rss_max_results": rss_max_results,
                     "rss_max_results_mode": root_state["rss_max_results_mode"],
+                    "rss_overlap_found": rss_overlap_found,
                     "scanned_count": result.scanned_count,
                     "changed_count": len(result.updated_page_ids),
                     "skipped_count": len(result.skipped_page_ids),
