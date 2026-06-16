@@ -6,6 +6,7 @@ update 可以自动进入 source refinement：当 `tools/check_refinement.py`、
 
 Release note:
 
+- `engine-v1.0.19`: `code_intelligence.py` 新增 `structural-wiki` 检测后端项目 `doc/wiki/`（单数 `doc`）格式，解析 `index.md` 的 `## 模块` / `## 接口` section 提取模块和 API topics；新增 `structural-knowledge` 补充检测 `doc/knowledge/` 业务域知识目录，递归扫描 `.md` 文件提取 SOP / 名词解释 / 排查指南等 domain knowledge topics；后端代码库 upstream 检测率从 6/14 提升到 11/14，新增 40 个 knowledge topics。
 - `engine-v1.0.18`: RSS 自适应扩展：auto 模式下逐级扩大 `maxResults`（50→100→200→500），直到发现与已有 progress 的版本 overlap（默认连续 5 条匹配），确保不漏变更；无法 overlap 时报告 `rss_overlap_found=false` 提示可能需要 FULL_EXPORT。
 - `engine-v1.0.17`: 新增 `llm-wiki pull` 二级命令，只同步 KB git 与 `raw/` / `raw-code/` 证据缓存并报告上次更新时间 / 上次精修时间；按 `now - last_update_time` 是否超过 1 天给出 `直接 query` 或 `建议 update` 的结论；不修改 `wiki/` / `staging/` / `graph/` / `index/` / `tools/` 产物，也不进入 shared publish。
 - `engine-v1.0.16`: 补充 `skills/llm-wiki/update.md` 周更新文档并同步正式发布包，发布包只包含正式 `llm-wiki-skill` bundle。

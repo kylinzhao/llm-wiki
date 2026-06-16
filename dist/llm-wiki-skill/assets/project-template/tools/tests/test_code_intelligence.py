@@ -66,6 +66,109 @@ class DetectUpstreamIntelligenceTests(unittest.TestCase):
             self.assertEqual(result["discovery_mode"], "auto-detected")
             self.assertEqual(result["root"], "raw-code/sell-taro/docs/wiki")
 
+    def test_detects_structural_wiki_signature(self) -> None:
+        """Backend projects use ``doc/wiki/`` (singular ``doc``) with
+        ``index.md`` / ``overview.md`` / ``architecture.md``."""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            doc_wiki = project / "raw-code" / "cars-dispatch" / "doc" / "wiki"
+            doc_wiki.mkdir(parents=True)
+            for rel in ("index.md", "overview.md", "architecture.md"):
+                (doc_wiki / rel).write_text("# content\n", encoding="utf-8")
+
+            result = detect_upstream_code_intelligence(project, "cars-dispatch")
+            self.assertEqual(result["upstream_type"], "structural-wiki")
+            self.assertEqual(result["index_path"], "raw-code/cars-dispatch/doc/wiki/index.md")
+            self.assertEqual(result["schema_path"], "")
+            self.assertEqual(result["source_map_path"], "")
+
+    def test_structural_wiki_adapter_parses_index_md(self) -> None:
+        """The structural-wiki adapter extracts module/API topics from
+        ``## 模块`` and ``## 接口`` sections in ``index.md``."""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            doc_wiki = project / "raw-code" / "cars-dispatch" / "doc" / "wiki"
+            doc_wiki.mkdir(parents=True)
+            (doc_wiki / "index.md").write_text(
+                "# cars-dispatch Wiki\n\n"
+                "## 总览\n\n"
+                "- [项目概述](overview.md)\n\n"
+                "## 模块\n\n"
+                "- [调度核心](modules/调度核心.md)\n"
+                "- [时间片](modules/时间片.md)\n\n"
+                "## 接口\n\n"
+                "- [REST接口](api/接口总览.md)\n",
+                encoding="utf-8",
+            )
+            for rel in ("overview.md", "architecture.md"):
+                (doc_wiki / rel).write_text("# content\n", encoding="utf-8")
+
+            resolved = detect_upstream_code_intelligence(project, "cars-dispatch")
+            summary = collect_upstream_summary(project, "cars-dispatch", resolved)
+            self.assertEqual(summary["upstream_type"], "structural-wiki")
+            self.assertGreaterEqual(summary["topic_count"], 3)
+            topics_json = json.loads(
+                (project / "staging" / "code-graph" / "cars-dispatch" / "upstream-topics.json").read_text()
+            )
+            topic_ids = [t["id"] for t in topics_json["topics"]]
+            self.assertIn("调度核心", topic_ids)
+            self.assertIn("REST接口", topic_ids)
+
+    def test_detects_knowledge_supplementary(self) -> None:
+        """``doc/knowledge/`` is detected as a supplementary upstream alongside
+        the primary wiki type."""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            doc_root = project / "raw-code" / "cars-dispatch" / "doc"
+            doc_root.mkdir(parents=True)
+            wiki_dir = doc_root / "wiki"
+            wiki_dir.mkdir()
+            for rel in ("index.md", "overview.md", "architecture.md"):
+                (wiki_dir / rel).write_text("# content\n", encoding="utf-8")
+            knowledge_dir = doc_root / "knowledge"
+            knowledge_dir.mkdir()
+            (knowledge_dir / "名词解释.md").write_text("# 名词解释\n\n测试内容。\n", encoding="utf-8")
+            (knowledge_dir / "SOP.md").write_text("# SOP指南\n\n标准操作。\n", encoding="utf-8")
+
+            result = detect_upstream_code_intelligence(project, "cars-dispatch")
+            self.assertEqual(result["upstream_type"], "structural-wiki")
+            self.assertEqual(result["knowledge_status"], "detected")
+            self.assertEqual(result["knowledge_root"], "raw-code/cars-dispatch/doc/knowledge")
+
+    def test_knowledge_adapter_scans_md_files(self) -> None:
+        """Knowledge adapter scans all .md files and extracts titles from H1."""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            knowledge_dir = project / "raw-code" / "cars-eval" / "doc" / "knowledge"
+            knowledge_dir.mkdir(parents=True)
+            (knowledge_dir / "报告提交.md").write_text("# 报告提交流程\n\n内容。\n", encoding="utf-8")
+            (knowledge_dir / "名词解释.md").write_text("# 名词解释\n\n词汇。\n", encoding="utf-8")
+            (knowledge_dir / "README.md").write_text("stub\n", encoding="utf-8")
+            sub = knowledge_dir / "troubleshooting"
+            sub.mkdir()
+            (sub / "排查指南.md").write_text("# 排查指南\n\n内容。\n", encoding="utf-8")
+
+            result = detect_upstream_code_intelligence(project, "cars-eval")
+            summary = collect_upstream_summary(project, "cars-eval", result)
+            self.assertEqual(summary["knowledge_topic_count"], 3)
+
+            kdata = json.loads(
+                (project / "staging" / "code-graph" / "cars-eval" / "upstream-knowledge.json").read_text()
+            )
+            titles = {t["title"] for t in kdata["topics"]}
+            self.assertIn("报告提交流程", titles)
+            self.assertIn("名词解释", titles)
+            self.assertIn("排查指南", titles)
+
+    def test_no_knowledge_dir_returns_none_status(self) -> None:
+        """Codebases without ``doc/knowledge/`` have ``knowledge_status=none``."""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "raw-code" / "frontend-app" / "src").mkdir(parents=True)
+            result = detect_upstream_code_intelligence(project, "frontend-app")
+            self.assertEqual(result["knowledge_status"], "none")
+            self.assertEqual(result["knowledge_root"], "")
+
     def test_explicit_registry_entry_overrides_auto_detection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
