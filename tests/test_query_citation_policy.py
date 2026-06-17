@@ -15,12 +15,25 @@ def test_query_logic_documents_remote_source_and_local_snapshot_policy():
     ]
 
     for query_logic in query_logic_files:
-        assert "## 10. 证据链接展示规则" in query_logic
+        assert "## 11. 证据链接展示规则" in query_logic
         assert "原文链接" in query_logic
         assert "本地快照" in query_logic
         assert "source_url" in query_logic
         assert "普通 query" in query_logic
         assert "Cwiki 评论稿" in query_logic
+
+
+def test_query_logic_documents_retrieval_budget_and_limited_search():
+    query_logic_files = [
+        read("skills/llm-wiki/references/query-logic.md"),
+        read("dist/llm-wiki-skill/references/query-logic.md"),
+    ]
+
+    for query_logic in query_logic_files:
+        assert "## 2. 检索预算与限流" in query_logic
+        assert "不要在整个 `wiki/` 目录上用高频词做无上限搜索" in query_logic
+        assert "`rg` 输出必须限流" in query_logic
+        assert "当前重点 / 规划 / 周会进展" in query_logic
 
 
 def _command_reference_corpus(root: str) -> str:

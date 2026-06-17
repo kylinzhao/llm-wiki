@@ -60,6 +60,21 @@ class GitAuthTest(unittest.TestCase):
         self.assertEqual(result.returncode, 128)
         self.assertEqual(calls, [None])
 
+    def test_redacts_gitlab_token_from_retry_output(self):
+        auth = load_git_auth()
+
+        def fake_run(args, cwd, env=None):
+            if env is None:
+                return auth.GitCommandResult(128, "", "Authentication failed")
+            return auth.GitCommandResult(128, "token=SENTINEL_GITLAB_TOKEN", "remote https://oauth2:SENTINEL_GITLAB_TOKEN@git.guazi-corp.com/repo.git")
+
+        with mock.patch.object(auth, "_run_git", side_effect=fake_run), mock.patch.object(auth, "gitlab_token", return_value="SENTINEL_GITLAB_TOKEN"):
+            result = auth.run_git(["ls-remote", "https://git.guazi-corp.com/c2b-fe/llm-wiki.git"])
+
+        self.assertNotIn("SENTINEL_GITLAB_TOKEN", result.stdout)
+        self.assertNotIn("SENTINEL_GITLAB_TOKEN", result.stderr)
+        self.assertIn("[REDACTED]", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

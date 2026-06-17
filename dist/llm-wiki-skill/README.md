@@ -18,11 +18,12 @@
 
 ## 版本
 
-- `version`: `1.0.19`
-- `engine_version`: `engine-v1.0.19`
+- `version`: `1.0.20`
+- `engine_version`: `engine-v1.0.20`
 
 ### Engine 发行记录
 
+- **`engine-v1.0.20`**：query 增加检索预算与限流规则，要求先限定候选目录/文件并限制 rg 输出，避免业务查询因全库高频词搜索消耗过多上下文。
 - **`engine-v1.0.19`**：code_intelligence 新增 structural-wiki 检测后端项目 doc/wiki/ 格式，新增 structural-knowledge 补充检测 doc/knowledge/ 业务域知识目录，后端代码库检测率从 6/14 提升到 11/14
 - **`engine-v1.0.18`**：feat: RSS adaptive expansion - auto-expand maxResults until version overlap with progress is detected
 - **`engine-v1.0.17`**：新增 llm-wiki pull 二级命令：只同步 KB git 与 raw/raw-code 证据缓存并报告上次更新时间与上次精修时间，按 now - last_update_time 是否超过 1 天给出直接 query 或建议 update 的结论，不修改 wiki/staging/graph/index/tools 产物，也不进入 shared publish。
